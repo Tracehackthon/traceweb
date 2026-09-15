@@ -1,0 +1,13 @@
+{
+  "name": "@trace/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Trace browser-local Web application",
+  "scripts": {
+    "build": "node --check server.mjs && node --check src/main.js && node --check src/discussion.js && node --check src/home.js && node --check src/home-model.js && node --check src/home-icons.js && node --check src/home/scene-glass.js && node --check src/prototype-session.js && node --check src/matters/matters-model.mjs && node --check src/matters/matters-screen.mjs && node --check src/web-main.js && node --check web-store.mjs && node --check src/product/bridge.mjs && node --check src/product/chain-model.mjs && node --check src/product/comparison-model.mjs && node --check src/product/worksite-model.mjs && node --check src/product/chain-screen.mjs && node --check src/product/comparison-screen.mjs && node --check src/product/worksite-screen.mjs && node --check src/product/library.mjs && tsc -p tsconfig.json --noEmit && vite build",
+    "dev": "node dev-server.mjs",
+    "start": "npm run build && node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

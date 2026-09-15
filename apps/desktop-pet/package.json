@@ -1,0 +1,52 @@
+{
+  "name": "@trace/desktop-pet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Trace UI V1 for DeepSeek Harness Web and the native desktop overlay",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "package.json",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "desktop": "npm run build && electron lib/desktop/main.mjs",
+    "desktop:start": "electron lib/desktop/main.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "traceweb": "file:../.."
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "electron": "44.3.0",
+    "esbuild": "0.25.9",
+    "typescript": "7.0.2"
+  }
+}

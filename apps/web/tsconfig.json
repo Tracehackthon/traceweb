@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": false,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client", "react", "react-dom"]
+  },
+  "include": ["src/react/**/*.ts", "src/react-main.tsx", "vite.config.ts"]
+}

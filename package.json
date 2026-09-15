@@ -1,0 +1,34 @@
+{
+  "name": "traceweb",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Trace Web application and desktop companion deployment source",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "start": "npm --prefix apps/web start",
+    "build": "npm run build:web",
+    "build:web": "npm --prefix apps/web run build",
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "build:pet": "npm --prefix apps/desktop-pet run build",
+    "desktop:pet": "npm --prefix apps/desktop-pet run desktop",
+    "test:browser-storage": "node scripts/browser-storage-e2e.cjs",
+    "test": "npm --prefix apps/web test",
+    "test:e2e": "node scripts/product-e2e.cjs",
+    "test:ui-renovation": "node scripts/ui-renovation-e2e.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "playwright": "1.62.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

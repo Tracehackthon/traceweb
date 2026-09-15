@@ -1,0 +1,16 @@
+.git
+.github
+.trace
+.test-results
+.env*
+!.env.example
+node_modules
+apps/web/dist
+apps/web/dist-vercel
+manunl
+artifacts
+docs
+*.zip
+*.sqlite*
+*.db*
+*.log

@@ -1,0 +1,3 @@
+# Keep the imported runtime snapshot byte-for-byte, including locked vendor JS.
+# In particular, Windows autocrlf must not change files covered by the asset lock.
+apps/web/** -text
