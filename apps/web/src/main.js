@@ -100,7 +100,7 @@ async function renderRoute({focusSearch=false}={}) {
       if(token!==revision)return
       const asset=path=>new URL(`../public/${path}`,import.meta.url).href
       screen=module.mountMattersScreen({root,view:session.view(),onAction:act,onHome:()=>navigate('home'),
-        assets:{background:asset('matters/environment.png'),birdPerched:asset('home/bird-perched.png'),birdTakeoff:asset('home/bird-takeoff.png'),serifFont:asset('matters/fonts/TraceMattersSerif-fixed.woff2'),sansFont:asset('matters/fonts/TraceMattersSans-fixed.woff2')},
+        assets:{birdPerched:asset('home/bird-perched.png'),birdTakeoff:asset('home/bird-takeoff.png'),serifFont:asset('matters/fonts/TraceMattersSerif-fixed.woff2'),sansFont:asset('matters/fonts/TraceMattersSans-fixed.woff2')},
         services:{animate,svg,mountSceneGlass},
       })
       if(focusSearch)root.querySelector('input[type="search"]')?.focus()

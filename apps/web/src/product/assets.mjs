@@ -14,9 +14,9 @@ const shared = Object.freeze({
   sansFont: asset('home/fonts/TraceHomeSans-fixed.woff2'),
 });
 export const ASSETS = Object.freeze({
-  home:{...shared,serifFont:asset('home/fonts/TraceHomeSerif-fixed.woff2'),sansFont:asset('home/fonts/TraceHomeSans-fixed.woff2'),background:asset('home/environment.png')},
-  matters:{...shared,serifFont:asset('matters/fonts/TraceMattersSerif-fixed.woff2'),sansFont:asset('matters/fonts/TraceMattersSans-fixed.woff2'),background:asset('matters/environment.png')},
-  chain:{...shared,background:asset('product/chain-environment.png'),overviewBackground:asset('product/chain-overview-environment.png')},
-  compare:{...shared,background:asset('product/compare-environment.png')},
-  worksite:{...shared,background:asset('product/worksite-environment.png')},
+  home:{...shared,serifFont:asset('home/fonts/TraceHomeSerif-fixed.woff2'),sansFont:asset('home/fonts/TraceHomeSans-fixed.woff2')},
+  matters:{...shared,serifFont:asset('matters/fonts/TraceMattersSerif-fixed.woff2'),sansFont:asset('matters/fonts/TraceMattersSans-fixed.woff2')},
+  chain:{...shared},
+  compare:{...shared},
+  worksite:{...shared},
 });

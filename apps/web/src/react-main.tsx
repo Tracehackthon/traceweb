@@ -245,6 +245,15 @@ function Chrome({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot>
   </>;
 }
 
+function AmbientFrame() {
+  return <div className="trace-ambient" aria-hidden="true">
+    <span className="trace-ambient-light" />
+    <img className="trace-ambient-piece trace-ambient-orbit" src="/decor/trace-orbit.svg" alt="" draggable="false" />
+    <img className="trace-ambient-piece trace-ambient-sprig" src="/decor/trace-sprig.svg" alt="" draggable="false" />
+    <img className="trace-ambient-piece trace-ambient-pebbles" src="/decor/trace-pebbles.svg" alt="" draggable="false" />
+  </div>;
+}
+
 function RouteOutlet({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<MountedScreen | null>(null);
@@ -375,7 +384,7 @@ function App() {
     document.documentElement.dataset.reduceMotion = String(runtime.isReducedMotion());
     document.title = route === 'home' ? 'Trace · 把此刻的一点，带到以后' : route === 'matters' ? 'Trace · 在意的事' : document.title;
   }, [snapshot.route.view, snapshot.host?.preferences?.reduceMotion]);
-  return <div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-busy={snapshot.busy ? 'true' : 'false'}><StatusBar snapshot={snapshot} /><Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div>;
+  return <div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-busy={snapshot.busy ? 'true' : 'false'}><AmbientFrame /><StatusBar snapshot={snapshot} /><Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div>;
 }
 
 const mountPoint = document.querySelector('#app');

@@ -1,217 +1,228 @@
 ---
-name: Trace Web — Fixed Scene Family
-description: 同一个山水场景中的接续；首页与在意的事保留各自参考图权威。
+name: Trace Web — Ambient Field
+description: 浅矿物白与鼠尾草绿上的接续空间，以三个独立周边组件围合留白而不是渲染整幅背景图。
 colors:
-  home-ink: "#08241f"
-  home-muted: "#506974"
-  home-green: "#075540"
-  matters-ink: "#08251f"
-  matters-action-top: "#126851"
-  matters-action-bottom: "#004b38"
-  matters-submit: "#065e45"
-  matters-reading: "#405f70"
-  matters-milk: "#f5faf3"
-  matters-rim: "#ffffff"
-  matters-warm-node: "#dfb654"
+  ink: "#123e35"
+  body-ink: "#173c32"
+  muted-sage: "#587369"
+  action-green: "#0b5942"
+  primary-solid: "#115d43"
+  focus-green: "#1f7057"
+  mineral-base: "#f3f6f1"
+  mineral-highlight: "#f7f9f5"
+  sage-wash: "#edf4f0"
+  glass-surface: "#fbfdf9dc"
+  shell-control: "#f7fcf0bf"
+  ambient-warm-node: "#d8a94c"
+  state-warm-node: "#dfb654"
+  white: "#ffffff"
 typography:
-  home-display:
+  display:
     fontFamily: '"Trace Web Serif", "Songti SC", SimSun, serif'
     fontSize: "66px"
     fontWeight: 600
     lineHeight: 1.43
-    letterSpacing: "0.6px"
-  matters-display:
-    fontFamily: 'var(--matters-serif, "Noto Serif SC", "Songti SC", "SimSun", serif)'
-    fontSize: "86px"
+    letterSpacing: "-0.015em"
+  display-mobile:
+    fontFamily: '"Trace Web Serif", "Songti SC", SimSun, serif'
+    fontSize: "40px"
     fontWeight: 600
-    lineHeight: 1.22
-    letterSpacing: "4px"
-  matters-bubble-title:
-    fontFamily: 'var(--matters-serif, "Noto Serif SC", "Songti SC", "SimSun", serif)'
-    fontSize: "calc(25px * var(--matters-copy-boost, 1))"
-    fontWeight: 600
-    lineHeight: 1.34
-    letterSpacing: "0.15px"
-  matters-comparison-title:
-    fontFamily: 'var(--matters-serif, "Noto Serif SC", "Songti SC", "SimSun", serif)'
-    fontSize: "37px"
-    fontWeight: 600
-    lineHeight: 1.32
-    letterSpacing: "0.3px"
-  matters-input:
-    fontFamily: 'var(--matters-sans, "Microsoft YaHei", "PingFang SC", sans-serif)'
-    fontSize: "calc(22px * var(--matters-copy-boost, 1))"
+    lineHeight: 1.24
+    letterSpacing: "-0.015em"
+  body:
+    fontFamily: '"Trace Web Sans", "Microsoft YaHei", "Segoe UI Emoji", sans-serif'
+    fontSize: "16px"
     fontWeight: 400
-    lineHeight: 1.65
+    lineHeight: 1.5
+  label:
+    fontFamily: '"Trace Web Sans", "Microsoft YaHei", "Segoe UI Emoji", sans-serif'
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.45
+  mobile-input:
+    fontFamily: '"Trace Web Sans", "Microsoft YaHei", "Segoe UI Emoji", sans-serif'
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: 1.55
 rounded:
-  matters-action: "28px"
-  matters-search: "42px"
-  matters-composer: "44px"
-  matters-search-panel: "35px"
-  matters-badge: "10px"
+  brand: "11px"
+  control: "20px"
+  pill: "23px"
+  home-composer: "29px"
+  mobile-surface: "24px"
   circle: "50%"
+spacing:
+  mobile-edge: "16px"
+  compact-gap: "12px"
+  card-gap: "18px"
+  desktop-edge: "32px"
 components:
-  matters-button-primary:
-    textColor: "#f4fff9"
-    rounded: "{rounded.matters-action}"
-    padding: "10px 25px"
-  matters-button-secondary:
-    textColor: "#527c67"
-    backgroundColor: "#ecf8df9e"
-    rounded: "{rounded.matters-action}"
-    padding: "10px 25px"
-  matters-search:
-    textColor: "#365c51"
-    rounded: "{rounded.matters-search}"
-    padding: "0 24px"
-    height: "66px"
-    width: "626px"
-  matters-composer:
-    rounded: "{rounded.matters-composer}"
-    padding: "12px 18px"
-    height: "84px"
-  matters-submit:
-    textColor: "{colors.matters-rim}"
-    backgroundColor: "{colors.matters-submit}"
-    rounded: "{rounded.circle}"
-    size: "52px"
-  matters-search-panel:
-    rounded: "{rounded.matters-search-panel}"
-    padding: "27px 38px 33px"
-  matters-change-badge:
-    rounded: "{rounded.matters-badge}"
-    padding: "4px 7px"
+  button-primary:
+    backgroundColor: "{colors.primary-solid}"
+    textColor: "{colors.white}"
+    typography: "{typography.label}"
+    rounded: "{rounded.pill}"
+    padding: "12px 24px"
+  button-shell:
+    backgroundColor: "{colors.shell-control}"
+    textColor: "{colors.ink}"
+    typography: "{typography.label}"
+    rounded: "{rounded.control}"
+    padding: "7px 13px"
+  home-composer:
+    backgroundColor: "{colors.glass-surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.home-composer}"
+    padding: "22px 26px 17px 32px"
+    height: "121px"
+    width: "762px"
+  home-composer-mobile:
+    backgroundColor: "{colors.glass-surface}"
+    textColor: "{colors.ink}"
+    typography: "{typography.mobile-input}"
+    rounded: "{rounded.mobile-surface}"
+    padding: "20px 68px 18px 20px"
+    height: "132px"
+  touch-target-mobile:
+    size: "44px"
 ---
 
-# Design System: Trace Desktop
+# Design System: Trace Web
 
 ## Overview
 
-### 当前 Web 接入范围（2026-09-15）
+**Creative North Star: "留白中的接续"**
 
-本次是沿用原世界的接入与扩展，不更换视觉方向。默认入口已改为 [web-main.js](src/web-main.js)，不再是刷新即重置的独立原型。首页与在意的事保留原构图；一件事、对照、工作现场分别复用 [product/](src/product/) 中的既有派生模块。搜索 / 全部 / 工作列表是对真实对象的目录，沿用事项环境与本地宋黑字体，不是另一套概念图。下面七态细节仍记录独立 matters 组件能力；默认产品总览会进入统一 chain，搜索则进入实际内容目录，不再把旧七态演示当作持久化产品路由。
+Mode: **Operate**。Trace 的当前视觉系统是一张浅矿物白与鼠尾草绿构成的产品表面，而不是一幅山水或环境图片。React shell 只挂载一次共享 ambient field；首页、在意的事、一件事、对照、工作现场与痕迹目录都把真实 DOM/SVG 内容置于其上。三个独立周边组件从画面边缘提供关系、萌芽与沉淀的暗示，中间持续保留大面积可读、可操作的负空间。
 
-[资源锁](approved-assets.lock.json) 记录十二项正在使用的固定背景、鸟、完整字体和 vendor 字节；[资产入口](src/product/assets.mjs) 映射六背景角色。首页 / 事项 / 一件事 / 工作现场 / 对照各用自己的环境，不以统一为由改成同一背景。未来单独「我的理解」「结果回来」原型存在，不等于已替换当前内部页面。
-
-
-**Creative North Star: "同一个场景中的接续"**
-
-Mode: **Operate**。本文供维护桌面 Web 的工程师与 Agent 使用，记录当前实现，而非提出新的视觉方向。山水、雾、水面、岩石与光构成连续环境；内容由真正可操作的文字、图标、输入与异形玻璃承载。层级来自对象位置、停点、聚焦和变化，不来自一套默认仪表盘组件。
-
-首页和“在意的事”共享场景语言，但保留各自构图权威。首页的六态仍属于同一首页场景；新增事项表面是独立的七图链路，不用首页参考覆盖它，也不反向重定义首页。
+现有关系线、状态节点、异形玻璃与小鸟继续表达「从哪里来、停在哪里、发生了什么」；它们不是用于填空的背景纹理。暖金只标记节点或已发生的变化，不扩张成主色。复杂产品流程、保存边界和历史事实保持原语义，新的 ambient field 只统一视觉环境，不重写业务状态。
 
 **Key Characteristics:**
-- 清洁环境图与真实 DOM/SVG 内容分层，保留景观纹理。
-- 宋体承载标题与思考层级，黑体承载正文、操作与输入。
-- 不对称轮廓、细白高光、少量暖色节点；大面积阅读表面保持乳白中心。
-- 小鸟与连线指向当前对象或停点，不是常驻摆动装饰。
+- 浅矿物白基底、淡鼠尾草洗色与深绿文字构成安静、清晰的操作表面。
+- 右上轨道节点、左下枝叶、右下卵石是三个独立 SVG 周边组件；中心不放大型插画。
+- 只有右上轨道以 10 秒周期进行低频微位移和微泛光呼吸；其余装饰保持静止。
+- 小鸟与关系线保留产品语义；装饰层永远 `aria-hidden`、不接收指针，也不阻塞路由或状态流。
 
-### 视觉权威与实现依据
+**The Ambient, not Wallpaper Rule.** 运行时表面不得使用全屏环境图片；用浅色 CSS 场与少量独立 SVG 从边缘组织氛围，内容层始终保持权威。
 
-| 表面 | 权威与范围 | 实现入口 |
-| --- | --- | --- |
-| 首页 | [Trace首页交互状态_v1](../../manunl/具体页面与视觉实现/桌面端/首页/Trace首页交互状态_v1/) 六张 PNG，静默总览、唤醒过程、思考接续、思考生长、工作接续、结果回流；基准为 1672 × 941。 | [首页样式](src/home.css)、[首页场景](src/home.js) |
-| 在意的事 | [Trace在意的事完整交互链路_v1](../../manunl/具体页面与视觉实现/桌面端/核心功能页面/Trace在意的事完整交互链路_v1/) 七张 PNG；状态对应见 Components。 | [事项样式](src/matters/matters.css)、[事项场景](src/matters/matters-screen.mjs) |
+### 当前实现与事实边界
 
-本文 token 提取自当前样式与 SVG 实现，前置 YAML 是已列 token 的规范记录；未列出的局部差异仍以对应源码为准。它不是全局 CSS 主题，也不能把事项 token 应用到旧讨论界面。材质、动画和组件静态片段见 [.impeccable/design.json](.impeccable/design.json)。
+- 默认入口仍是 [web-main.js](src/web-main.js)，它加载 [react-main.tsx](src/react-main.tsx) 中的 React shell；共享 ambient field 在 route outlet 之外挂载，因此换路由不会重建背景世界。
+- [web.css](src/product/web.css) 明确把首页、事项、chain、compare、worksite、目录与加载态的 `background-image` 置为 `none`。`ASSETS` 当前只映射字体与小鸟，不含背景角色。
+- 旧 `environment*.png` 与锁定记录可以继续留在仓库作为历史/审计资产，但既不是当前 primary/legacy runtime 的视觉入口，也不是新增页面应复用的系统组件。
+- 自动模型回复、联网搜索、外部 Agent 真正执行、账号和云同步仍未接入；视觉上的高亮、关联或本地保存不能冒充外部送达和结论采用。
 
 ## Colors
 
+配色以低对比矿物白和鼠尾草洗色建立空气感，再用深绿形成可读层级；暖金只承担稀少的时间/变化信号。
+
 ### Primary
-- **首页墨绿**：`home-ink`、`home-green` 保留首页文字与行动层级。
-- **事项墨绿**：`matters-ink` 承载内容；主操作由 `matters-action-top` 到 `matters-action-bottom` 的轻渐变呈现；圆形提交使用 `matters-submit`。不能把渐变误记为一个平涂背景色。
+- **行动深绿**（`action-green`、`primary-solid`）：品牌、主要按钮、提交与明确可操作节点。两者分别来自共享变量和现有实心按钮，不应被合并成未经实现验证的新色值。
+- **焦点绿**（`focus-green`）：键盘焦点轮廓。可见焦点不能只依赖阴影或色相微差。
 
 ### Secondary
-- **暖光节点**：`matters-warm-node` 是连接节点的暖色边缘，配合轻晕与变化徽记。暖色不铺成整页警告色或大面积蒙层。
+- **环境暖金**（`ambient-warm-node`）：新轨道与卵石 SVG 中的少数亮点。
+- **状态暖金**（`state-warm-node`）：既有事项变化节点与徽记。两种暖金都只用于点状强调，不能铺成大按钮、大标题或整面渐变。
 
 ### Neutral
-- **辅助与阅读文字**：`home-muted` 属于首页辅助文字；`matters-reading` 对应重新进入面的段落。事项其余正文有局部蓝绿层级，不强制合并为一个色值。
-- **乳白中心与细白边缘**：`matters-milk` 用于大表面的径向中心；`matters-rim` 经不同透明度进入边缘与高光。环境图片本身的色彩不转换成一份虚构的平色主题。
+- **主墨绿与正文墨绿**（`ink`、`body-ink`）：前者是当前 shell 的主文字，后者保留给现有 Web 正文层级。
+- **辅助鼠尾草**（`muted-sage`）：说明、元数据和较弱导航。
+- **矿物基底**（`mineral-base`）：`body` 与 shell 的统一底色。
+- **高光与洗色**（`mineral-highlight`、`sage-wash`、`white`）：组合成 ambient field 的径向与线性渐变，不作为整幅位图的替身。
+- **半透明表面**（`glass-surface`、`shell-control`）：分别用于首页 composer 与 shell 控件；透明度必须让底层洗色可见，但不能降低正文对比。
 
-**The 分表面配色 Rule.** 保留首页与事项各自的颜色作用域，不为“统一”而覆盖其中一方；真实实现与旧文档数值冲突时，核验当前样式再更新记录。
+**The Warm Node Ration Rule.** 一个局部关系或变化只需要一个暖金焦点；若暖金开始比正文或主操作更先被看见，就已经使用过量。
 
 ## Typography
 
-- **首页**：默认 Web 使用同一来源的完整 `TraceSerif.woff2` 与 `TraceSans.ttf`，旧固定子集保留给 legacy；主标题采用 `home-display`，正文与操作保持黑体。首页缩窄样式仍由自己的 CSS 管理。
-- **事项**：本地 [事项字体目录](public/matters/fonts/) 中的 `TraceMattersSerif-fixed.woff2`、`TraceMattersSans-fixed.woff2` 是独立固定文案子集，不替换首页字体。挂载时以实例专属名称注册，通过 `--matters-serif` / `--matters-sans` 引用，并使用 `font-display: swap`。
-- **动态文字**：Web 使用完整 Source Han Serif CN（250–900）及 Noto Sans SC（100–900）本地字体；各模块 FontFace 保留独立名称但字节来自同一锁定原字体。系统 / emoji fallback 仍需保留，完整字体不等于罕见字和 emoji 全覆盖。
-- **事项层级**：总览/搜索用 `matters-display`；重新进入页标题缩小到（46px）；气泡标题以 `matters-bubble-title` 为基础，中央主气泡与部分侧节点有局部字号；三段重新进入面以中央停点标题（43px）高于两侧（33px / 32px）；深度对照标题使用 `matters-comparison-title`。
+- **共享别名**：`Trace Web Serif` 与 `Trace Web Sans` 是当前产品 shell 的字体入口，分别加载本地 `TraceHomeSerif-fixed.woff2` 与 `TraceHomeSans-fixed.woff2`，并使用 `font-display: swap`。
+- **路由映射**：首页通过 `--serif` / `--sans`，事项通过 `--matters-serif` / `--matters-sans` 接入共享 Web 别名；chain、compare、worksite 保留模块别名和系统 fallback，但不应重新引入环境图来证明各自身份。
+- **层级**：宋体承担首页展示标题、事项标题与理解/判断层级；黑体承担正文、导航、按钮、输入和状态说明。桌面首页主标题使用 `display`，720px 及以下使用 `display-mobile`；350px 及以下再降为源码中的 36px 局部修正。
+- **动态文字**：标题、停点、来源摘录、输入与按钮必须继续是可选择、可换行的文字。固定字体字节不等于覆盖所有罕见字和 emoji，系统 fallback 必须保留。
+- **移动输入**：720px 及以下首页 textarea 使用 `mobile-input`（16px / 1.55），不能降到 16px 以下。
 
-**The 可写文字 Rule.** 标题、停点、示例摘录、输入和按钮必须是文字内容，不栅格化到参考图；用户新输入允许换行或在指定区域滚动，不借固定文案子集假设动态内容长度。
+**The Writable Text Rule.** 不把标题、停点、输入、状态或按钮栅格化进装饰资产；用户内容长度由换行、滚动和真实布局处理。
 
 ## Layout
 
-### 首页：保留六图场景
-- 左上品牌、右上搜索 / 全部 / 工作现场；不引入旧讨论侧栏。
-- 原首页主要输入位置保留（x486 / y336 / w762 / h121，场景坐标）。节点、连接线与内容共享基准坐标，状态切换联动。
-- 原型采用 hover/focus 轻唤醒、click 展开、Escape / 收起返回等实现约定；这些触发细节不是六图明示的产品事实。
+### 共享 ambient field
 
-### 在意的事：单一背景平面与缩放 UI
-- 环境来自 [environment.png](public/matters/environment.png)，以 `center / cover` 填满宿主。只有 UI 场景按（1672 × 941）居中等比缩放：`scale = min(width / 1672, height / 941)`。不在缩放层再放第二张裁切不同的全屏背景。
-- 总览标题居中，搜索位于其下（x523 / y230 / w626 / h66）；中央事项及五个侧事项是六个场景位置，不是均匀卡片网格。新捕获对象进入中央位置，此前对象仍能从共享搜索中找回。
-- 重新进入面采用三段融合表面（x174 / y221 / w1390 / h551），以中间的真实停点为主；深度继续采用独立大表面（x329 / y279 / w1117 / h577），上方四个节点保持同一阅读顺序。
-- 搜索态上移标题、上移并加宽搜索框（x448 / y169 / w777 / h69）；事项、曾说过的话、来源与现场放在同一可滚动结果面，不把参考图中的数量写成常量。
-- 缩放小于（0.68）进入 compact 模式。正文补偿为 `clamp(1, 0.70 / scale, 1.36)`，并有局部位置、字号和高度修正。（880 × 620）仍是桌面场景缩放，不是移动端重排，也不代表已支持手机。
-- 大段正文有独立滚动区域；compact 重新进入面的两侧段落和对照两栏使用更短的可滚动视窗。关系按钮与 composer 固定在内容区之外，不能随正文一起挤出操作面。搜索结果及原现场弹窗也各自滚动。
+- `.trace-ambient` 固定铺满 viewport，只使用 CSS 径向/线性渐变；内容 route root 位于其上方。
+- 右上轨道节点宽 330px，右侧轻微出界；左下枝叶宽 220px；右下卵石宽 290px。三者围绕边缘布置，中央光场约 660 × 430px，不能再叠加第四个中央主视觉。
+- 首页使用装饰默认透明度；非首页路由把周边组件降至 0.35、中央光场降至 0.46，让事项、chain、compare、worksite 与痕迹库共享同一环境但不过度抢占阅读。
 
-**The 正文与操作分区 Rule.** 先给动态正文留出真实滚动边界，再固定关系决定和输入；不通过截掉内容、隐藏操作或换成整页截图维持构图。
+### 桌面与中间宽度
+
+- 首页在 721px 及以上继续使用 1672 × 941 场景坐标并居中等比缩放；这是桌面构图策略，不是手机适配。
+- 1050px 及以下的旧桌面窄屏排版补偿仍然存在；目录在 800px 及以下从双栏切为单栏。
+- 事项、chain、compare 与 worksite 保留各自内容模块和局部缩放/滚动规则，但底层环境已经统一为 ambient field。不要因共享背景而改写它们的阅读顺序、状态机或 canonical matter。
+
+### 真实 viewport 移动首页
+
+- **720px 断点**：首页不再整体缩放 1672px 场景；scene 改为 `width: 100%`、`height: 100dvh`、`transform: none`，以 16px 左右边距直接排版。
+- 标题、说明、composer、空态、关系线、小鸟与横向 thought cards 都按 viewport 重排。thought cards 使用可横向滚动的 278 × 106px 表面，而不是缩小到不可读。
+- 主要导航和固定底部操作以 44px 为最小触控目标；提交 orb 为 48 × 48px。390px 与 320px viewport 已验证输入为 16px、主要触控为 44/48px、无水平 overflow，小鸟保持完整可见。
+- **350px 断点**：隐藏项目胶囊文字、主标题降至 36px，并微调 composer/空态纵向位置；这仍是 viewport 布局，不回退到场景缩放。
+
+**The Real Mobile Layout Rule.** 720px 及以下首页必须重排真实控件；不允许通过缩小桌面场景来伪装适配。尚未按同一矩阵验证的其他复杂路由，不得仅因共享 ambient field 宣称完成移动验收。
 
 ## Elevation & Depth
 
-首页保留清洁山水玻璃景观的色调与构图，不用额外厚色蒙层遮盖纹理。已有异形玻璃核心与本地 Anime.js 继续复用；Codrops 仅借鉴交互结构，不复制受限制资源。
+- ambient field 的深度来自淡渐变和边缘组件的低强度 `drop-shadow`，不是景深位图或厚色蒙层。中央光场用 18px blur，只负责柔化留白。
+- 首页 composer 使用半透明近白表面、20px blur、极浅外影与内侧白高光；focus-within 仅增加一圈低透明绿，不产生发光面板。
+- 既有异形气泡和大阅读面仍可用薄边、乳白中心、局部 backdrop blur 与轻投影；大正文表面不能叠加全幅折射或把装饰纹理压到文字下方。
+- 右上轨道的 `trace-orbit-breathe` 在 10 秒内只移动（-8px, 7px）并轻调透明度/阴影。`prefers-reduced-motion: reduce` 与产品内减少动效设置都必须停止或近乎即时结束动效；枝叶、卵石不动画。
 
-事项玻璃由 SVG 轮廓、裁切后的 backdrop blur、渐变薄膜、内缘高光和轻投影组成。小气泡的基础模糊为（7px）；仅中央主气泡接入场景对齐的背景折射采样。大面积重新进入 / 深度继续 / 生长表面使用（22px）模糊与乳白径向中心，不把全幅位移折射盖在文字下面。搜索和输入是更规整的浅玻璃表面，阴影只提供轻分离。
-
-**The 大面乳白 Rule.** 大阅读面优先保持乳白中心，小主气泡才使用受限折射；玻璃效果失败时仍保留静态轮廓与可操作 DOM，不让装饰成为状态流的前提。
+**The One Breathing Ornament Rule.** 同一 viewport 只有右上轨道可以持续呼吸；不要让三件装饰、小鸟、按钮和关系线一起漂浮。
 
 ## Shapes
 
-- 首页气泡保留各自不对称曲线与独立内容，不改成统一圆角矩形。
-- 事项有基础气泡、三段融合面与深度继续面三种 SVG 轮廓。异形不能用单个 `border-radius` token 代替；YAML 的圆角仅描述真实按钮、输入、搜索面和徽记。
-- 品牌直接复用 [首页图标源](src/home-icons.js) 中的线形 mark；事项搜索 / 全部痕迹复用同源图标。事项内容图标以轻底色圆形容器承载，仍为本地 inline SVG，不使用图标字体或图片里的假按钮。
-- 栖息与起飞仅复用 [bird-perched.png](public/home/bird-perched.png)、[bird-takeoff.png](public/home/bird-takeoff.png) 两个已准备姿态；不生成第三种身份，不将鸟烘焙进背景。
+- 三个装饰资产保持独立 viewBox 和透明边界：轨道是开放曲线与三个节点，枝叶是细茎/叶片，卵石是两块叠置石形与一条地线。不得把它们合并成一张大图。
+- 品牌 tile 使用 11px 圆角；主要短操作使用约 20–23px 圆角；首页 composer 桌面为 29px、移动为 24px；提交与头像保持圆形。
+- 首页与事项的关系气泡保留各自不对称 SVG 轮廓。移动 thought card 隐藏复杂 material SVG，改用 24px 圆角轻表面，以可读性和滚动稳定性优先。
+- 小鸟只使用已锁定的栖息与起飞姿态。它与关系线指向对象/停点，不增加第三种鸟身份，也不烘焙进 ambient SVG。
 
 ## Components
 
-### 同文档入口与共享对象
+### AmbientFrame 与 route surface
 
-[路由入口](src/web-main.js) 切换各模块并隔离样式；首页“全部”进入真实痕迹目录，搜索进入实际检索，品牌返回首页。对象与版本由 [宿主 bridge](src/product/bridge.mjs) 统一持有并事务保存；首页只读取同一份数据投影，不建立第二份事项事实。
+`AmbientFrame` 是 shell 级、`aria-hidden`、无指针事件的装饰层，包含中央光场与三个独立 SVG。route surface 的背景强制透明，非首页由 shell 的 `data-route` 降低装饰透明度。装饰加载失败不能改变路由、输入、保存或焦点顺序。
 
-导航与刷新保留已写入本机的对象、草稿、来源和版本；URL 只标识对象和位置，不承载输入正文。返回保存 query / filter / anchor / scroll 信息，失效对象有明确空态，不替换成示例。模型与外部 Agent 仍未连接，手工材料和结果按用户输入标识；本地保存、关联、采用理解和外部送达不可混称。旧 observation query 与 Mock 讨论留在 legacy。
+### 操作与输入
 
-### 七张图对应一个状态流
+- **主 / 次操作**：主操作保持深绿实心或既有深绿渐变，次操作为浅色薄面；hover/active 只提供短促反馈。移动主要触控下限为 44px，圆形提交为 48px。
+- **首页 composer**：桌面保留 762 × 121px 玻璃表面；移动改为左右 16px、132px 高的真实 viewport 表面，textarea 为 16px，提交 orb 固定在右下。
+- **焦点**：按钮和链接使用可见 `focus-visible` 轮廓；输入由容器 `focus-within` 或输入轮廓表达焦点。不能因为局部 input 清除默认 outline 就宣称整站已完成无障碍验证。
+- **目录**：痕迹库卡片保持真实数据、两栏到单栏的响应变化与内容截断；背景透明以露出 ambient field，而不是再次加载事项环境图。
 
-| 参考状态 | 已实现的表达 |
+### 产品语义与状态规则
+
+| 状态/组件 | 保留的真实语义 |
 | --- | --- |
-| 01 静默总览 | 六个事项位置、当前停点、细连线、小鸟与已有对照提示。 |
-| 02 悬停识别 | hover/focus 聚焦当前气泡、减弱其他节点并呈现来由提示；不写入变化。 |
-| 03 点击进入 / 气泡生长 | 从所选气泡展开的短暂动画，可跳过；这是本地进入过渡，不是假网络加载。reduced motion 或动画服务不可用时直达重新进入面。 |
-| 04 重新进入 | 当时为什么在意 / 上次真正停在 / 后来发生了什么三段融合表面；原现场、继续及先不带回旧理解都是独立操作。 |
-| 05 新的对照 / 深度继续 | 当时在意 / 原来的理解 / 新的对照 / 当前停点四个节点；正文、关系按钮与输入分区。 |
-| 06 搜索精确找回 | 实际匹配的三类结果与计数；事项、引文与来源回到同一个对象，而非复制展示数据。 |
-| 07 变化折回总览 | 明确关系决定或保存表达可产生变化徽记；保存新判断才更新当前停点、生成对应分支并折回总览。仅打开或返回不制造变化。 |
+| 静默总览与聚焦 | 对象、当前停点、细连线、小鸟与已有对照提示；hover/focus 不写入变化。 |
+| 重新进入 | 当时为什么在意 / 上次真正停在 / 后来发生了什么；原现场、继续与不带回旧理解是独立操作。 |
+| 新的对照 | 当时在意 / 原来的理解 / 新的对照 / 当前停点保持阅读顺序；正文、关系决定与输入分区。 |
+| 搜索 / 全部痕迹 | 结果、分类与数量来自当前保存对象，保留来路、筛选与返回位置，不复制一份演示数据。 |
+| 工作现场 / 结果回来 | 工作保留当时快照；结果确认后才修订当前理解。视觉高亮不等于外部 Agent 已执行。 |
 
-### 操作、输入与来源
+- **关系与判断分开**：“接为挑战”等关系选择不自动采用材料结论；“这次无关”不删除来源。没有对照源时关系按钮禁用。
+- **提交边界**：空白不能提交；Enter 保存、Shift + Enter 换行，输入法组合期间不提交。保存当前判断、保存我的理解、材料关联和外部送达是不同动作。
+- **持久化边界**：URL 只标识对象与位置，不承载正文；刷新与返回以 canonical matter 和持久化状态为准。失败时保留草稿并提供重试/导出，版本冲突拒绝静默覆盖。
 
-- **主 / 次操作**：圆润短胶囊。主操作为深绿渐变，次操作为浅绿薄面，普通文本操作保持透明；hover 加深或浅亮。已选关系同时使用 `aria-pressed` 与轮廓，不仅更换文案。
-- **关系与判断分开**：“接为挑战”确认材料关系，不自动采用它的结论；“这次无关”不删除来源。没有对照源时关系按钮禁用。视觉上保留关系状态说明，不把主按钮颜色当作“已形成判断”。
-- **先不带回旧理解**：改变本次上下文选择及输入草稿呈现，而非用覆盖层遮住原文；不删除历史示例原文。
-- **composer**：独立 textarea、原现场入口和圆形提交。空白内容不能提交；Enter 保存、Shift + Enter 换行，输入法组合期间不提交。保存“当前判断”与保存“我的理解”是两个明确动作。
-- **搜索与原现场**：结果分类和数量由当前数据产生；来源弹窗呈现归属、短摘录和示例说明，关闭后恢复触发位置的焦点。
-- **键盘与动态**：按钮具有 `focus-visible` 轮廓；Escape 处理退出/返回，reduced motion 去掉过渡。当前搜索和草稿输入在 CSS 中覆盖了自身 outline，不能仅凭通用焦点规则宣称所有输入已有可见焦点环，更不能据此声明完整无障碍达标。
-
-状态与行为事实以 [事项模型](src/matters/matters-model.mjs)、场景及路由源码为准。视觉/交互验收记录单独保留于 [本仓库导入与验证说明](../../docs/web-import.md)，不在设计系统复制临时测试分数。本文不作像素一致、对比度达标、性能达标或完整产品验收通过的声明。
+**The Decoration Never Decides Rule.** ambient 透明度、暖金节点、泛光或鸟的位置都不能触发、替代或证明状态写入。
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** 分别使用首页六图与事项七图的视觉权威，保留共享品牌、鸟与本地资源来源。
-- **Do** 用真实 DOM/SVG 表达七态、变化、输入和来源；把背景限制为环境层。
-- **Do** 保留大表面乳白中心、动态正文滚动区和独立操作区，并核验缩放后的实际可读与可操作范围。
-- **Do** 将用户内容和旧演示分开，使用同一对象的当前停点驱动首页、事项与搜索；本地保存不能标为外部送达。
+- **Do** 在所有主路由复用同一个浅矿物白 / 鼠尾草 ambient field，并在非首页降低装饰存在感。
+- **Do** 把轨道、枝叶、卵石保留为三个独立、可单独定位和降级的 SVG 周边组件，持续保护中央负空间。
+- **Do** 在 720px 及以下使用首页真实 viewport 布局，保持 16px 输入字号、44px 主要触控下限和 48px 提交目标。
+- **Do** 保留小鸟、关系线、异形表面与暖金节点的产品语义，并以 DOM/SVG 文字和控件承载真实状态。
+- **Do** 对持续动效尊重 `prefers-reduced-motion` 与产品内减少动效偏好。
 
 ### Don't:
-- **Don't** 将七张参考图做成全屏图片切换，或把新的事项构图提升为首页/旧讨论的全局规则。
-- **Don't** 为统一外观顺手换用组件库默认卡片、厚色蒙层、另一套字体或新的小鸟身份。
-- **Don't** 用打开页面、返回、悬停或材料关系选择伪造用户已经采用的新判断。
-- **Don't** 将固定字形子集、880 × 620 场景缩放或静态组件演示等同于全字符、移动端、无障碍或完整产品验收。
+- **Don't** 在 primary 或 legacy runtime 重新引用任何 `environment*.png`、六张背景角色或新的全屏背景图。
+- **Don't** 把三个周边组件合并成一张全画布插画，或在中央留白新增大面积装饰。
+- **Don't** 同时动画轨道、枝叶、卵石、小鸟和关系线；持续呼吸只属于右上轨道。
+- **Don't** 用整体缩放 1672px 桌面场景冒充 720px 以下首页适配，也不要把首页 390/320 验证外推为所有复杂路由已验收。
+- **Don't** 用打开页面、悬停、暖金高亮、材料关系选择或本地保存伪造用户已采用判断或外部工作已送达。

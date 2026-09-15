@@ -1,162 +1,192 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-14T19:26:43.850Z",
-  "title": "Design System: Trace Desktop",
+  "generatedAt": "2026-09-15T07:57:54.539370Z",
+  "title": "Design System: Trace Web",
   "extensions": {
     "colorMeta": {
-      "home-ink": {
+      "ink": {
         "role": "neutral",
-        "displayName": "首页深墨绿",
-        "canonical": "#08241f",
+        "displayName": "主墨绿",
+        "canonical": "#123e35",
         "tonalRamp": [
-          "oklch(15.00% 0.03501 179.38)",
-          "oklch(26.43% 0.03501 179.38)",
-          "oklch(37.86% 0.03501 179.38)",
-          "oklch(49.29% 0.03501 179.38)",
-          "oklch(60.71% 0.03501 179.38)",
-          "oklch(72.14% 0.03501 179.38)",
-          "oklch(83.57% 0.03501 179.38)",
-          "oklch(95.00% 0.03501 179.38)"
+          "oklch(15.00% 0.05059 176.99)",
+          "oklch(26.43% 0.05059 176.99)",
+          "oklch(37.86% 0.05059 176.99)",
+          "oklch(49.29% 0.05059 176.99)",
+          "oklch(60.71% 0.05059 176.99)",
+          "oklch(72.14% 0.05059 176.99)",
+          "oklch(83.57% 0.05059 176.99)",
+          "oklch(95.00% 0.05059 176.99)"
         ]
       },
-      "home-muted": {
+      "body-ink": {
         "role": "neutral",
-        "displayName": "首页辅助蓝绿",
-        "canonical": "#506974",
+        "displayName": "正文墨绿",
+        "canonical": "#173c32",
         "tonalRamp": [
-          "oklch(15.00% 0.03435 226.68)",
-          "oklch(26.43% 0.03435 226.68)",
-          "oklch(37.86% 0.03435 226.68)",
-          "oklch(49.29% 0.03435 226.68)",
-          "oklch(60.71% 0.03435 226.68)",
-          "oklch(72.14% 0.03435 226.68)",
-          "oklch(83.57% 0.03435 226.68)",
-          "oklch(95.00% 0.03435 226.68)"
+          "oklch(15.00% 0.04632 173.10)",
+          "oklch(26.43% 0.04632 173.10)",
+          "oklch(37.86% 0.04632 173.10)",
+          "oklch(49.29% 0.04632 173.10)",
+          "oklch(60.71% 0.04632 173.10)",
+          "oklch(72.14% 0.04632 173.10)",
+          "oklch(83.57% 0.04632 173.10)",
+          "oklch(95.00% 0.04632 173.10)"
         ]
       },
-      "home-green": {
+      "muted-sage": {
+        "role": "neutral",
+        "displayName": "辅助鼠尾草",
+        "canonical": "#587369",
+        "tonalRamp": [
+          "oklch(15.00% 0.03523 170.27)",
+          "oklch(26.43% 0.03523 170.27)",
+          "oklch(37.86% 0.03523 170.27)",
+          "oklch(49.29% 0.03523 170.27)",
+          "oklch(60.71% 0.03523 170.27)",
+          "oklch(72.14% 0.03523 170.27)",
+          "oklch(83.57% 0.03523 170.27)",
+          "oklch(95.00% 0.03523 170.27)"
+        ]
+      },
+      "action-green": {
         "role": "primary",
-        "displayName": "首页行动绿",
-        "canonical": "#075540",
+        "displayName": "行动深绿",
+        "canonical": "#0b5942",
         "tonalRamp": [
-          "oklch(15.00% 0.07796 168.39)",
-          "oklch(26.43% 0.07796 168.39)",
-          "oklch(37.86% 0.07796 168.39)",
-          "oklch(49.29% 0.07796 168.39)",
-          "oklch(60.71% 0.07796 168.39)",
-          "oklch(72.14% 0.07796 168.39)",
-          "oklch(83.57% 0.07796 168.39)",
-          "oklch(95.00% 0.07796 168.39)"
+          "oklch(15.00% 0.08056 167.01)",
+          "oklch(26.43% 0.08056 167.01)",
+          "oklch(37.86% 0.08056 167.01)",
+          "oklch(49.29% 0.08056 167.01)",
+          "oklch(60.71% 0.08056 167.01)",
+          "oklch(72.14% 0.08056 167.01)",
+          "oklch(83.57% 0.08056 167.01)",
+          "oklch(95.00% 0.08056 167.01)"
         ]
       },
-      "matters-ink": {
-        "role": "neutral",
-        "displayName": "事项深墨绿",
-        "canonical": "#08251f",
-        "tonalRamp": [
-          "oklch(15.00% 0.03647 176.98)",
-          "oklch(26.43% 0.03647 176.98)",
-          "oklch(37.86% 0.03647 176.98)",
-          "oklch(49.29% 0.03647 176.98)",
-          "oklch(60.71% 0.03647 176.98)",
-          "oklch(72.14% 0.03647 176.98)",
-          "oklch(83.57% 0.03647 176.98)",
-          "oklch(95.00% 0.03647 176.98)"
-        ]
-      },
-      "matters-action-top": {
+      "primary-solid": {
         "role": "primary",
-        "displayName": "事项主操作亮端",
-        "canonical": "#126851",
+        "displayName": "实心主按钮绿",
+        "canonical": "#115d43",
         "tonalRamp": [
-          "oklch(15.00% 0.08609 169.63)",
-          "oklch(26.43% 0.08609 169.63)",
-          "oklch(37.86% 0.08609 169.63)",
-          "oklch(49.29% 0.08609 169.63)",
-          "oklch(60.71% 0.08609 169.63)",
-          "oklch(72.14% 0.08609 169.63)",
-          "oklch(83.57% 0.08609 169.63)",
-          "oklch(95.00% 0.08609 169.63)"
+          "oklch(15.00% 0.08336 164.62)",
+          "oklch(26.43% 0.08336 164.62)",
+          "oklch(37.86% 0.08336 164.62)",
+          "oklch(49.29% 0.08336 164.62)",
+          "oklch(60.71% 0.08336 164.62)",
+          "oklch(72.14% 0.08336 164.62)",
+          "oklch(83.57% 0.08336 164.62)",
+          "oklch(95.00% 0.08336 164.62)"
         ]
       },
-      "matters-action-bottom": {
+      "focus-green": {
         "role": "primary",
-        "displayName": "事项主操作暗端",
-        "canonical": "#004b38",
+        "displayName": "焦点绿",
+        "canonical": "#1f7057",
         "tonalRamp": [
-          "oklch(15.00% 0.07355 168.86)",
-          "oklch(26.43% 0.07355 168.86)",
-          "oklch(37.86% 0.07355 168.86)",
-          "oklch(49.29% 0.07355 168.86)",
-          "oklch(60.71% 0.07355 168.86)",
-          "oklch(72.14% 0.07355 168.86)",
-          "oklch(83.57% 0.07355 168.86)",
-          "oklch(95.00% 0.07355 168.86)"
+          "oklch(15.00% 0.08696 168.14)",
+          "oklch(26.43% 0.08696 168.14)",
+          "oklch(37.86% 0.08696 168.14)",
+          "oklch(49.29% 0.08696 168.14)",
+          "oklch(60.71% 0.08696 168.14)",
+          "oklch(72.14% 0.08696 168.14)",
+          "oklch(83.57% 0.08696 168.14)",
+          "oklch(95.00% 0.08696 168.14)"
         ]
       },
-      "matters-submit": {
-        "role": "primary",
-        "displayName": "事项圆形提交绿",
-        "canonical": "#065e45",
-        "tonalRamp": [
-          "oklch(15.00% 0.08601 166.70)",
-          "oklch(26.43% 0.08601 166.70)",
-          "oklch(37.86% 0.08601 166.70)",
-          "oklch(49.29% 0.08601 166.70)",
-          "oklch(60.71% 0.08601 166.70)",
-          "oklch(72.14% 0.08601 166.70)",
-          "oklch(83.57% 0.08601 166.70)",
-          "oklch(95.00% 0.08601 166.70)"
-        ]
-      },
-      "matters-reading": {
+      "mineral-base": {
         "role": "neutral",
-        "displayName": "事项阅读蓝绿",
-        "canonical": "#405f70",
+        "displayName": "矿物白基底",
+        "canonical": "#f3f6f1",
         "tonalRamp": [
-          "oklch(15.00% 0.04562 233.04)",
-          "oklch(26.43% 0.04562 233.04)",
-          "oklch(37.86% 0.04562 233.04)",
-          "oklch(49.29% 0.04562 233.04)",
-          "oklch(60.71% 0.04562 233.04)",
-          "oklch(72.14% 0.04562 233.04)",
-          "oklch(83.57% 0.04562 233.04)",
-          "oklch(95.00% 0.04562 233.04)"
+          "oklch(15.00% 0.00732 132.41)",
+          "oklch(26.43% 0.00732 132.41)",
+          "oklch(37.86% 0.00732 132.41)",
+          "oklch(49.29% 0.00732 132.41)",
+          "oklch(60.71% 0.00732 132.41)",
+          "oklch(72.14% 0.00732 132.41)",
+          "oklch(83.57% 0.00732 132.41)",
+          "oklch(95.00% 0.00732 132.41)"
         ]
       },
-      "matters-milk": {
+      "mineral-highlight": {
         "role": "neutral",
-        "displayName": "大表面乳白中心",
-        "canonical": "#f5faf3",
+        "displayName": "矿物高光",
+        "canonical": "#f7f9f5",
         "tonalRamp": [
-          "oklch(15.00% 0.01061 136.56)",
-          "oklch(26.43% 0.01061 136.56)",
-          "oklch(37.86% 0.01061 136.56)",
-          "oklch(49.29% 0.01061 136.56)",
-          "oklch(60.71% 0.01061 136.56)",
-          "oklch(72.14% 0.01061 136.56)",
-          "oklch(83.57% 0.01061 136.56)",
-          "oklch(95.00% 0.01061 136.56)"
+          "oklch(15.00% 0.00567 128.52)",
+          "oklch(26.43% 0.00567 128.52)",
+          "oklch(37.86% 0.00567 128.52)",
+          "oklch(49.29% 0.00567 128.52)",
+          "oklch(60.71% 0.00567 128.52)",
+          "oklch(72.14% 0.00567 128.52)",
+          "oklch(83.57% 0.00567 128.52)",
+          "oklch(95.00% 0.00567 128.52)"
         ]
       },
-      "matters-rim": {
+      "sage-wash": {
         "role": "neutral",
-        "displayName": "玻璃白边",
-        "canonical": "#ffffff",
+        "displayName": "鼠尾草洗色",
+        "canonical": "#edf4f0",
         "tonalRamp": [
-          "oklch(15.00% 0.00000 0.00)",
-          "oklch(26.43% 0.00000 0.00)",
-          "oklch(37.86% 0.00000 0.00)",
-          "oklch(49.29% 0.00000 0.00)",
-          "oklch(60.71% 0.00000 0.00)",
-          "oklch(72.14% 0.00000 0.00)",
-          "oklch(83.57% 0.00000 0.00)",
-          "oklch(95.00% 0.00000 0.00)"
+          "oklch(15.00% 0.00910 161.35)",
+          "oklch(26.43% 0.00910 161.35)",
+          "oklch(37.86% 0.00910 161.35)",
+          "oklch(49.29% 0.00910 161.35)",
+          "oklch(60.71% 0.00910 161.35)",
+          "oklch(72.14% 0.00910 161.35)",
+          "oklch(83.57% 0.00910 161.35)",
+          "oklch(95.00% 0.00910 161.35)"
         ]
       },
-      "matters-warm-node": {
+      "glass-surface": {
+        "role": "neutral",
+        "displayName": "首页半透明表面",
+        "canonical": "#fbfdf9dc",
+        "tonalRamp": [
+          "oklch(15.00% 0.00565 128.52)",
+          "oklch(26.43% 0.00565 128.52)",
+          "oklch(37.86% 0.00565 128.52)",
+          "oklch(49.29% 0.00565 128.52)",
+          "oklch(60.71% 0.00565 128.52)",
+          "oklch(72.14% 0.00565 128.52)",
+          "oklch(83.57% 0.00565 128.52)",
+          "oklch(95.00% 0.00565 128.52)"
+        ]
+      },
+      "shell-control": {
+        "role": "neutral",
+        "displayName": "Shell 控件薄面",
+        "canonical": "#f7fcf0bf",
+        "tonalRamp": [
+          "oklch(15.00% 0.01661 125.28)",
+          "oklch(26.43% 0.01661 125.28)",
+          "oklch(37.86% 0.01661 125.28)",
+          "oklch(49.29% 0.01661 125.28)",
+          "oklch(60.71% 0.01661 125.28)",
+          "oklch(72.14% 0.01661 125.28)",
+          "oklch(83.57% 0.01661 125.28)",
+          "oklch(95.00% 0.01661 125.28)"
+        ]
+      },
+      "ambient-warm-node": {
         "role": "secondary",
-        "displayName": "暖光节点边缘",
+        "displayName": "环境暖金节点",
+        "canonical": "#d8a94c",
+        "tonalRamp": [
+          "oklch(15.00% 0.12286 82.00)",
+          "oklch(26.43% 0.12286 82.00)",
+          "oklch(37.86% 0.12286 82.00)",
+          "oklch(49.29% 0.12286 82.00)",
+          "oklch(60.71% 0.12286 82.00)",
+          "oklch(72.14% 0.12286 82.00)",
+          "oklch(83.57% 0.12286 82.00)",
+          "oklch(95.00% 0.12286 82.00)"
+        ]
+      },
+      "state-warm-node": {
+        "role": "secondary",
+        "displayName": "状态暖金节点",
         "canonical": "#dfb654",
         "tonalRamp": [
           "oklch(15.00% 0.12498 86.45)",
@@ -168,209 +198,317 @@
           "oklch(83.57% 0.12498 86.45)",
           "oklch(95.00% 0.12498 86.45)"
         ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "白色高光",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15.00% 0.00000 89.88)",
+          "oklch(26.43% 0.00000 89.88)",
+          "oklch(37.86% 0.00000 89.88)",
+          "oklch(49.29% 0.00000 89.88)",
+          "oklch(60.71% 0.00000 89.88)",
+          "oklch(72.14% 0.00000 89.88)",
+          "oklch(83.57% 0.00000 89.88)",
+          "oklch(95.00% 0.00000 89.88)"
+        ]
       }
     },
     "typographyMeta": {
-      "home-display": {
-        "displayName": "首页主标题",
-        "purpose": "首页默认尺度；事项不复用这一字号。"
+      "display": {
+        "displayName": "首页桌面展示标题",
+        "purpose": "721px 及以上首页主标题；有效字号 66px。"
       },
-      "matters-display": {
-        "displayName": "事项总览主标题",
-        "purpose": "总览与搜索；重新进入态另有缩小字号。"
+      "display-mobile": {
+        "displayName": "首页移动展示标题",
+        "purpose": "720px 及以下首页主标题；350px 以下源码局部修正为 36px。"
       },
-      "matters-bubble-title": {
-        "displayName": "事项气泡标题",
-        "purpose": "普通气泡基础值，局部主体与 compact 样式见源码。"
+      "body": {
+        "displayName": "共享正文",
+        "purpose": "共享 shell、目录、正文和一般输入的默认黑体层级。"
       },
-      "matters-comparison-title": {
-        "displayName": "新的对照标题",
-        "purpose": "深度继续的大标题。"
+      "label": {
+        "displayName": "共享标签",
+        "purpose": "导航、按钮、元数据与辅助说明。"
       },
-      "matters-input": {
-        "displayName": "事项输入",
-        "purpose": "正文倍率作用于 composer 动态文字。"
+      "mobile-input": {
+        "displayName": "移动输入",
+        "purpose": "移动首页 textarea，固定 16px 以保持可读和稳定输入。"
       }
     },
     "shadows": [
       {
-        "name": "matters-small-membrane",
-        "value": "drop-shadow(0 4px 6px #385e461c)",
-        "purpose": "小气泡薄膜的轻分离。"
+        "name": "ambient-piece",
+        "value": "drop-shadow(0 16px 26px #215c4930)",
+        "purpose": "三个周边 SVG 的低强度分离；不形成悬浮卡片感。"
       },
       {
-        "name": "matters-large-membrane",
-        "value": "drop-shadow(0 9px 12px #35594712)",
-        "purpose": "大融合表面，中心靠乳白而非加深阴影。"
+        "name": "ambient-orbit-rest",
+        "value": "drop-shadow(0 12px 22px #215c4924)",
+        "purpose": "右上轨道呼吸起点。"
       },
       {
-        "name": "matters-search",
-        "value": "inset 0 2px 4px #ffffffb0,0 4px 20px #455f4920",
-        "purpose": "搜索胶囊内高光与轻外影。"
+        "name": "ambient-orbit-breathe",
+        "value": "drop-shadow(0 20px 36px #2f806044)",
+        "purpose": "右上轨道呼吸终点，配合轻微位移。"
+      },
+      {
+        "name": "home-composer",
+        "value": "0 24px 62px #285d4917, inset 0 1px 0 #fff",
+        "purpose": "首页输入表面的轻分离与内侧白高光。"
+      },
+      {
+        "name": "home-composer-focus",
+        "value": "0 26px 70px #285d4922, 0 0 0 3px #3c8a6b18",
+        "purpose": "focus-within 的受限绿晕。"
       }
     ],
     "motion": [
       {
-        "name": "matters-bubble-feedback",
-        "value": "opacity 230ms,filter 230ms,transform 230ms",
-        "purpose": "气泡 hover/focus 与减弱状态。"
+        "name": "feedback",
+        "value": "120ms ease-out",
+        "purpose": "共享按钮的颜色、背景、边框、阴影和位移反馈。"
       },
       {
-        "name": "matters-entry-growth",
-        "value": "680ms; ease: out(4); settle:720ms",
-        "purpose": "本地可跳过的进入动画，不表示请求进行中。"
+        "name": "route-enter",
+        "value": "240ms cubic-bezier(.22,.8,.24,1)",
+        "purpose": "路由资源就绪后的短进入，不表示网络或保存成功。"
       },
       {
-        "name": "matters-entry-copy",
-        "value": "390ms; delay:140ms; ease:out(3)",
-        "purpose": "进入过程中文字出现。"
+        "name": "route-exit",
+        "value": "180ms ease",
+        "purpose": "旧 route root 的淡出。"
+      },
+      {
+        "name": "orbit-breathe",
+        "value": "10s cubic-bezier(.16,1,.3,1) infinite alternate; translate3d(0,0,0) → translate3d(-8px,7px,0)",
+        "purpose": "唯一持续的环境动效，只用于右上轨道。"
       },
       {
         "name": "reduced-motion",
-        "value": "prefers-reduced-motion: reduce",
-        "purpose": "去掉过渡并直接进入内容。"
+        "value": "prefers-reduced-motion: reduce; html[data-reduce-motion=true]",
+        "purpose": "停止轨道呼吸并取消或近乎即时结束 route/control 动效。"
       }
     ],
     "breakpoints": [
       {
-        "name": "home-narrow",
-        "value": "max-width:1050px"
+        "name": "home-desktop-narrow",
+        "value": "max-width:1050px",
+        "purpose": "桌面坐标场景的字号与可读性补偿。"
       },
       {
-        "name": "matters-compact",
-        "value": "scene scale < 0.68"
+        "name": "directory-single-column",
+        "value": "max-width:800px",
+        "purpose": "痕迹目录由双栏改为单栏。"
+      },
+      {
+        "name": "home-real-viewport-mobile",
+        "value": "max-width:720px",
+        "purpose": "首页停止 1672px 场景缩放，改为 100% × 100dvh 的真实 viewport 布局。"
+      },
+      {
+        "name": "home-small-mobile",
+        "value": "max-width:350px",
+        "purpose": "隐藏项目胶囊文字并微调标题和垂直位置。"
       }
     ],
+    "ambientField": {
+      "base": "radial-gradient(circle at 50% 38%,#ffffff 0,#f7faf6 28%,transparent 58%),linear-gradient(145deg,#f7f9f5,#edf4f0)",
+      "centerLight": "660px × 430px; blur(18px); opacity .72",
+      "nonHomeOpacity": {
+        "pieces": ".35",
+        "centerLight": ".46"
+      },
+      "mobile": "At <=720px the gradient focus moves upward and each edge ornament is resized/repositioned; the center stays clear."
+    },
+    "decorativeAssets": [
+      {
+        "name": "Trace Orbit",
+        "path": "public/decor/trace-orbit.svg",
+        "placement": "right:-24px; top:82px; width:330px",
+        "meaning": "关系轨道与三个节点",
+        "motion": "orbit-breathe"
+      },
+      {
+        "name": "Trace Sprig",
+        "path": "public/decor/trace-sprig.svg",
+        "placement": "left:-12px; bottom:-30px; width:220px",
+        "meaning": "生长与继续",
+        "motion": "none"
+      },
+      {
+        "name": "Trace Pebbles",
+        "path": "public/decor/trace-pebbles.svg",
+        "placement": "right:20px; bottom:12px; width:290px",
+        "meaning": "停点与沉淀",
+        "motion": "none"
+      }
+    ],
+    "interactionMinimums": {
+      "scope": "home at <=720px",
+      "touchTarget": "44px minimum for primary navigation/fixed controls",
+      "submitTarget": "48px × 48px",
+      "inputFontSize": "16px",
+      "verifiedViewports": [
+        "390px",
+        "320px"
+      ],
+      "verifiedOutcome": "no horizontal overflow; perched bird fully visible"
+    },
     "materialPolicy": {
-      "small": "7px backdrop blur; only featured small bubble samples the aligned environment",
-      "large": "22px backdrop blur; SVG milk center; no full-surface displacement refraction",
-      "background": "one environment image plane, center / cover; UI scales independently"
+      "background": "CSS-only mineral/sage field; no runtime full-scene environment image",
+      "surface": "near-white translucent layers, thin white rim, restrained blur and shadow",
+      "content": "real DOM/SVG stays above decoration and owns interaction/state",
+      "warmAccent": "isolated nodes/change signals only"
+    },
+    "runtimeAssets": {
+      "registry": "src/product/assets.mjs",
+      "current": [
+        "shared perched bird",
+        "shared takeoff bird",
+        "local serif font",
+        "local sans font"
+      ],
+      "historicalOnly": "environment*.png files and their lock entries may remain in the repository but are not runtime visual-system inputs",
+      "surfaceOverride": "src/product/web.css forces background-image:none on home, matters, chain, compare, worksite, library and loading surfaces"
     },
     "previewLimits": [
-      "色阶由当前色值转为 OKLCH 后固定 hue/chroma、分 8 档 lightness 生成，仅用于文档色片；不是新增的实现 token 或另一套视觉方向。",
-      "组件为无状态样式片段，不执行路由、搜索、关系修改、提交或折射服务；不充当 UI 验收。",
-      "事项字体别名在挂载时按实例注册；独立文档面板没有实例变量时走所列系统 fallback，不承诺与应用字形一致。",
-      "原型只有桌面场景与 compact 缩放，不声明移动端适配或无障碍合规。"
+      "色阶由当前色值转为 OKLCH 后固定 hue/chroma、分 8 档 lightness 生成，仅用于文档色片；不是新增实现 token。",
+      "组件片段是无状态 shadow-DOM 预览，不执行路由、保存、关系修改、搜索或外部工作。",
+      "首页 390px 与 320px 已验证移动输入、主要触控、overflow 和小鸟可见性；此结论不自动覆盖事项、chain、compare 或 worksite。",
+      "历史 environment PNG 仍可能存在于锁文件和 public 目录；存在不等于 runtime 引用。"
     ],
     "webIntegration": {
       "entry": "src/web-main.js",
-      "assetRegistry": "src/product/assets.mjs",
-      "assetLock": "approved-assets.lock.json",
+      "shell": "src/react-main.tsx",
       "source": "src/product/web.css",
-      "scope": "desktop local Web; legacy components remain separately scoped",
+      "assetRegistry": "src/product/assets.mjs",
+      "scope": "shared ambient field across home, matters, chain, compare, worksite and library routes",
       "fonts": {
-        "sans": "public/product/fonts/TraceSans.ttf",
-        "serif": "public/product/fonts/TraceSerif.woff2"
+        "sansAlias": "Trace Web Sans",
+        "serifAlias": "Trace Web Serif",
+        "sansFile": "public/home/fonts/TraceHomeSans-fixed.woff2",
+        "serifFile": "public/home/fonts/TraceHomeSerif-fixed.woff2"
       },
-      "notes": "Six distinct backgrounds; one bird identity. New directory styles are local extensions, not a replacement for page-specific scene compositions."
+      "notes": "No background roles exist in ASSETS. Home uses a true viewport layout at <=720px; non-home routes lower ambient opacity."
     }
   },
   "components": [
     {
-      "name": "Matters Primary Button",
+      "name": "Primary Action",
       "kind": "button",
-      "refersTo": "matters-button-primary",
-      "description": "深度继续或确认材料关系的主操作；选中关系不表示已采用判断。",
-      "html": "<button type=\"button\" class=\"ds-primary\">接为挑战</button>",
-      "css": ".ds-primary{display:inline-flex;justify-content:center;align-items:center;gap:18px;min-height:49px;padding:10px 25px;border:0;border-radius:28px;font:400 22px/1.25 var(--matters-sans,\"Microsoft YaHei\",\"PingFang SC\",sans-serif);white-space:nowrap;color:#f4fff9;background:linear-gradient(170deg,#126851,#004b38);box-shadow:inset 0 1px 1px #a9d6ad66,0 2px 4px #24472d15;cursor:pointer}.ds-primary:hover{background:linear-gradient(170deg,#1a775e,#055b43)}.ds-primary:focus-visible{outline:3px solid #126c53;outline-offset:5px}.ds-primary[aria-pressed=\"true\"]{box-shadow:0 0 0 2px #759c54,0 0 0 5px #ffffffa8}.ds-primary:disabled{opacity:.45;cursor:default}"
+      "refersTo": "button-primary",
+      "description": "共享深绿主操作；语义由真实 action 决定，颜色本身不表示已保存或已送达。",
+      "html": "<button type=\"button\" class=\"ds-primary\">继续</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:12px 24px;border:0;border-radius:23px;background:#115d43;color:#fff;font:400 14px/1.45 var(--web-sans,\"Trace Web Sans\",\"Microsoft YaHei\",sans-serif);transition:background-color 120ms ease-out,transform 120ms ease-out;cursor:pointer}.ds-primary:hover{background:#0b5942}.ds-primary:active{transform:translateY(1px) scale(.985)}.ds-primary:focus-visible{outline:2px solid #1f7057;outline-offset:4px}@media(prefers-reduced-motion:reduce){.ds-primary{transition:none}.ds-primary:active{transform:none}}"
     },
     {
-      "name": "Matters Secondary Button",
+      "name": "Shell Button",
       "kind": "button",
-      "refersTo": "matters-button-secondary",
-      "description": "浅绿关系操作；次要外观不代表删除来源。",
-      "html": "<button type=\"button\" class=\"ds-secondary\">这次无关</button>",
-      "css": ".ds-secondary{display:inline-flex;justify-content:center;align-items:center;gap:18px;min-height:49px;padding:10px 25px;border:0;border-radius:28px;font:400 22px/1.25 var(--matters-sans,\"Microsoft YaHei\",\"PingFang SC\",sans-serif);white-space:nowrap;color:#527c67;background:#ecf8df9e;box-shadow:inset 0 0 0 1px #d4e3c977;cursor:pointer}.ds-secondary:hover{background:#deefcccf}.ds-secondary:focus-visible{outline:3px solid #126c53;outline-offset:5px}.ds-secondary[aria-pressed=\"true\"]{box-shadow:0 0 0 2px #759c54,0 0 0 5px #ffffffa8}.ds-secondary:disabled{opacity:.45;cursor:default}"
+      "refersTo": "button-shell",
+      "description": "返回、上下文和恢复入口使用的轻薄 shell 控件。",
+      "html": "<button type=\"button\" class=\"ds-shell\">返回来处</button>",
+      "css": ".ds-shell{padding:7px 13px;border:1px solid #76977440;border-radius:20px;background:#f7fcf0bf;color:#3b6852;font:400 14px/1.45 var(--web-sans,\"Trace Web Sans\",\"Microsoft YaHei\",sans-serif);transition:background-color 120ms ease-out,border-color 120ms ease-out;cursor:pointer}.ds-shell:hover{background:#fffff0;border-color:#71977c80}.ds-shell:focus-visible{outline:2px solid #1f7057;outline-offset:4px}"
     },
     {
-      "name": "Matters Submit",
-      "kind": "button",
-      "refersTo": "matters-submit",
-      "description": "composer 中的独立圆形提交；真实页面依据草稿是否为空启用。",
-      "html": "<button type=\"button\" class=\"ds-submit\" aria-label=\"保存当前判断，回到总览\"><svg class=\"ds-arrow\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.45\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 12h16m-6-6 6 6-6 6\"/></svg></button>",
-      "css": ".ds-submit{display:grid;place-items:center;flex:none;width:52px;height:52px;padding:0;border:0;border-radius:50%;background:#065e45;color:white;box-shadow:inset 0 1px 2px #97c28b88;cursor:pointer}.ds-submit:focus-visible{outline:3px solid #126c53;outline-offset:5px}.ds-submit:disabled{opacity:.43;cursor:default}.ds-arrow{width:25px;height:25px}"
-    },
-    {
-      "name": "Matters Search",
+      "name": "Home Composer",
       "kind": "input",
-      "refersTo": "matters-search",
-      "description": "总览搜索浅玻璃胶囊；静态片段不连接搜索模型，保留实现中输入自身 outline 为 0 的事实。",
-      "html": "<div class=\"ds-search\"><svg class=\"ds-search-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.45\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"10\" r=\"6.5\"/><path d=\"m15 15 6 6\"/></svg><input class=\"ds-search-input\" type=\"search\" aria-label=\"找一下之前在意的事\" placeholder=\"找一下之前在意的事……\" /></div>",
-      "css": ".ds-search{display:flex;align-items:center;gap:18px;box-sizing:border-box;width:626px;max-width:100%;height:66px;padding:0 24px;border:1.5px solid #ffffffeb;border-radius:42px;background:linear-gradient(180deg,#ffffffbe,#eff8f3a6);box-shadow:inset 0 2px 4px #ffffffb0,0 4px 20px #455f4920;color:#678579;backdrop-filter:blur(9px)}.ds-search-icon{width:27px;height:27px;flex:none}.ds-search-input{min-width:0;flex:1;height:100%;border:0;background:none;outline:0!important;font:400 24px var(--matters-sans,\"Microsoft YaHei\",\"PingFang SC\",sans-serif);letter-spacing:.3px;color:#365c51}.ds-search-input::placeholder{color:#4b7062;opacity:1}.ds-search-input:focus-visible{outline:0!important}.ds-search-input::-webkit-search-cancel-button{display:none}"
+      "refersTo": "home-composer",
+      "description": "首页核心输入表面；桌面为固定场景组件，移动端改为 16px 边距的真实 viewport 布局。",
+      "html": "<label class=\"ds-composer\"><span class=\"ds-sr\">此刻在意什么</span><textarea placeholder=\"此刻，你在意什么？\"></textarea><button type=\"button\" class=\"ds-send\" aria-label=\"保存\">→</button></label>",
+      "css": ".ds-composer{position:relative;display:block;width:762px;max-width:100%;height:121px;padding:22px 74px 17px 32px;border:1px solid #fff;border-radius:29px;background:#fbfdf9dc;box-shadow:0 24px 62px #285d4917,inset 0 1px 0 #fff;backdrop-filter:blur(20px) saturate(112%)}.ds-composer:focus-within{border-color:#8eb8a7;box-shadow:0 26px 70px #285d4922,0 0 0 3px #3c8a6b18}.ds-composer textarea{width:100%;height:52px;resize:none;border:0;outline:0;background:transparent;color:#123e35;font:400 16px/1.55 var(--web-sans,\"Trace Web Sans\",\"Microsoft YaHei\",sans-serif)}.ds-send{position:absolute;right:20px;bottom:16px;width:51px;height:51px;border:0;border-radius:50%;background:radial-gradient(circle at 36% 22%,#24715b,#00503c 72%);color:#fff;font-size:24px;cursor:pointer}.ds-send:focus-visible{outline:2px solid #1f7057;outline-offset:4px}.ds-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}@media(max-width:720px){.ds-composer{width:100%;height:132px;padding:20px 68px 18px 20px;border-radius:24px}.ds-send{right:14px;bottom:14px;width:48px;height:48px}}"
     },
     {
-      "name": "Matters Navigation",
-      "kind": "nav",
-      "description": "事项页右上角的同源 inline SVG 与透明文本操作；静态片段无路由副作用。",
-      "html": "<nav class=\"ds-nav\" aria-label=\"页面导航\"><button type=\"button\" class=\"ds-nav-button\"><svg class=\"ds-search-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.45\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"10\" r=\"6.5\"/><path d=\"m15 15 6 6\"/></svg>搜索</button><span class=\"ds-divider\" aria-hidden=\"true\">|</span><button type=\"button\" class=\"ds-nav-button\"><svg class=\"ds-nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.45\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5\"/></svg>全部痕迹</button></nav>",
-      "css": ".ds-nav{display:flex;align-items:center;gap:20px;font:400 19px var(--matters-sans,\"Microsoft YaHei\",\"PingFang SC\",sans-serif);color:#45615c}.ds-nav-button{display:inline-flex;align-items:center;gap:10px;padding:6px 3px;border:0;background:transparent;white-space:nowrap;font:inherit;color:inherit;cursor:pointer}.ds-nav-button:hover{color:#063c2f;text-decoration:underline;text-underline-offset:5px}.ds-nav-button:focus-visible{outline:3px solid #126c53;outline-offset:5px}.ds-nav-icon,.ds-search-icon{display:block;width:24px;height:24px}.ds-divider{color:#91aaa1;opacity:.65;font-size:17px}"
+      "name": "Directory Search",
+      "kind": "input",
+      "description": "痕迹目录的近白搜索表面；真实页面按保存内容检索。",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"10\" r=\"6.5\"/><path d=\"m15 15 6 6\"/></svg><input type=\"search\" placeholder=\"搜索痕迹\"></label>",
+      "css": ".ds-search{display:flex;align-items:center;gap:15px;padding:14px 20px;border:1px solid #fff;border-radius:20px;background:#f8fcf6ba;box-shadow:0 7px 30px #53765a0b;color:#176447}.ds-search svg{width:23px;height:23px;flex:none}.ds-search input{min-width:0;width:100%;border:0;outline:0;background:transparent;color:#173c32;font:400 16px/1.5 var(--web-sans,\"Trace Web Sans\",\"Microsoft YaHei\",sans-serif)}.ds-search:focus-within{outline:2px solid #4f907866;outline-offset:4px}"
     },
     {
-      "name": "Matters Change Badge",
-      "kind": "chip",
-      "refersTo": "matters-change-badge",
-      "description": "对象明确变化后的非交互徽记；不单独触发状态修改。",
-      "html": "<span class=\"ds-change-badge\">刚有变化</span>",
-      "css": ".ds-change-badge{display:inline-block;white-space:nowrap;font:400 15px/1.3 var(--matters-sans,\"Microsoft YaHei\",\"PingFang SC\",sans-serif);letter-spacing:.4px;padding:4px 7px;border:1px solid #e7d88ab0;border-radius:10px;background:#fff3b652;color:#898050}"
-    },
-    {
-      "name": "Matters Search Panel",
+      "name": "Trace Record Card",
       "kind": "card",
-      "refersTo": "matters-search-panel",
-      "description": "规整的可滚动结果表面；示例行不是另一份事项状态。",
-      "html": "<section class=\"ds-search-panel\" tabindex=\"0\" aria-label=\"搜索结果\"><h2 class=\"ds-group-title\">在意的事</h2><button type=\"button\" class=\"ds-result\"><span class=\"ds-result-title\">收藏后为什么接不回来</span><span class=\"ds-result-stop\">现在停在：重新出现的理由，可能比分类更重要</span></button></section>",
-      "css": ".ds-search-panel{padding:27px 38px 33px;border:1.5px solid #ffffffdc;border-radius:35px;background:linear-gradient(150deg,#fafffbeb,#eaf3edda);box-shadow:inset 0 1px 3px #fff,0 5px 16px #49745d13;backdrop-filter:blur(13px);overflow:auto;scrollbar-width:thin;scrollbar-color:#9ab3a681 transparent;font-family:var(--matters-sans,\"Microsoft YaHei\",\"PingFang SC\",sans-serif)}.ds-search-panel:focus-visible,.ds-result:focus-visible{outline:3px solid #126c53;outline-offset:5px}.ds-group-title{margin:0 0 10px;font:600 27px/1.5 var(--matters-serif,\"Noto Serif SC\",\"Songti SC\",\"SimSun\",serif);color:#365747}.ds-result{display:flex;flex-direction:column;gap:7px;width:100%;padding:12px 24px;text-align:left;border:0;border-radius:12px;background:linear-gradient(90deg,#edf6e9b0,#e4efdda1);color:#3e5b50;cursor:pointer}.ds-result:hover{background:#e4f1ded0}.ds-result-title{font:600 27px/1.5 var(--matters-serif,\"Noto Serif SC\",\"Songti SC\",\"SimSun\",serif);color:#325445}.ds-result-stop{font:400 19px/1.55 var(--matters-sans,\"Microsoft YaHei\",\"PingFang SC\",sans-serif);color:#506f59;overflow-wrap:anywhere}"
+      "description": "痕迹目录中的半透明真实数据卡；800px 以下由外层网格切为单栏。",
+      "html": "<article class=\"ds-record\"><small>当前停点</small><h2>收藏后为什么接不回来</h2><p>重新出现的理由，可能比分类更重要。</p></article>",
+      "css": ".ds-record{min-width:0;padding:23px 27px;border:1px solid #fff;border-radius:25px;background:#f8fbf3df;box-shadow:0 12px 30px #5378540b;backdrop-filter:blur(16px);color:#173c32}.ds-record small{color:#2c694c;font:400 11px/1.5 var(--web-sans,\"Trace Web Sans\",sans-serif)}.ds-record h2{margin:14px 0 9px;font:600 20px/1.65 var(--web-serif,\"Trace Web Serif\",serif)}.ds-record p{margin:0;color:#4f6b5d;font:400 14px/1.9 var(--web-sans,\"Trace Web Sans\",sans-serif)}.ds-record:hover{background:#fffef5ed}"
     },
     {
-      "name": "Matters Irregular Glass",
+      "name": "Ambient Orbit",
       "kind": "custom",
-      "description": "实际基础轮廓的静态 SVG 薄膜片段；不模拟环境折射采样，不替代原场景的复杂玻璃。",
-      "html": "<div class=\"ds-glass\"><svg class=\"ds-glass-svg\" viewBox=\"0 0 1000 300\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><defs><linearGradient id=\"ds-bubble-fill\" x1=\"0\" y1=\"0\" x2=\".2\" y2=\"1\"><stop offset=\"0%\" stop-color=\"#fff\" stop-opacity=\".85\"/><stop offset=\"34%\" stop-color=\"#f5fffd\" stop-opacity=\".73\"/><stop offset=\"77%\" stop-color=\"#dcefe9\" stop-opacity=\".43\"/><stop offset=\"100%\" stop-color=\"#fff\" stop-opacity=\".78\"/></linearGradient><linearGradient id=\"ds-bubble-rim\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0%\" stop-color=\"#fff\"/><stop offset=\"40%\" stop-color=\"#fff\" stop-opacity=\".87\"/><stop offset=\"65%\" stop-color=\"#9cbbb0\" stop-opacity=\".50\"/><stop offset=\"82%\" stop-color=\"#e6c46f\" stop-opacity=\".80\"/><stop offset=\"100%\" stop-color=\"#fff\" stop-opacity=\".98\"/></linearGradient></defs><path d=\"M 90 20 C 224 -3 366 18 489 13 C 655 4 789 8 906 32 C 974 46 1002 85 991 153 C 1008 217 964 269 891 278 C 675 302 576 277 446 287 C 309 303 188 290 102 273 C 27 260 7 219 14 153 C 0 91 19 39 90 20 Z\" fill=\"url(#ds-bubble-fill)\" stroke=\"url(#ds-bubble-rim)\" stroke-width=\"3.3\" vector-effect=\"non-scaling-stroke\"/><path d=\"M 90 20 C 224 -3 366 18 489 13 C 655 4 789 8 906 32 C 974 46 1002 85 991 153 C 1008 217 964 269 891 278 C 675 302 576 277 446 287 C 309 303 188 290 102 273 C 27 260 7 219 14 153 C 0 91 19 39 90 20 Z\" fill=\"none\" stroke=\"#fff\" stroke-opacity=\".65\" stroke-width=\"1\" transform=\"translate(7 4) scale(.985 .969)\" vector-effect=\"non-scaling-stroke\"/></svg><span class=\"ds-glass-copy\">上次真正停在</span></div>",
-      "css": ".ds-glass{position:relative;display:grid;place-items:center;width:557px;max-width:100%;height:148px;color:#08251f;font:600 28px/1.34 var(--matters-serif,\"Noto Serif SC\",\"Songti SC\",\"SimSun\",serif);filter:drop-shadow(0 4px 6px #385e461c)}.ds-glass-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}.ds-glass-copy{position:relative;padding:16px 28px}"
+      "description": "右上关系轨道；唯一持续呼吸的环境组件，纯装饰且不接收交互。",
+      "html": "<svg class=\"ds-orbit\" viewBox=\"0 0 360 220\" fill=\"none\" aria-hidden=\"true\"><defs><radialGradient id=\"ds-halo\" cx=\"0\" cy=\"0\" r=\"1\" gradientTransform=\"translate(258 78) rotate(90) scale(58)\"><stop stop-color=\"#BFE6D5\" stop-opacity=\".58\"/><stop offset=\"1\" stop-color=\"#BFE6D5\" stop-opacity=\"0\"/></radialGradient></defs><circle cx=\"258\" cy=\"78\" r=\"58\" fill=\"url(#ds-halo)\"/><path d=\"M23 177C93 143 119 82 191 75c50-5 82 26 146-9\" stroke=\"#5B8E7D\" stroke-opacity=\".48\" stroke-width=\"1.5\"/><circle cx=\"119\" cy=\"117\" r=\"5\" fill=\"#F7FBF6\" stroke=\"#2E7965\" stroke-width=\"2\"/><circle cx=\"196\" cy=\"75\" r=\"4\" fill=\"#D8A94C\" stroke=\"#FFF9E8\" stroke-width=\"3\"/><circle cx=\"275\" cy=\"91\" r=\"3.5\" fill=\"#1F6F5C\" stroke=\"#F8FCF9\" stroke-width=\"2\"/></svg>",
+      "css": ".ds-orbit{display:block;width:330px;max-width:100%;opacity:.72;filter:drop-shadow(0 16px 26px #215c4930);animation:ds-orbit-breathe 10s cubic-bezier(.16,1,.3,1) infinite alternate}@keyframes ds-orbit-breathe{from{transform:translate3d(0,0,0);opacity:.56;filter:drop-shadow(0 12px 22px #215c4924)}to{transform:translate3d(-8px,7px,0);opacity:.82;filter:drop-shadow(0 20px 36px #2f806044)}}@media(prefers-reduced-motion:reduce){.ds-orbit{animation:none}}"
+    },
+    {
+      "name": "Mobile Thought Card",
+      "kind": "card",
+      "description": "720px 以下首页关系对象的横向滚动卡；以真实可读表面替代缩小的复杂材质。",
+      "html": "<button type=\"button\" class=\"ds-thought\"><span class=\"ds-thought-icon\">·</span><span><strong>收藏后为什么接不回来</strong><small>上次停在：重新出现的理由</small></span></button>",
+      "css": ".ds-thought{display:flex;align-items:center;gap:12px;width:278px;height:106px;padding:18px 20px;border:1px solid #ffffffcc;border-radius:24px;background:#fbfdf9d9;box-shadow:0 14px 34px #285d4914;text-align:left;color:#123e35}.ds-thought-icon{display:grid;place-items:center;flex:none;width:40px;height:40px;border:1px solid #ffffffef;border-radius:50%;background:#f5fffb66;font-size:24px}.ds-thought strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 17px/1.35 var(--web-serif,\"Trace Web Serif\",serif)}.ds-thought small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5b7480;font:400 14px/1.45 var(--web-sans,\"Trace Web Sans\",sans-serif)}.ds-thought:focus-visible{outline:2px solid #1f7057;outline-offset:4px}"
+    },
+    {
+      "name": "Shared Navigation",
+      "kind": "nav",
+      "description": "共享品牌/路由操作；移动端图标按钮保持至少 44px。",
+      "html": "<nav class=\"ds-nav\" aria-label=\"主导航\"><button type=\"button\">搜索</button><button type=\"button\">全部痕迹</button></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:22px;color:#123e35;font:400 14px/1.45 var(--web-sans,\"Trace Web Sans\",sans-serif)}.ds-nav button{min-height:44px;padding:8px;border:0;background:transparent;color:inherit;cursor:pointer}.ds-nav button:hover{text-decoration:underline;text-underline-offset:5px}.ds-nav button:focus-visible{outline:2px solid #1f7057;outline-offset:4px}@media(max-width:720px){.ds-nav{gap:5px}.ds-nav button{min-width:44px}}"
     }
   ],
   "narrative": {
-    "northStar": "同一个场景中的接续",
-    "overview": "Mode: **Operate**。本文供维护桌面 Web的工程师与 Agent 使用，记录当前实现，而非提出新的视觉方向。山水、雾、水面、岩石与光构成连续环境；内容由真正可操作的文字、图标、输入与异形玻璃承载。层级来自对象位置、停点、聚焦和变化，不来自一套默认仪表盘组件。\n\n首页和“在意的事”共享场景语言，但保留各自构图权威。首页的六态仍属于同一首页场景；新增事项表面是独立的七图链路，不用首页参考覆盖它，也不反向重定义首页。",
+    "northStar": "留白中的接续",
+    "overview": "Mode: **Operate**。Trace 的当前视觉系统是一张浅矿物白与鼠尾草绿构成的产品表面，而不是一幅山水或环境图片。React shell 只挂载一次共享 ambient field；首页、在意的事、一件事、对照、工作现场与痕迹目录都把真实 DOM/SVG 内容置于其上。三个独立周边组件从画面边缘提供关系、萌芽与沉淀的暗示，中间持续保留大面积可读、可操作的负空间。\n\n现有关系线、状态节点、异形玻璃与小鸟继续表达「从哪里来、停在哪里、发生了什么」；它们不是用于填空的背景纹理。暖金只标记节点或已发生的变化，不扩张成主色。复杂产品流程、保存边界和历史事实保持原语义，新的 ambient field 只统一视觉环境，不重写业务状态。",
     "keyCharacteristics": [
-      "清洁环境图与真实 DOM/SVG 内容分层，保留景观纹理。",
-      "宋体承载标题与思考层级，黑体承载正文、操作与输入。",
-      "不对称轮廓、细白高光、少量暖色节点；大面积阅读表面保持乳白中心。",
-      "小鸟与连线指向当前对象或停点，不是常驻摆动装饰。"
+      "浅矿物白基底、淡鼠尾草洗色与深绿文字构成安静、清晰的操作表面。",
+      "右上轨道节点、左下枝叶、右下卵石是三个独立 SVG 周边组件；中心不放大型插画。",
+      "只有右上轨道以 10 秒周期进行低频微位移和微泛光呼吸；其余装饰保持静止。",
+      "小鸟与关系线保留产品语义；装饰层永远 `aria-hidden`、不接收指针，也不阻塞路由或状态流。"
     ],
     "rules": [
       {
-        "name": "The 分表面配色 Rule",
-        "body": "保留首页与事项各自的颜色作用域，不为“统一”而覆盖其中一方；真实实现与旧文档数值冲突时，核验当前样式再更新记录。",
+        "name": "The Ambient, not Wallpaper Rule",
+        "body": "运行时表面不得使用全屏环境图片；用浅色 CSS 场与少量独立 SVG 从边缘组织氛围，内容层始终保持权威。",
+        "section": "Overview"
+      },
+      {
+        "name": "The Warm Node Ration Rule",
+        "body": "一个局部关系或变化只需要一个暖金焦点；若暖金开始比正文或主操作更先被看见，就已经使用过量。",
         "section": "Colors"
       },
       {
-        "name": "The 可写文字 Rule",
-        "body": "标题、停点、示例摘录、输入和按钮必须是文字内容，不栅格化到参考图；用户新输入允许换行或在指定区域滚动，不借固定文案子集假设动态内容长度。",
+        "name": "The Writable Text Rule",
+        "body": "不把标题、停点、输入、状态或按钮栅格化进装饰资产；用户内容长度由换行、滚动和真实布局处理。",
         "section": "Typography"
       },
       {
-        "name": "The 正文与操作分区 Rule",
-        "body": "先给动态正文留出真实滚动边界，再固定关系决定和输入；不通过截掉内容、隐藏操作或换成整页截图维持构图。",
+        "name": "The Real Mobile Layout Rule",
+        "body": "720px 及以下首页必须重排真实控件；不允许通过缩小桌面场景来伪装适配。尚未按同一矩阵验证的其他复杂路由，不得仅因共享 ambient field 宣称完成移动验收。",
         "section": "Layout"
       },
       {
-        "name": "The 大面乳白 Rule",
-        "body": "大阅读面优先保持乳白中心，小主气泡才使用受限折射；玻璃效果失败时仍保留静态轮廓与可操作 DOM，不让装饰成为状态流的前提。",
+        "name": "The One Breathing Ornament Rule",
+        "body": "同一 viewport 只有右上轨道可以持续呼吸；不要让三件装饰、小鸟、按钮和关系线一起漂浮。",
         "section": "Elevation & Depth"
+      },
+      {
+        "name": "The Decoration Never Decides Rule",
+        "body": "ambient 透明度、暖金节点、泛光或鸟的位置都不能触发、替代或证明状态写入。",
+        "section": "Components"
       }
     ],
     "dos": [
-      "**Do** 分别使用首页六图与事项七图的视觉权威，保留共享品牌、鸟与本地资源来源。",
-      "**Do** 用真实 DOM/SVG 表达七态、变化、输入和来源；把背景限制为环境层。",
-      "**Do** 保留大表面乳白中心、动态正文滚动区和独立操作区，并核验缩放后的实际可读与可操作范围。",
-      "**Do** 将用户内容和旧演示分开，使用同一对象的当前停点驱动首页、事项与搜索；本地保存不能标为外部送达。"
+      "**Do** 在所有主路由复用同一个浅矿物白 / 鼠尾草 ambient field，并在非首页降低装饰存在感。",
+      "**Do** 把轨道、枝叶、卵石保留为三个独立、可单独定位和降级的 SVG 周边组件，持续保护中央负空间。",
+      "**Do** 在 720px 及以下使用首页真实 viewport 布局，保持 16px 输入字号、44px 主要触控下限和 48px 提交目标。",
+      "**Do** 保留小鸟、关系线、异形表面与暖金节点的产品语义，并以 DOM/SVG 文字和控件承载真实状态。",
+      "**Do** 对持续动效尊重 `prefers-reduced-motion` 与产品内减少动效偏好。"
     ],
     "donts": [
-      "**Don't** 将七张参考图做成全屏图片切换，或把新的事项构图提升为首页/旧讨论的全局规则。",
-      "**Don't** 为统一外观顺手换用组件库默认卡片、厚色蒙层、另一套字体或新的小鸟身份。",
-      "**Don't** 用打开页面、返回、悬停或材料关系选择伪造用户已经采用的新判断。",
-      "**Don't** 将固定字形子集、880 × 620 场景缩放或静态组件演示等同于全字符、移动端、无障碍或完整产品验收。"
+      "**Don't** 在 primary 或 legacy runtime 重新引用任何 `environment*.png`、六张背景角色或新的全屏背景图。",
+      "**Don't** 把三个周边组件合并成一张全画布插画，或在中央留白新增大面积装饰。",
+      "**Don't** 同时动画轨道、枝叶、卵石、小鸟和关系线；持续呼吸只属于右上轨道。",
+      "**Don't** 用整体缩放 1672px 桌面场景冒充 720px 以下首页适配，也不要把首页 390/320 验证外推为所有复杂路由已验收。",
+      "**Don't** 用打开页面、悬停、暖金高亮、材料关系选择或本地保存伪造用户已采用判断或外部工作已送达。"
     ]
   }
 }

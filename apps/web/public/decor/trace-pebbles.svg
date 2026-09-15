@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 190" fill="none">
+  <defs>
+    <radialGradient id="mist" cx="0" cy="0" r="1" gradientTransform="translate(172 104) rotate(90) scale(84 118)">
+      <stop stop-color="#CDE6DC" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#CDE6DC" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="stone" x1="73" y1="54" x2="194" y2="157" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FCFDFC" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#DCEAE4" stop-opacity=".45"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="172" cy="104" rx="118" ry="84" fill="url(#mist)"/>
+  <path d="M61 138c6-36 32-65 66-68 32-3 57 15 64 46 4 18-9 32-31 37-31 7-104 17-99-15Z" fill="url(#stone)" stroke="#A4C1B6" stroke-opacity=".35"/>
+  <path d="M158 125c5-27 25-46 52-44 25 2 44 20 43 43-1 20-20 30-43 30-28 0-57-5-52-29Z" fill="#F6FAF7" fill-opacity=".72" stroke="#91B2A5" stroke-opacity=".3"/>
+  <path d="M39 162c58 11 136 6 220-24" stroke="#709A8B" stroke-opacity=".22"/>
+  <circle cx="231" cy="62" r="5" fill="#D4A246" stroke="#FFF9E9" stroke-width="3"/>
+</svg>

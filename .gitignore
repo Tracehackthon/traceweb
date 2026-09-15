@@ -16,5 +16,6 @@ Thumbs.db
 .vercel/
 apps/web/dist/
 apps/web/dist-vercel/
+apps/web/.impeccable/review/
 apps/desktop-pet/lib/
 apps/desktop-pet/node_modules/

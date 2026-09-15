@@ -13,7 +13,7 @@ const mount = root || document.querySelector('#app')
 if (!mount) throw new Error('Trace 首页缺少挂载点')
 const $ = s => mount.querySelector(s)
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
-const backgroundUrl = assets.background || new URL('/home/environment.png', document.baseURI).href
+const backgroundUrl = assets.background || ''
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
 let state = snapshot?.state || createState(new URLSearchParams(location.search).get('state'))
 let prototypePreview = !product && (snapshot?.prototypePreview ?? new URLSearchParams(location.search).has('state'))
@@ -307,7 +307,7 @@ function dispatch(action) {
 // explicit actions in the expanded card own the transition to the canonical
 // matter route; this keeps the visual wake-up reversible and avoids turning a
 // hover/click into an implicit navigation.
-function openEntry(id) { lastFocus=$(`[data-entry="${id}"]`); if(!product&& !prototypePreview&&onOpen){onOpen(id);return} dispatch({type:'OPEN',id}) }
+function openEntry(id) { lastFocus=$(`[data-entry="${id}"]`); if((!product&&!prototypePreview||product&&scene.dataset.viewport==='compact')&&onOpen){onOpen(id);return} dispatch({type:'OPEN',id}) }
 function discussion() {
   const url=new URL(location.href); url.search=''; url.searchParams.set('view','discussion'); url.searchParams.set('observationId',`home-${state.active}`); url.searchParams.set('text',currentTitle()); url.searchParams.set('source','Trace 首页 · 会话内原型'); location.assign(url.href)
 }
@@ -384,9 +384,13 @@ for(const el of mount.querySelectorAll('[data-entry]')) {
 }
 let resizeTimer
 function resizeScene(){
+  const compact=innerWidth<=720
   const scale=Math.min(innerWidth/1672,innerHeight/941)
-  scene.style.setProperty('--scene-scale',scale)
-  scene.style.left=`${(innerWidth-1672*scale)/2}px`;scene.style.top=`${Math.max(0,(innerHeight-941*scale)/2)}px`
+  scene.style.setProperty('--scene-scale',compact?1:scale)
+  scene.style.setProperty('--compact-scene-scale',Math.min(.5,innerWidth/1672))
+  scene.dataset.viewport=compact?'compact':'desktop'
+  scene.style.left=`${compact?0:(innerWidth-1672*scale)/2}px`
+  scene.style.top=`${compact?0:Math.max(0,(innerHeight-941*scale)/2)}px`
   clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{for(const [el,material]of materials)if(!el.hidden)material.refresh()},180)
 }
 listen(window,'resize',resizeScene)
