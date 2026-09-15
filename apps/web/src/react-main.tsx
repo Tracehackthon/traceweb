@@ -111,13 +111,21 @@ async function loadRouteResources(view: ViewName): Promise<any> {
           : view === 'worksite' ? import('./product/worksite-screen.mjs')
             : ['all', 'search', 'works'].includes(view) ? Promise.resolve({ mountLibrary }) : Promise.resolve(null);
   const styleName = routeStyle(view);
-  const resourcePromises: Promise<unknown>[] = [style('web'), modulePromise];
-  if (styleName) resourcePromises.push(style(styleName));
-  if (view !== 'discussion') resourcePromises.push(preloadImages(routeResourceUrls(view), { timeoutMs: 7000 }));
+  const criticalPromises: Promise<unknown>[] = [style('web'), modulePromise];
+  if (styleName) criticalPromises.push(style(styleName));
+
+  // Images and full Chinese font faces improve visual fidelity but are not a
+  // functional prerequisite.  On a cold CDN edge these files can take longer
+  // than the old seven-second gate, which previously replaced the entire app
+  // with an error screen even though its JS and CSS were already ready.  Warm
+  // them in parallel and let font-display/CSS fallbacks keep the route usable.
+  const warmupPromises: Promise<unknown>[] = [];
+  if (view !== 'discussion') warmupPromises.push(preloadImages(routeResourceUrls(view), { timeoutMs: 30000 }).catch(() => undefined));
   for (const font of routeResourceFonts(view)) {
-    if (font.url) resourcePromises.push(registerFont(font).catch(() => undefined));
+    if (font.url) warmupPromises.push(registerFont(font).catch(() => undefined));
   }
-  const results = await Promise.all(resourcePromises);
+  void Promise.all(warmupPromises);
+  const results = await Promise.all(criticalPromises);
   return results[1];
 }
 
