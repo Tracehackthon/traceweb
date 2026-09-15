@@ -1,5 +1,6 @@
 import {
   applyPendingComparison,
+  attachProviderSourceProvenance,
   captureInput,
   createBridge,
   createWorkFromHandoff,
@@ -11,9 +12,10 @@ import {
   selectComparison,
   selectComparisonAnchor,
 } from './bridge.mjs';
+import { DEMO_ZHIHU_SNAPSHOT } from './demo-zhihu-snapshot.mjs';
 
 export const COMPLETE_DEMO = Object.freeze({
-  version: 2,
+  version: 3,
   matterId: 'demo:continuity',
   comparisonId: 'demo:comparison',
   workId: 'demo:work',
@@ -53,6 +55,7 @@ function work(host, type, fields = {}) {
  */
 export function createCompleteDemoWorkspace() {
   let host = createBridge();
+  const [zhihuOrigin, zhihuCounterpoint] = DEMO_ZHIHU_SNAPSHOT.items;
 
   // These three supporting matters make the home scene a faithful, useful
   // overview rather than a one-card fixture.  They are built through the same
@@ -89,11 +92,17 @@ export function createCompleteDemoWorkspace() {
     matterId: COMPLETE_DEMO.matterId,
     text: '我收藏了很多内容，却很少真正回来。我在意的也许不是保存，而是以后还能不能接回当时的问题。',
     source: {
-      id: 'demo:zhihu-origin',
-      title: '知乎阅读现场 · 关于“第二大脑”的讨论（演示摘录）',
-      excerpt: '任何需要手动建设的“第二大脑”都是伪命题。',
-      context: '演示摘录，用来说明来源、个人触动和后续判断如何保持不同身份。',
+      id: zhihuOrigin.id,
+      title: zhihuOrigin.title,
+      excerpt: zhihuOrigin.excerpt,
+      sourceType: zhihuOrigin.sourceType,
+      context: `知乎开放平台公开搜索摘要 · 作者：${zhihuOrigin.author}。只作为来源快照，不等于作者全文或我的理解。`,
     },
+  });
+  host = attachProviderSourceProvenance(host, {
+    matterId: COMPLETE_DEMO.matterId,
+    sourceId: zhihuOrigin.id,
+    provenance: { ...DEMO_ZHIHU_SNAPSHOT, ...zhihuOrigin },
   });
   host = chain(host, 'COMPOSER_DRAFT', { text: '如果只留下原文，几周后我还能认出自己当时真正卡住的问题吗？' });
   host = chain(host, 'SEND');
@@ -108,17 +117,27 @@ export function createCompleteDemoWorkspace() {
     anchor,
     returnTarget: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'understanding', contextMode: 'resume' },
   });
+  const sourceIdsBeforeComparison = new Set(host.chain.sources.map(source => source.id));
   host = compare(host, 'IMPORT_MATERIAL', { material: {
-    title: '持续项目里的另一种情况（演示材料）',
-    excerpt: '即使没有给收藏写附言，重新处理同一个具体任务时，问题和原来的阅读现场也可能一起浮现。',
-    context: '完整演示数据，不对应真实作者；它只挑战“必须写附言”这一绝对条件。',
+    id: zhihuCounterpoint.id,
+    title: zhihuCounterpoint.title,
+    excerpt: zhihuCounterpoint.excerpt,
+    sourceType: `${zhihuCounterpoint.sourceType} · ${zhihuCounterpoint.author}`,
+    context: '知乎开放平台公开搜索摘要。它提出“知识管理靠使用而不是积累”的另一种判断，用来挑战“只要保留得更完整就足够”的倾向；关系仍由用户确认。',
   } });
+  const comparisonSourceId = host.chain.sources.find(source =>
+    source.ownerMatterId === COMPLETE_DEMO.matterId && !sourceIdsBeforeComparison.has(source.id))?.id;
   host = compare(host, 'LINK');
   host = commitComparison(host);
   host = compare(host, 'OPEN_REVISION');
   host = compare(host, 'REVISION_DRAFT', { text: '收藏不是终点。保留原现场和当时的问题能帮助接回；在持续项目中，具体任务本身也可能成为新的入口。' });
   host = compare(host, 'CONFIRM_REVISION');
   host = commitComparison(host);
+  host = attachProviderSourceProvenance(host, {
+    matterId: COMPLETE_DEMO.matterId,
+    sourceId: comparisonSourceId,
+    provenance: { ...DEMO_ZHIHU_SNAPSHOT, ...zhihuCounterpoint },
+  });
 
   host = createWorkFromHandoff(host, {
     matterId: COMPLETE_DEMO.matterId,
@@ -135,7 +154,7 @@ export function createCompleteDemoWorkspace() {
     matterId: COMPLETE_DEMO.matterId,
     fact: '六个动作现在都有可打开的记录，并能从动作清单直达原处。',
     interpretation: '把演示数据放进真实产品模型，比静态截图更能说明 Trace 的接续关系。',
-    unconfirmed: '尚未代表跨设备账号同步，也不代表知乎授权已经完成。',
+    unconfirmed: '知乎内容来自 2026-09-15 的公开搜索摘要快照，尚未代表实时结果、完整原文或全部社区观点。',
     proposedUnderstanding: 'Trace 要保留来源、问题、理解、对照、工作与结果之间的接续关系；完整演示必须让六个动作的数据都能被打开和核对。',
     relation: 'support',
   } });
@@ -143,6 +162,17 @@ export function createCompleteDemoWorkspace() {
   host = work(host, 'CONFIRM_REVISION');
   host.route = { view: 'home' };
   host.preferences = { displayName: '', reduceMotion: false };
-  host.experience = { kind: 'complete-demo', version: COMPLETE_DEMO.version, synthetic: true };
+  host.experience = {
+    kind: 'complete-demo',
+    version: COMPLETE_DEMO.version,
+    synthetic: true,
+    sourceSnapshot: {
+      provider: DEMO_ZHIHU_SNAPSHOT.provider,
+      query: DEMO_ZHIHU_SNAPSHOT.query,
+      fetchedAt: DEMO_ZHIHU_SNAPSHOT.fetchedAt,
+      contentMode: DEMO_ZHIHU_SNAPSHOT.contentMode,
+      count: DEMO_ZHIHU_SNAPSHOT.items.length,
+    },
+  };
   return host;
 }

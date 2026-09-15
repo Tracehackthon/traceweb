@@ -17,7 +17,8 @@ export function recordsOf(host) {
   for(const s of host.chain.sources) {
     const m=host.chain.matters.find(m=>m.id===s.ownerMatterId);
     const links=(m?.links||[]).filter(l=>l.sourceId===s.id);
-    rows.push({kind:'source',id:s.id,matterId:m?.id,title:s.title||'手工带入的材料',text:s.excerpt||'',meta:links.length?`已关联 · ${links.map(l=>({limit:'限制',limitation:'限制',support:'支持',supplement:'补充',challenge:'挑战'}[l.relationship.type]||'有关')).join('、')} · 未自动采用`:'尚未关联 · 用户粘贴，来源未核验',route:m?{view:'chain',matterId:m.id,screen:'resume'}:null});
+    const provenance=s.origin==='provider-snapshot'&&s.provider==='zhihu'?`知乎开放平台快照${s.author?` · ${s.author}`:''}`:'';
+    rows.push({kind:'source',id:s.id,matterId:m?.id,title:s.title||'手工带入的材料',text:s.excerpt||'',meta:links.length?`${provenance?`${provenance} · `:''}已关联 · ${links.map(l=>({limit:'限制',limitation:'限制',support:'支持',supplement:'补充',challenge:'挑战'}[l.relationship.type]||'有关')).join('、')} · 未自动采用`:provenance?`${provenance} · 尚未关联`:'尚未关联 · 用户粘贴，来源未核验',route:m?{view:'chain',matterId:m.id,screen:'resume'}:null});
   }
   for(const w of Object.values(host.worksite.works)) {
     const s=host.worksite.sessions[w.id];

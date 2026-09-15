@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBridge, captureInput, dispatchChain, selectChain, openComparison, dispatchComparison,
   selectComparison, applyPendingComparison, deliverComparisonResult, commitComparison, returnFromComparison,
-  createWorkFromHandoff, dispatchWorksite, selectWorksite, selectComparisonAnchor, recoverPendingComparisons } from '../src/product/bridge.mjs';
+  createWorkFromHandoff, dispatchWorksite, selectWorksite, selectComparisonAnchor, recoverPendingComparisons,
+  attachProviderSourceProvenance } from '../src/product/bridge.mjs';
 
 const ID = 'user:matter-42';
 const ORIGINAL = '收藏后为什么接不回当时的问题？';
@@ -384,6 +385,22 @@ test('source excerpts stay separate from user expression and demo fixtures never
   assert.equal(current(h).understanding, '');
   assert.equal(selectChain(h, ID).isDemo, false);
   assert.ok(h.chain.sources.every(s => s.kind === 'user'));
+});
+
+test('host can preserve verified Zhihu snapshot provenance without adopting its claim', () => {
+  let h = captureInput(createBridge(), { matterId: ID, text: ORIGINAL, source: { id: 'source:zhihu', title: '知乎回答', excerpt: '公开接口摘要，不是我的判断。', url: null } });
+  const before = structuredClone(h);
+  const invalid = attachProviderSourceProvenance(h, { matterId: ID, sourceId: 'source:zhihu', provenance: { provider: 'zhihu', author: '作者', query: '问题', fetchedAt: '2026-09-15T00:00:00Z', url: 'javascript:alert(1)' } });
+  assert.equal(invalid.error.code, 'invalid_provenance');
+  assert.deepEqual(invalid.chain, before.chain);
+  h = attachProviderSourceProvenance(h, { matterId: ID, sourceId: 'source:zhihu', provenance: { provider: 'zhihu', author: '作者', query: '问题', fetchedAt: '2026-09-15T00:00:00Z', url: 'https://www.zhihu.com/question/1/answer/2' } });
+  const source = current(h).sources[0];
+  assert.equal(source.origin, 'provider-snapshot');
+  assert.equal(source.provider, 'zhihu');
+  assert.equal(source.author, '作者');
+  assert.equal(source.url, 'https://www.zhihu.com/question/1/answer/2');
+  assert.equal(current(h).understanding, '');
+  assert.equal(current(h).observations.length, 0);
 });
 
 test('no fake search capability or externally readable URL', () => {

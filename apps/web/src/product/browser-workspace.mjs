@@ -1,7 +1,7 @@
 // Origin-scoped storage for the static deployment. Never fall back to an
 // empty workspace after a read failure, and never report success before commit.
 const DEMO_WORKSPACE = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
-const DATABASE = DEMO_WORKSPACE ? 'trace-web-complete-demo-v2' : 'trace-portal-workspace-v1';
+const DATABASE = DEMO_WORKSPACE ? 'trace-web-complete-demo-v3' : 'trace-portal-workspace-v1';
 const STORE = 'workspace';
 const COMMANDS = 'commands';
 const info = { kind: 'indexeddb', mode: DEMO_WORKSPACE ? 'complete-demo' : 'personal', location: DEMO_WORKSPACE ? '当前浏览器 · 独立演示空间（不会混入个人空间）' : '当前浏览器 · IndexedDB（仅当前网站，不跨设备同步）' };

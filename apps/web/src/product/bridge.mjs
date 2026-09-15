@@ -53,6 +53,36 @@ export function captureInput(host, { matterId, text, source } = {}) {
   return next;
 }
 
+/**
+ * Add host-verified provenance to a source that was already captured through
+ * the normal product command path. This does not fetch, link, adopt or revise
+ * anything; it only preserves where a public provider snapshot came from.
+ */
+export function attachProviderSourceProvenance(host, { matterId, sourceId, provenance } = {}) {
+  const current = matter(host, matterId);
+  const existing = host.chain.sources.find(item => item.id === sourceId);
+  let parsed;
+  try { parsed = new URL(provenance?.url); } catch { parsed = null; }
+  const zhihuHost = parsed && (parsed.hostname === 'zhihu.com' || parsed.hostname.endsWith('.zhihu.com'));
+  if (!current || !existing || existing.ownerMatterId !== matterId)
+    return failure(host, 'unknown_source', '没有找到属于这件事的来源，未写入来路。');
+  if (provenance?.provider !== 'zhihu' || !nonempty(provenance.author) || !nonempty(provenance.query) ||
+      !nonempty(provenance.fetchedAt) || Number.isNaN(Date.parse(provenance.fetchedAt)) || parsed?.protocol !== 'https:' || !zhihuHost)
+    return failure(host, 'invalid_provenance', '来源来路无效，未把它标记为知乎公开内容。');
+  const next = copy(host);
+  Object.assign(next.chain.sources.find(item => item.id === sourceId), {
+    origin: 'provider-snapshot',
+    provider: 'zhihu',
+    author: provenance.author.trim(),
+    query: provenance.query.trim(),
+    fetchedAt: provenance.fetchedAt,
+    contentMode: 'openapi-summary',
+    url: parsed.href,
+  });
+  next.error = null;
+  return next;
+}
+
 /** Existing chain actions, explicitly addressed to an object rather than a UI selection. */
 export function dispatchChain(host, { matterId, action, expectedUnderstandingVersion } = {}) {
   const current = matter(host, matterId);

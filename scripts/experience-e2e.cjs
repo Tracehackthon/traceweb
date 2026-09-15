@@ -25,7 +25,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     page = await context.newPage();
     const capabilityRequests = [];
-    page.on('request', (request) => { if (/\/api\/zhihu\//.test(request.url())) capabilityRequests.push(request.url()); });
+    page.on('request', (request) => { if (/\/api\/(?:zhihu|search)\//.test(request.url())) capabilityRequests.push(request.url()); });
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('requestfailed', (request) => {
       const expectedEmptyVideoProbe = request.method() === 'HEAD' && new URL(request.url()).pathname === '/video/trace-demo.mp4';
@@ -71,15 +71,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       };
     });
     check('complete demo home presents four canonical matters without guide overlap', demoHome.matters === 4 && demoHome.guideOpen === 'false' && !demoHome.guideOverlapsBubble, demoHome);
-    check('complete demo labels the selected synthetic capability path', demoHome.source === 'zhihu' && demoHome.agent === 'codex-harness' && await page.getByText('演示数据 · 未联网', { exact: true }).count() === 1, demoHome);
+    check('complete demo identifies its cached Zhihu participation without a visitor search', demoHome.source === 'zhihu' && demoHome.agent === 'codex-harness' && await page.getByText('知乎来源快照 · 2 条 · 演示不联网', { exact: true }).count() === 1 && capabilityRequests.length === 0, demoHome);
     if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'demo-home-desktop.png'), animations: 'disabled' });
     await page.locator('.demo-guide-toggle').click();
     const actionButtons = page.locator('.demo-guide nav button');
     check('complete demo exposes all six actions', await actionButtons.count() === 6);
     const expectations = [
-      ['留下一点', '.chain-root', '第二大脑'],
+      ['留下一点', '.chain-root', '收藏动作和回顾动作之间没有建立联系'],
       ['从这里接着', '.chain-root', '几周后'],
-      ['找个对照', '.compare-root', '持续项目里的另一种情况'],
+      ['找个对照', '.compare-root', '你收藏的东西，24小时用不上就该删'],
       ['我的理解', '.chain-root', '六个动作的数据'],
       ['带去用', '.worksite-viewport', '验证六个动作'],
       ['结果回来', '.worksite-viewport', '[data-field=result-fact]'],
@@ -87,6 +87,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     for (const [label, selector, text] of expectations) {
       await page.locator('.demo-guide nav button', { hasText: label }).click();
       await page.locator(selector).waitFor({ timeout: 10000 });
+      if (label === '留下一点') {
+        await page.getByRole('button', { name: '查看原现场' }).click();
+        const sourceLink = page.getByRole('link', { name: '打开知乎原文' });
+        await sourceLink.waitFor({ timeout: 10000 });
+        check('demo source exposes real Zhihu author, summary boundary and canonical link', /拾光者/.test(await page.locator('.chain-modal').innerText()) && (await sourceLink.getAttribute('href')) === 'https://www.zhihu.com/question/585059015/answer/2076093417847898217');
+        await page.locator('.chain-modal [data-action="close-modal"]').click();
+      }
       if (text.startsWith('[')) {
         const field = page.locator(text); await field.waitFor({ timeout: 10000 });
         check(`demo action exposes the saved result fact: ${label}`, /六个动作现在都有可打开的记录/.test(await field.inputValue()));

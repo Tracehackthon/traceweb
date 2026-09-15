@@ -21,6 +21,7 @@ const paths = {
   balance:'<path d="M12 2v19M6 21h12M3 6h18M5 6l-4 9h8L5 6Zm14 0-4 9h8l-4-9Z"/>',
   question:'<circle cx="12" cy="12" r="9"/><path d="M9 8a3 3 0 0 1 6 0c0 3-3 2-3 5M12 17h.01"/>',
   message:'<path d="M3 3h18v14H9l-6 4V3Z"/><path d="M7 10h.01M12 10h.01M17 10h.01"/>',
+  external:'<path d="M9 5H5v14h14v-4M13 3h8v8M10 14 21 3"/>',
 };
 export const icon = name => `<svg class="chain-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.file}</svg>`;
 export const mark = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 11V7a3 3 0 1 0-3 3h16a3 3 0 1 0-3-3v18a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3V11Z"/></svg>';

@@ -170,7 +170,11 @@ async function mountRoute(root: HTMLDivElement, route: RouteMemory, module: any)
       else runtime.navigate({ view: 'chain', matterId: entry.matterId, screen: 'handoff' });
     };
     return module.mountHome({
-      root, product: true, entries, snapshot: { captureDraft: host.chain.capture.text || '', completeDemoMode }, assets,
+      root, product: true, entries, snapshot: {
+        captureDraft: host.chain.capture.text || '',
+        completeDemoMode,
+        demoSourceCount: host.chain.sources.filter((item: any) => item.origin === 'provider-snapshot' && item.provider === 'zhihu').length,
+      }, assets,
       services,
       // The first bubble click is deliberately local (see home.js).  These
       // callbacks are only for explicit actions in the expanded card.
@@ -197,7 +201,7 @@ async function mountRoute(root: HTMLDivElement, route: RouteMemory, module: any)
     return module.mountMattersScreen({ root, view: runtime.getMattersView(), assets, services, onHome: () => runtime.navigate({ view: 'home' }), onAll: () => runtime.navigate({ view: 'all' }), onAction: runtime.onMattersAction });
   }
   if (route.view === 'chain') {
-    return module.mountChainScreen({ root, view: runtime.projection(), assets, services, onAction: runtime.onChainAction, onHome: () => runtime.navigate({ view: 'home' }), onMatters: () => runtime.navigate({ view: 'matters' }), onBack: () => route.screen === 'resume' ? runtime.back() : runtime.navigate({ ...runtime.getRoute(), screen: 'resume' }), onWorkspaces: () => runtime.navigate({ view: 'works' }) });
+    return module.mountChainScreen({ root, view: runtime.projection(), assets, services, demo: completeDemoMode, onAction: runtime.onChainAction, onHome: () => runtime.navigate({ view: 'home' }), onMatters: () => runtime.navigate({ view: 'matters' }), onBack: () => route.screen === 'resume' ? runtime.back() : runtime.navigate({ ...runtime.getRoute(), screen: 'resume' }), onWorkspaces: () => runtime.navigate({ view: 'works' }) });
   }
   if (route.view === 'compare') {
     return module.mountComparisonScreen({ root, view: runtime.projection(), assets, services, onAction: runtime.onComparisonAction, onReturn: runtime.onReturnComparison, onContinue: () => runtime.continueComparison(), onAll: () => runtime.navigate({ view: 'all', matterId: route.matterId }), onProfile: () => runtime.profile() });
@@ -271,7 +275,7 @@ function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapsh
     && (!('screen' in item.route) || item.route.screen === snapshot.route.screen);
   return <aside className="demo-guide" data-open={open ? 'true' : 'false'} aria-label="完整演示动作清单">
     <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示数据</span><b>6 / 6</b></button>
-    {open && <div className="demo-guide-body"><p>同一套真实交互 · 数据为合成演示</p><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => runtime.navigate(item.route as RouteMemory)}><span>{index + 1}</span>{item.label}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
+    {open && <div className="demo-guide-body"><p>产品状态为合成演示 · 含知乎公开来源快照</p><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => runtime.navigate(item.route as RouteMemory)}><span>{index + 1}</span>{item.label}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
   </aside>;
 }
 
