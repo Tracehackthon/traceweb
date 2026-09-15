@@ -81,12 +81,12 @@ function routeResourceFonts(view: ViewName): Array<{ family: string; url?: strin
     { family: 'Trace Product Sans', url: assets.fullSansFont || assets.sansFont, weight: '100 900' },
   ];
   if (view === 'home') return [
-    { family: 'Trace Home Serif', url: assets.fullSerifFont || assets.serifFont, weight: '250 900' },
-    { family: 'Trace Home Sans', url: assets.fullSansFont || assets.sansFont, weight: '100 900' },
+    { family: 'Trace Home Serif', url: assets.serifFont, weight: '250 900' },
+    { family: 'Trace Home Sans', url: assets.sansFont, weight: '100 900' },
   ];
   if (view === 'matters') return [
-    { family: 'Trace Matters Serif', url: assets.fullSerifFont || assets.serifFont, weight: '250 900' },
-    { family: 'Trace Matters Sans', url: assets.fullSansFont || assets.sansFont, weight: '100 900' },
+    { family: 'Trace Matters Serif', url: assets.serifFont, weight: '250 900' },
+    { family: 'Trace Matters Sans', url: assets.sansFont, weight: '100 900' },
   ];
   if (view === 'chain') return [
     { family: 'Trace Chain Serif', url: assets.serifFont, weight: '250 900' },
@@ -114,18 +114,20 @@ async function loadRouteResources(view: ViewName): Promise<any> {
   const criticalPromises: Promise<unknown>[] = [style('web'), modulePromise];
   if (styleName) criticalPromises.push(style(styleName));
 
-  // Images and full Chinese font faces improve visual fidelity but are not a
+  const results = await Promise.all(criticalPromises);
+
+  // Images and Chinese font faces improve visual fidelity but are not a
   // functional prerequisite.  On a cold CDN edge these files can take longer
   // than the old seven-second gate, which previously replaced the entire app
-  // with an error screen even though its JS and CSS were already ready.  Warm
-  // them in parallel and let font-display/CSS fallbacks keep the route usable.
+  // with an error screen even though its JS and CSS were already ready.  Start
+  // warmups only after route code/styles have won network priority, and let
+  // font-display/CSS fallbacks keep the route usable.
   const warmupPromises: Promise<unknown>[] = [];
   if (view !== 'discussion') warmupPromises.push(preloadImages(routeResourceUrls(view), { timeoutMs: 30000 }).catch(() => undefined));
   for (const font of routeResourceFonts(view)) {
     if (font.url) warmupPromises.push(registerFont(font).catch(() => undefined));
   }
   void Promise.all(warmupPromises);
-  const results = await Promise.all(criticalPromises);
   return results[1];
 }
 

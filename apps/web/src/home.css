@@ -1,8 +1,7 @@
-/* Route aliases intentionally point at the same full source faces as every
-   product screen.  The fixed subset files remain locked runtime assets for
-   the incumbent reference, but are not used for live text or user input. */
-@font-face{font-family:"Trace Home Serif";src:url('/product/fonts/TraceSerif.woff2') format('woff2');font-weight:250 900;font-display:swap}
-@font-face{font-family:"Trace Home Sans";src:url('/product/fonts/TraceSans.ttf') format('truetype');font-weight:100 900;font-display:swap}
+/* Keep the first paint small. Missing user-input glyphs fall through to the
+   system Chinese fonts instead of blocking the route on the full source faces. */
+@font-face{font-family:"Trace Home Serif";src:url('/home/fonts/TraceHomeSerif-fixed.woff2') format('woff2');font-weight:250 900;font-display:swap}
+@font-face{font-family:"Trace Home Sans";src:url('/home/fonts/TraceHomeSans-fixed.woff2') format('woff2');font-weight:100 900;font-display:swap}
 :root{color-scheme:light;--ink:#08241f;--muted:#506974;--green:#075540;--serif:"Trace Home Serif","Songti SC",SimSun,serif;--sans:"Trace Home Sans","Microsoft YaHei","PingFang SC",sans-serif;font-family:var(--sans);font-synthesis:none;color:var(--ink);background:#e6eeea}
 *{box-sizing:border-box}html,body,#app{width:100%;height:100%;margin:0}body{overflow:hidden}button,input,textarea{font:inherit;color:inherit}button{cursor:pointer}button,a,input,textarea{-webkit-tap-highlight-color:transparent}button{border:0;background:none}button:focus-visible,a:focus-visible{outline:2px solid #257c65;outline-offset:6px}input:focus-visible,textarea:focus-visible{outline:none}::selection{background:#d0e6cc;color:#073e32}button:disabled{cursor:default}.icon{width:24px;height:24px;flex-shrink:0}button .icon{pointer-events:none}[hidden]{display:none!important}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .home-viewport{width:100%;height:100%;position:relative;overflow:hidden;background:url('/home/environment.png') center/cover no-repeat}.scene{width:1672px;height:941px;position:absolute;transform:scale(var(--scene-scale,1));transform-origin:top left;background:url('/home/environment.png') center/cover no-repeat;isolation:isolate}

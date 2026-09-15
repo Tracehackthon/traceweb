@@ -129,8 +129,8 @@ export function mountMattersScreen({ root, view: initialView, onAction, onHome =
   // Font faces are registered once per stable family by the app resource
   // cache.  Instance-scoped @font-face rules caused duplicate face growth on
   // every matters -> chain -> matters revisit.
-  if (assets.fullSerifFont || assets.serifFont) registerFont({ family: 'Trace Matters Serif', url: assets.fullSerifFont || assets.serifFont, weight: '250 900' }).catch(() => { shell.dataset.fontFallback = 'true'; });
-  if (assets.fullSansFont || assets.sansFont) registerFont({ family: 'Trace Matters Sans', url: assets.fullSansFont || assets.sansFont, weight: '100 900' }).catch(() => { shell.dataset.fontFallback = 'true'; });
+  if (assets.serifFont) registerFont({ family: 'Trace Matters Serif', url: assets.serifFont, weight: '250 900' }).catch(() => { shell.dataset.fontFallback = 'true'; });
+  if (assets.sansFont) registerFont({ family: 'Trace Matters Sans', url: assets.sansFont, weight: '100 900' }).catch(() => { shell.dataset.fontFallback = 'true'; });
   shell.style.setProperty('--matters-serif', '"Trace Matters Serif", "Noto Serif SC", "Songti SC", "SimSun", serif');
   shell.style.setProperty('--matters-sans', '"Trace Matters Sans", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif');
   let view = initialView, lastFingerprint = '', destroyed = false;
