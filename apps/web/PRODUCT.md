@@ -16,6 +16,6 @@ web
 个人设置提供偏好、保存位置与导出。个人空间不创建示例用户数据；`/app/demo` 始终使用独立 IndexedDB，即使本地开发也不会把演示记录写入个人 SQLite。完整 demo v3 通过同一产品命令生成 4 个 matters 和 2 个 works；事项状态、讨论、理解、工作与结果标记为 `synthetic`，主事项中的两份来源则是 2026-09-15 通过知乎开放平台真实检索后缓存的公开摘要快照，保留作者、查询、获取时间和 HTTPS 原文链接。访客打开 Demo 不重复请求接口或消耗额度，摘要不冒充全文或用户理解。主事项具有来源、讨论、理解、对照、交接、工作、结果与修订记录，「留下一点 / 从这里接着 / 找个对照 / 我的理解 / 带去用 / 结果回来」六个动作都有直达入口。旧独立原型仅保留在 `legacy.html`。
 ## Constraints
 原生 HTML/JS/CSS；本地字体与既有素材，无 CDN。五套页面分别以对应原型为视觉权威；背景、共享鸟、原字体及现用 vendor 已做资源锁，不反复生图或替换为组件库默认风格。原件留 artifacts，runtime 为派生副本。保留用户已有修改与未接入的后续原型产物。
-当前可用边界不等于完整商业产品：Vercel Web 的公开搜索依赖后端 Access Secret；Codex、受限模型和外部 Agent 只通过桌宠连接本机 Runtime，不在普通网页中执行；Trace 账号和云同步尚未接入。知乎 OAuth 只授权「我的知乎内容」，必须由 Vercel Secret 和活动页登记的 `https://trace.neutronm.store/callback` 启用。React base shell CSS 随入口静态加载，因此路由资源失败时加载态与错误恢复界面仍保持基础样式。移动端下拉至少为 44px 触控目标；shell 对话关闭后把焦点恢复到原触发控件。移动端、OS 输入法全矩阵与桌面包装仍需持续验收。没有把本地确认冒充发送/验证成功。出现存储失败保留草稿、显示重试/导出；版本冲突拒绝静默覆盖。
+当前可用边界不等于完整商业产品：Vercel Web 的公开搜索依赖后端 Access Secret；Codex、受限模型和外部 Agent 只通过桌宠连接本机 Runtime，不在普通网页中执行；Trace 账号和云同步尚未接入。知乎 OAuth 只授权「我的知乎内容」，必须由 Vercel Secret 和活动页登记的 `https://trace.neutrom.store/callback` 启用。React base shell CSS 随入口静态加载，因此路由资源失败时加载态与错误恢复界面仍保持基础样式。移动端下拉至少为 44px 触控目标；shell 对话关闭后把焦点恢复到原触发控件。移动端、OS 输入法全矩阵与桌面包装仍需持续验收。没有把本地确认冒充发送/验证成功。出现存储失败保留草稿、显示重试/导出；版本冲突拒绝静默覆盖。
 
 首页能力选择器的可复用视觉方向图保存在 `artifacts/ui-components/trace-capability-kit.png`，生成图哈希、候选开源 Select 调研与继续使用原生 `<select>` 的理由记录在 `artifacts/ui-components/README.md`。该图是设计资产，不是整页背景或当前运行时依赖。

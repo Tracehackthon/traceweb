@@ -2,12 +2,12 @@
 
 Trace 的独立产品交付仓库：集中维护可由 Vercel 部署的 **Trace 产品交互介绍、完整 Web 应用、视频路由**，以及与它共享视觉和交互语言的 **Trace 桌宠**。
 
-**在线应用：<https://trace.neutronm.store>**
+**在线应用：<https://trace.neutrom.store>**
 
-- 产品交互介绍：<https://trace.neutronm.store/>
-- 六个动作的完整演示数据：<https://trace.neutronm.store/app/demo>
-- 个人浏览器空间：<https://trace.neutronm.store/app>
-- 视频展示：<https://trace.neutronm.store/video>
+- 产品交互介绍：<https://trace.neutrom.store/>
+- 六个动作的完整演示数据：<https://trace.neutrom.store/app/demo>
+- 个人浏览器空间：<https://trace.neutrom.store/app>
+- 视频展示：<https://trace.neutrom.store/video>
 
 Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
@@ -87,7 +87,7 @@ npm run desktop
 - 个人空间数据属于当前浏览器配置和当前 origin；清理网站数据可能删除本地内容。
 - 完整演示使用独立 IndexedDB，不会混入个人空间。事项状态、讨论、理解、工作和结果是合成演示；其中两份知乎来源是 2026-09-15 通过开放平台搜索取得的公开摘要快照，保留作者与原文链接。访客打开 Demo 不会重复联网、消耗额度，也不会把摘要冒充全文或用户理解。
 - Preview、Vercel 默认域名和自定义域名拥有不同的浏览器存储空间。
-- Vercel 版不连接 Trace 本机 SQLite。公开知乎／全网搜索由同源 Serverless 接口代理；Codex 与自定义 Agent 只由桌宠连接本机 Runtime。知乎 OAuth 仍只负责“我的知乎内容”，必须配置后端 Secret，并把回调登记为 `https://trace.neutronm.store/callback`。知乎授权不是 Trace 云账号，也不提供跨设备同步。
+- Vercel 版不连接 Trace 本机 SQLite。公开知乎／全网搜索由同源 Serverless 接口代理；Codex 与自定义 Agent 只由桌宠连接本机 Runtime。知乎 OAuth 仍只负责“我的知乎内容”，必须配置后端 Secret，并把回调登记为 `https://trace.neutrom.store/callback`。知乎授权不是 Trace 云账号，也不提供跨设备同步。
 - 不提交 `.env*`、Token、数据库、`.vercel/`、构建目录和测试输出。
 
 ## 知乎授权部署配置
@@ -97,7 +97,7 @@ Serverless 接口把 App Key、Access Secret、授权码与 OAuth Token 留在�
 ```text
 ZHIHU_OAUTH_APP_ID=669
 ZHIHU_OAUTH_APP_KEY=<Vercel Secret>
-ZHIHU_OAUTH_REDIRECT_URI=https://trace.neutronm.store/callback
+ZHIHU_OAUTH_REDIRECT_URI=https://trace.neutrom.store/callback
 ZHIHU_ACCESS_SECRET=<Vercel Secret>
 ```
 

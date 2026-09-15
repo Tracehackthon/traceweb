@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 test('serverless Zhihu OAuth keeps app key and token behind signed HttpOnly cookies', async () => {
   process.env.ZHIHU_OAUTH_APP_ID = '669';
   process.env.ZHIHU_OAUTH_APP_KEY = 'test-only-app-key-with-enough-length';
-  process.env.ZHIHU_OAUTH_REDIRECT_URI = 'https://trace.neutronm.store/callback';
+  process.env.ZHIHU_OAUTH_REDIRECT_URI = 'https://trace.neutrom.store/callback';
   const oauth = await import(`../../../lib/zhihu-oauth.mjs?test=${Date.now()}`);
   const headers = new Map();
   const response = { setHeader(name, value) { headers.set(name.toLowerCase(), value); } };
@@ -31,7 +31,7 @@ test('serverless Zhihu OAuth keeps app key and token behind signed HttpOnly cook
 test('OAuth callback accepts Zhihu hackathon callback without state but requires its browser binding', async () => {
   process.env.ZHIHU_OAUTH_APP_ID = '669';
   process.env.ZHIHU_OAUTH_APP_KEY = 'another-test-only-key-with-enough-length';
-  process.env.ZHIHU_OAUTH_REDIRECT_URI = 'https://trace.neutronm.store/callback';
+  process.env.ZHIHU_OAUTH_REDIRECT_URI = 'https://trace.neutrom.store/callback';
   const oauth = await import(`../../../lib/zhihu-oauth.mjs?test=${Date.now()}-missing`);
   await assert.rejects(() => oauth.finishAuthorization({ headers: {} }, new URLSearchParams({ authorization_code: 'code' })), (error) => error.code === 'OAUTH_STATE_MISMATCH');
   const headers = new Map();
