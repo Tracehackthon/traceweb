@@ -32,6 +32,7 @@ type TraceReminder = { observationId: string; text: string }
 type DesktopCandidatePayload = { type?: string; observationId?: string; status?: ObservationStatus }
 type TraceNativeBridge = {
   openDiscussion?: (url: string) => void
+  requestCapability?: (request: Record<string, unknown>) => Promise<any>
   onCandidate?: (listener: (payload: DesktopCandidatePayload) => void) => (() => void) | undefined
 }
 type ReminderPlacement = { side: 'top' | 'bottom' | 'inside'; style: CSSProperties }
@@ -289,6 +290,7 @@ export function TraceOverlay() {
   const [observations, setObservations] = useState<Observation[]>(() => traceSessionStore.observations)
   const [candidateStatus, setCandidateStatus] = useState<CandidateStatus>(() => traceSessionStore.candidateStatus)
   const [discussionNotice, setDiscussionNotice] = useState('')
+  const [capabilities, setCapabilities] = useState<any>({ connected: false, loading: true })
   const [reminder, setReminder] = useState<TraceReminder | null>(null)
   const [panelPosition, setPanelPosition] = useState<PetPosition | null>(null)
   const [hugging, setHugging] = useState(false)
@@ -321,6 +323,14 @@ export function TraceOverlay() {
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  useEffect(() => {
+    const bridge = getTraceNativeBridge()
+    if (!bridge?.requestCapability) { setCapabilities({ connected: false, loading: false, error: { message: '当前宿主没有连接 Trace Runtime。' } }); return }
+    let active = true
+    void bridge.requestCapability({ operation: 'capabilities' }).then((value) => { if (active) setCapabilities({ ...value, loading: false }) }, (error) => { if (active) setCapabilities({ connected: false, loading: false, error: { message: error instanceof Error ? error.message : String(error) } }) })
+    return () => { active = false }
   }, [])
 
   useEffect(() => () => {
@@ -454,18 +464,25 @@ export function TraceOverlay() {
   const detailPanelStyle: CSSProperties = { left: `${currentPanelPosition.x}px`, top: `${currentPanelPosition.y}px`, right: 'auto', bottom: 'auto' }
   const panelSide = currentPanelPosition.x > currentPetPosition.x ? 'right' : 'left'
 
-  const acceptObservation = (text: string) => {
+  const acceptObservation = (text: string, source?: string) => {
     const nextObservation: Observation = {
       id: `capture-${Date.now()}`,
       text,
       status: '待确认',
       confidence: 50,
+      ...(source ? { source } : {}),
       createdAt: '刚刚',
       isNew: true,
     }
     traceSessionStore.observations = [nextObservation, ...traceSessionStore.observations]
     setObservations(traceSessionStore.observations)
     setDiscussionNotice('已接住：这条观察进入历史列表。')
+  }
+
+  const requestCapability = async (request: Record<string, unknown>) => {
+    const bridge = getTraceNativeBridge()
+    if (!bridge?.requestCapability) throw new Error('当前宿主没有连接 Trace Runtime。')
+    return bridge.requestCapability(request)
   }
 
   const continueDiscussion = () => {
@@ -835,6 +852,8 @@ export function TraceOverlay() {
             onHeaderPointerMove={handlePanelPointerMove}
             onHeaderPointerUp={handlePanelPointerUp}
             compact={!panelIsDetached}
+            capabilities={capabilities}
+            onCapabilityRequest={requestCapability}
           />
         </div>
       )}

@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('traceNative', {
   openDiscussion(url) {
     if (typeof url === 'string') ipcRenderer.send('trace-native:open-discussion', url)
   },
+  requestCapability(request) {
+    return ipcRenderer.invoke('trace-native:capability', request)
+  },
   onCandidate(listener) {
     if (typeof listener !== 'function') return undefined
     const wrapped = (_event, payload) => listener(payload)

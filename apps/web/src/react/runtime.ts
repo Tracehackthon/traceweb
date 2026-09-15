@@ -493,8 +493,8 @@ export class WebRuntime {
   };
 
   onCapture = (text: string, options: { source?: string; agent?: string } = {}): void => {
+    const matterId = uid('matter');
     void this.commit((state) => {
-      const matterId = uid('matter');
       let next = B.captureInput(state, { matterId, text });
       const matter = next.chain?.matters?.find((item: any) => item.id === matterId);
       if (matter) matter.captureIntent = {
@@ -515,8 +515,17 @@ export class WebRuntime {
         next.route = { ...next.route, view: 'chain', matterId, screen: 'handoff' };
       }
       return next;
-    }, (next) => this.navigate(next.route));
+    }, (next) => {
+      this.navigate(next.route);
+      const source = ['zhihu', 'web'].includes(options.source || '') ? options.source as 'zhihu' | 'web' : 'none';
+      const agent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as 'codex-native' | 'codex-harness' | 'custom' : 'none';
+      if (!completeDemoMode && (source !== 'none' || agent !== 'none')) this.showDialog({ type: 'capability', title: '让来源与 Agent 参与', capability: { matterId, query: text, source, agent } });
+    });
   };
+
+  keepPublicSource(matterId: string, source: any, query: string): Promise<void> {
+    return this.commit((state) => B.keepPublicSource(state, { matterId, source, query }));
+  }
 
   onChainAction = (action: any): void => {
     if (this.busy || !this.host || !this.route.matterId) return;

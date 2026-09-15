@@ -33,9 +33,10 @@ export interface WebStatus {
 }
 
 export interface DialogState {
-  type: 'profile' | 'sources' | 'work-context' | 'message' | 'record';
+  type: 'profile' | 'sources' | 'capability' | 'work-context' | 'message' | 'record';
   title: string;
   message?: string;
+  capability?: { matterId: string; query: string; source: 'none' | 'zhihu' | 'web'; agent: 'none' | 'codex-native' | 'codex-harness' | 'custom' };
   confirm?: { label: string; action: () => void };
   record?: {
     meta?: string;

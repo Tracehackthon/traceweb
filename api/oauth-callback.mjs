@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     return res.end(req.method === 'GET' ? '知乎授权回调尚未配置。' : 'Method not allowed');
   }
   try {
-    const origin = new URL(process.env.ZHIHU_OAUTH_REDIRECT_URI || 'https://trace.neutrom.store/callback').origin;
+    const origin = new URL(process.env.ZHIHU_OAUTH_REDIRECT_URI || 'https://trace.neutronm.store/callback').origin;
     const url = new URL(req.url, origin);
     const result = await finishAuthorization(req, url.searchParams);
     res.setHeader('set-cookie', [result.tokenCookie, result.clearStateCookie]);

@@ -1,10 +1,12 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRuntimeCapabilityClient } from './runtime-client.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
 const allowedDiscussionKeys = new Set(['from', 'observationId', 'text', 'status', 'source'])
+const capabilityClient = createRuntimeCapabilityClient()
 
 let overlayWindow
 let tray
@@ -111,7 +113,10 @@ function createOverlayWindow() {
   })
   overlayWindow.once('ready-to-show', showOverlay)
   overlayWindow.webContents.setWindowOpenHandler(({ url }) => {
-    openDiscussion(url)
+    let target
+    try { target = new URL(url) } catch { target = null }
+    if (target?.origin === discussionOrigin) openDiscussion(url)
+    else if (target && ['https:', 'http:'].includes(target.protocol)) void shell.openExternal(target.href)
     return { action: 'deny' }
   })
   void overlayWindow.loadFile(join(root, 'index.html'))
@@ -169,6 +174,12 @@ ipcMain.on('trace-native:discussion-candidate', (event, payload) => {
   if (!payload || payload.type !== 'trace.desktop.candidate') return
   if (typeof payload.observationId !== 'string' || !['候选中', '待确认'].includes(payload.status)) return
   overlayWindow?.webContents.send('trace-native:candidate', payload)
+})
+
+ipcMain.handle('trace-native:capability', async (event, request) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) throw new Error('Capability caller is not a Trace window')
+  return capabilityClient.request(request)
 })
 
 app.on('window-all-closed', () => {})

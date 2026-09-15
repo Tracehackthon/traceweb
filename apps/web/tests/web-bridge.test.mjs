@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createBridge, captureInput, dispatchChain, selectChain, openComparison, dispatchComparison,
   selectComparison, applyPendingComparison, deliverComparisonResult, commitComparison, returnFromComparison,
   createWorkFromHandoff, dispatchWorksite, selectWorksite, selectComparisonAnchor, recoverPendingComparisons,
-  attachProviderSourceProvenance } from '../src/product/bridge.mjs';
+  attachProviderSourceProvenance, keepPublicSource } from '../src/product/bridge.mjs';
 
 const ID = 'user:matter-42';
 const ORIGINAL = '收藏后为什么接不回当时的问题？';
@@ -47,6 +47,25 @@ function workReview(h = work()) {
     unconfirmed: '还未验证更长间隔。', proposedUnderstanding: '问题线索可能帮助恢复，但仍需分情形验证。', relation: 'limit' } });
   return wd(h, 'OPEN_REVISION_REVIEW');
 }
+
+test('an explicitly selected public search result is kept with provenance but no inferred relationship', () => {
+  const h = keepPublicSource(captured(), { matterId: ID, query: '怎么重新接回收藏', source: {
+    id: 'external:zhihu-1', provider: 'zhihu', source: 'zhihu', title: '重新进入问题现场', author: '答主',
+    excerpt: '再次遇到具体问题时，旧材料才重新有了位置。', url: 'https://www.zhihu.com/question/1/answer/2',
+    content_id: 'answer-2', content_type: 'answer', content_mode: 'summary', vote_up_count: 27, comment_count: 4,
+    authority_level: '2', edited_at: '2026-09-14T00:00:00.000Z', fetched_at: '2026-09-15T00:00:00.000Z',
+  } });
+  assert.equal(h.error, null);
+  assert.equal(h.chain.sources.length, 1);
+  assert.equal(h.chain.sources[0].origin, 'provider-snapshot');
+  assert.equal(h.chain.sources[0].query, '怎么重新接回收藏');
+  assert.equal(h.chain.sources[0].contentId, 'answer-2');
+  assert.equal(h.chain.sources[0].voteUpCount, 27);
+  assert.equal(h.chain.sources[0].commentCount, 4);
+  assert.deepEqual(h.chain.matters.find((item) => item.id === ID).sourceIds, ['external:zhihu-1']);
+  assert.deepEqual(h.chain.matters.find((item) => item.id === ID).links || [], []);
+  assert.equal(current(h).understanding, '');
+});
 
 test('closed loop calls existing chain/compare reducers: one ID, link is not adoption, receipt, exact return anchor', () => {
   let h = captured();

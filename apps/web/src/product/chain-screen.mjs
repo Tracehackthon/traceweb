@@ -18,11 +18,14 @@ const row = (title,text,name='file',extra='') => `<section class="chain-context-
 const safeSourceURL = (source) => {
   try {
     const value = new URL(source?.url);
-    return value.protocol === 'https:' && (value.hostname === 'zhihu.com' || value.hostname.endsWith('.zhihu.com')) ? value.href : '';
+    const isZhihu = value.hostname === 'zhihu.com' || value.hostname.endsWith('.zhihu.com');
+    return value.protocol === 'https:' && (source?.searchSource === 'global' || isZhihu) ? value.href : '';
   } catch { return ''; }
 };
 const sourceProvenance = (source) => source?.origin === 'provider-snapshot' && source?.provider === 'zhihu'
-  ? `知乎开放平台公开摘要${source.author ? ` · ${source.author}` : ''}${source.fetchedAt ? ` · 获取于 ${new Date(source.fetchedAt).toLocaleDateString('zh-CN')}` : ''}` : '';
+  ? `知乎开放平台${source.searchSource === 'global' ? '全网搜索' : '知乎公开内容'}摘要${source.author ? ` · ${source.author}` : ''}${source.fetchedAt ? ` · 获取于 ${new Date(source.fetchedAt).toLocaleDateString('zh-CN')}` : ''}` : '';
+const sourceMetrics = (source) => [Number.isSafeInteger(source?.voteUpCount) ? `${source.voteUpCount} 赞同` : '', Number.isSafeInteger(source?.commentCount) ? `${source.commentCount} 评论` : '', source?.contentType || ''].filter(Boolean).join(' · ');
+const sourceProviderLabel = (source) => source?.searchSource === 'global' ? '全网公开内容' : '知乎公开内容';
 const sourceRole = (source, matter) => {
   const relation = (matter?.observations || []).find(item => item.sourceId === source?.id)?.relation;
   return relation ? `作为“${RELATIONS[relation] || relation}”对照` : '保留为原现场';
@@ -56,7 +59,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   const originalText = () => current.matter?.originalText || current.matter?.whyCare || '';
   const hasHistory = () => Boolean(current.matter?.understanding || current.matter?.stop || current.matter?.revisions?.length || current.matter?.results?.length);
   const isDemo = () => demo || current.isDemo === true;
-  const sourceEvidence = (source, matter=current.matter) => sourceProvenance(source) ? `<button type="button" class="chain-source-evidence" data-action="source" data-source="${h(source.id)}"><i>知</i><span><strong>知乎公开内容参与了这件事</strong><small>${h(source.author || '知乎作者')} · ${h(sourceRole(source,matter))}</small></span>${icon('next')}</button>` : btn('source','查看原现场','file','subtle',source?`data-source="${h(source.id)}"`:'');
+  const sourceEvidence = (source, matter=current.matter) => sourceProvenance(source) ? `<button type="button" class="chain-source-evidence" data-action="source" data-source="${h(source.id)}"><i>${source?.searchSource==='global'?'网':'知'}</i><span><strong>${source?.searchSource==='global'?'全网来源':'知乎内容'}参与了这件事</strong><small>${h(source.author || (source?.searchSource==='global'?'公开来源':'知乎作者'))} · ${h(sourceRole(source,matter))}</small></span>${icon('next')}</button>` : btn('source','查看原现场','file','subtle',source?`data-source="${h(source.id)}"`:'');
 
   function header() {
     const simple = current.screen==='paused' || current.screen==='handoff';
@@ -129,7 +132,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   function modalHTML() {
     if (!modal) return '';
     const m=current.matter||{}; let heading='', body='';
-    if (modal.type==='source') { const s=getSource(modal.id)||firstSource(),url=safeSourceURL(s),provenance=sourceProvenance(s),zhihu=Boolean(provenance); heading=zhihu?'知乎原文摘录':'原文片段'; body=`${zhihu?`<div class="chain-source-identity"><i>知</i><span><strong>知乎公开内容</strong><small>${h(s.author || '知乎作者')} · ${h(sourceRole(s,m))}</small></span></div><p class="chain-source-provenance">${h(provenance)}</p>`:''}<h3>${h(s?.title || '暂无来源')}</h3><blockquote>${h(s?.excerpt || m.originalText || '')}</blockquote>${url?`<a class="chain-source-link" href="${h(url)}" target="_blank" rel="noreferrer">打开知乎原文 ${icon('external')}</a>`:''}<p class="chain-footnote">${zhihu?'知乎在这里提供可核对的公开材料；接口返回的是摘要快照，不代表完整原文，也不会自动成为“我的理解”。':'这份材料不会自动成为“我的理解”。'}</p>`; }
+    if (modal.type==='source') { const s=getSource(modal.id)||firstSource(),url=safeSourceURL(s),provenance=sourceProvenance(s),provider=Boolean(provenance),label=sourceProviderLabel(s),metrics=sourceMetrics(s); heading=provider?`${label}摘录`:'原文片段'; body=`${provider?`<div class="chain-source-identity"><i>${s?.searchSource==='global'?'网':'知'}</i><span><strong>${h(label)}</strong><small>${h(s.author || (s?.searchSource==='global'?'公开来源':'知乎作者'))} · ${h(sourceRole(s,m))}</small></span></div><p class="chain-source-provenance">${h(provenance)}${metrics?` · ${h(metrics)}`:''}</p>`:''}<h3>${h(s?.title || '暂无来源')}</h3><blockquote>${h(s?.excerpt || m.originalText || '')}</blockquote>${url?`<a class="chain-source-link" href="${h(url)}" target="_blank" rel="noreferrer">${s?.searchSource==='global'?'打开原文':'打开知乎原文'} ${icon('external')}</a>`:''}<p class="chain-footnote">${provider?'这里提供的是可核对的公开摘要，不代表完整原文，也不会自动成为“我的理解”。':'这份材料不会自动成为“我的理解”。'}</p>`; }
     if (modal.type==='provenance') { heading='原文与来路'; body=`<h3>原话</h3><blockquote>${h(m.originalText||m.whyCare||'尚未留下原话。')}</blockquote><h3>来源材料</h3>${(m.sources||[]).map(s=>`<details><summary>${h(s.title)}</summary>${sourceProvenance(s)?`<small>${h(sourceProvenance(s))}</small>`:''}<p>${h(s.excerpt)}</p>${safeSourceURL(s)?`<a class="chain-source-link" href="${h(safeSourceURL(s))}" target="_blank" rel="noreferrer">打开知乎原文 ${icon('external')}</a>`:''}</details>`).join('')||'<p>暂无来源。可以粘贴一段材料。</p>'}<h3>对照关系</h3>${(m.observations||[]).map(o=>`<p>${h(RELATIONS[o.relation]||o.relation)} · ${h(o.text)}</p>`).join('')||'<p>暂无已确认对照。</p>'}<h3>留下的旁支</h3>${(m.branches||[]).map(b=>`<blockquote>${h(b.text)}<small>来处：${h(b.origin?.text || b.origin?.field || '')}</small></blockquote>`).join('')||'<p>暂无旁支。</p>'}`; }
     if (modal.type==='revision-history') { heading='理解修订'; body=(m.revisions||[]).map(r=>`<section class="chain-history-item"><h3>原来的理解</h3><p>${h(r.before?.text ?? r.before?.understanding ?? r.before)}</p><h3>这次修订为</h3><p>${h(r.after?.text ?? r.after?.understanding ?? r.after)}</p></section>`).join('')||'<p>暂无修订。</p>'; }
     if (modal.type==='result-history') { heading='查看使用经历'; body=(m.results||[]).map(r=>`<section class="chain-history-item"><h3>事实</h3><p>${h(r.fact)}</p><h3>解释</h3><p>${h(r.interpretation)}</p><h3>未确认</h3><p>${h(r.unconfirmed)}</p></section>`).join('')||'<p>还没有带回实际结果。</p>'; }

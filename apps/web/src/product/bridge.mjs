@@ -83,6 +83,40 @@ export function attachProviderSourceProvenance(host, { matterId, sourceId, prove
   return next;
 }
 
+/** Keep one explicit public-search result as material for an existing matter.
+ * Search never mutates the original expression or infers a relationship. */
+export function keepPublicSource(host, { matterId, source, query } = {}) {
+  const current = matter(host, matterId);
+  if (!current || !source || source.provider !== 'zhihu' || !['zhihu', 'global'].includes(source.source) ||
+      !keyOK(source.id) || !nonempty(source.excerpt) || !nonempty(query) || !nonempty(source.fetched_at))
+    return failure(host, 'invalid_public_source', '这份公开来源缺少可核对的摘要或来路，未保存。');
+  let parsed;
+  try { parsed = new URL(source.url); } catch { parsed = null; }
+  const validUrl = parsed && parsed.protocol === 'https:' && !parsed.username && !parsed.password &&
+    (source.source !== 'zhihu' || parsed.hostname === 'zhihu.com' || parsed.hostname.endsWith('.zhihu.com'));
+  if (!validUrl || Number.isNaN(Date.parse(source.fetched_at))) return failure(host, 'invalid_public_source', '来源链接或获取时间无效，未保存。');
+  const existing = host.chain.sources.find(item => item.id === source.id);
+  if (existing) return existing.ownerMatterId === matterId ? host : failure(host, 'source_conflict', '同一来源已经属于另一件事，未重复保存。');
+  const next = copy(host);
+  next.chain.sources.push({
+    id: source.id, title: nonempty(source.title) ? source.title.trim() : '公开来源', kind: 'external',
+    sourceType: source.source === 'zhihu' ? '知乎公开内容' : '全网公开内容', excerpt: source.excerpt.trim(),
+    context: `${source.source === 'zhihu' ? '知乎' : '全网'}公开搜索摘要${nonempty(source.author) ? ` · 作者：${source.author.trim()}` : ''}。关系尚未确认。`,
+    url: parsed.href, ownerMatterId: matterId, origin: 'provider-snapshot', provider: 'zhihu', searchSource: source.source,
+    author: nonempty(source.author) ? source.author.trim() : '', query: query.trim(), fetchedAt: source.fetched_at,
+    contentMode: source.content_mode === 'summary' ? 'openapi-summary' : 'provider-metadata', contentType: source.content_type || 'unknown',
+    contentId: nonempty(source.content_id) ? source.content_id.trim() : null,
+    voteUpCount: Number.isSafeInteger(source.vote_up_count) && source.vote_up_count >= 0 ? source.vote_up_count : null,
+    commentCount: Number.isSafeInteger(source.comment_count) && source.comment_count >= 0 ? source.comment_count : null,
+    authorityLevel: nonempty(source.authority_level) ? source.authority_level.trim() : null,
+    editedAt: nonempty(source.edited_at) && !Number.isNaN(Date.parse(source.edited_at)) ? source.edited_at : null,
+  });
+  const target = matter(next, matterId);
+  target.sourceIds = [...new Set([...(target.sourceIds || []), source.id])];
+  next.error = null;
+  return next;
+}
+
 /** Existing chain actions, explicitly addressed to an object rather than a UI selection. */
 export function dispatchChain(host, { matterId, action, expectedUnderstandingVersion } = {}) {
   const current = matter(host, matterId);

@@ -2,12 +2,12 @@
 
 Trace 的独立产品交付仓库：集中维护可由 Vercel 部署的 **Trace 产品交互介绍、完整 Web 应用、视频路由**，以及与它共享视觉和交互语言的 **Trace 桌宠**。
 
-**在线应用：<https://trace.neutrom.store>**
+**在线应用：<https://trace.neutronm.store>**
 
-- 产品交互介绍：<https://trace.neutrom.store/>
-- 六个动作的完整演示数据：<https://trace.neutrom.store/app/demo>
-- 个人浏览器空间：<https://trace.neutrom.store/app>
-- 视频展示：<https://trace.neutrom.store/video>
+- 产品交互介绍：<https://trace.neutronm.store/>
+- 六个动作的完整演示数据：<https://trace.neutronm.store/app/demo>
+- 个人浏览器空间：<https://trace.neutronm.store/app>
+- 视频展示：<https://trace.neutronm.store/video>
 
 Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
@@ -17,7 +17,7 @@ Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
 | 目录 | 交付物 | 运行方式 |
 | --- | --- | --- |
-| [`apps/web`](apps/web/) | Trace 产品介绍与浏览器应用，包含首页、事项、对照、理解、工作结果、知乎授权入口和预留视频页 | Vercel 静态页面 + 最小同源 Serverless OAuth；应用数据使用 IndexedDB |
+| [`apps/web`](apps/web/) | Trace 产品介绍与浏览器应用，包含首页、事项、对照、理解、工作结果、知乎公开搜索、知乎授权入口和预留视频页 | Vercel 静态页面 + 同源 Serverless 搜索／OAuth；应用数据使用 IndexedDB |
 | [`apps/desktop-pet`](apps/desktop-pet/) | Trace 原生桌宠与 DeepSeek Harness Web Overlay | 本机 Electron／Harness 插件构建 |
 
 Web 与桌宠共用已经确认的刘看山、栖息鸟、起飞鸟、字体和交互素材，不从历史原型或构建目录取运行资源。
@@ -60,6 +60,15 @@ npm run build:vercel
 
 构建结果位于 `apps/web/dist-vercel`。
 
+## 已接入的来源与 Agent 能力
+
+- 在个人空间首页保存原话时选择「知乎搜索」或「全网搜索」，Web 会在原话保存成功后调用同源 `/api/search/*`，显示知乎开放平台返回的标题、作者、公开摘要、赞同／评论数与原文链接。
+- 搜索结果默认不写入事项。只有点击「保留到这件事」才保存来源、查询和获取时间；不会自动生成对照关系或改写“我的理解”。
+- 选择 Codex 原生、Codex Harness 或自定义 Agent 会保存本次交接意图。普通网页不访问本机登录或密钥；桌宠通过受限 Electron IPC 连接 loopback `trace-runtime`，从服务端 profile 选择真正的 `codex` / `model` / `agent` 执行器。
+- 桌宠的「查找来源」调用本机 `/api/search/zhihu` 或 `/api/search/global`；「交给 Agent」会依次创建产品事项、创建 Agent run，并轮询到终态。返回内容仍是未采纳候选。
+
+启动本机能力后端的环境与 profile 以 [`trace_backend`](https://github.com/Tracehackthon/trace_backend) 的 Runtime 文档为准。桌宠默认只连接 `http://127.0.0.1:4173`；如使用其它本机端口，可设置 `TRACE_BACKEND_ORIGIN`，该值只接受 loopback HTTP origin。
+
 ## 构建桌宠
 
 桌宠使用独立依赖，不进入 Vercel 构建：
@@ -71,14 +80,14 @@ npm run build
 npm run desktop
 ```
 
-桌宠会以透明、无边框、置顶的 Electron Overlay 运行；点击角色后可以展开 Trace 卡片与内置讨论页。当前没有安装包签名和自动更新，不把源码构建等同于可发布安装包。
+桌宠会以透明、无边框、置顶的 Electron Overlay 运行；点击角色后可以展开 Trace 卡片与内置讨论页，并在本机 Runtime 可用时显示知乎／全网搜索和 Agent profile。当前没有安装包签名和自动更新，不把源码构建等同于可发布安装包。
 
 ## 数据边界
 
 - 个人空间数据属于当前浏览器配置和当前 origin；清理网站数据可能删除本地内容。
 - 完整演示使用独立 IndexedDB，不会混入个人空间。事项状态、讨论、理解、工作和结果是合成演示；其中两份知乎来源是 2026-09-15 通过开放平台搜索取得的公开摘要快照，保留作者与原文链接。访客打开 Demo 不会重复联网、消耗额度，也不会把摘要冒充全文或用户理解。
 - Preview、Vercel 默认域名和自定义域名拥有不同的浏览器存储空间。
-- Vercel 版不连接 Trace 本机 SQLite、Agent Runtime 或 Codex。仓库包含同源知乎 OAuth 与最小用户资料读取接口；只有部署平台配置后端 Secret、并把知乎回调登记为 `https://trace.neutrom.store/callback` 后才会启用。知乎授权不是 Trace 云账号，也不提供跨设备同步。
+- Vercel 版不连接 Trace 本机 SQLite。公开知乎／全网搜索由同源 Serverless 接口代理；Codex 与自定义 Agent 只由桌宠连接本机 Runtime。知乎 OAuth 仍只负责“我的知乎内容”，必须配置后端 Secret，并把回调登记为 `https://trace.neutronm.store/callback`。知乎授权不是 Trace 云账号，也不提供跨设备同步。
 - 不提交 `.env*`、Token、数据库、`.vercel/`、构建目录和测试输出。
 
 ## 知乎授权部署配置
@@ -88,7 +97,7 @@ Serverless 接口把 App Key、Access Secret、授权码与 OAuth Token 留在�
 ```text
 ZHIHU_OAUTH_APP_ID=669
 ZHIHU_OAUTH_APP_KEY=<Vercel Secret>
-ZHIHU_OAUTH_REDIRECT_URI=https://trace.neutrom.store/callback
+ZHIHU_OAUTH_REDIRECT_URI=https://trace.neutronm.store/callback
 ZHIHU_ACCESS_SECRET=<Vercel Secret>
 ```
 

@@ -51,7 +51,7 @@
   object-fit: contain;
   transform-origin: 50% 90%;
   transform-style: preserve-3d;
-  animation: trace-pet-float 3.2s cubic-bezier(.34, 1.15, .64, 1) infinite;
+  animation: trace-pet-float 3.2s cubic-bezier(.16, 1, .3, 1) infinite;
 }
 
 .trace-pet-visual {
@@ -63,7 +63,7 @@
   place-items: end center;
   transform: scaleX(-1);
   transform-origin: 50% 90%;
-  transition: transform 240ms cubic-bezier(.34, 1.56, .64, 1);
+  transition: transform 240ms cubic-bezier(.16, 1, .3, 1);
   transform-style: preserve-3d;
 }
 
@@ -82,7 +82,7 @@
   filter: blur(7px);
   opacity: .6;
   transform: translateX(-50%) scale(.88);
-  transition: transform 240ms cubic-bezier(.34, 1.56, .64, 1), opacity 240ms ease;
+  transition: transform 240ms cubic-bezier(.16, 1, .3, 1), opacity 240ms ease;
 }
 
 .trace-pet-button-sit .trace-pet-shadow {
@@ -116,7 +116,7 @@
 }
 
 .trace-pet-button-crawling .trace-pet-image {
-  animation: trace-pet-crawl 440ms cubic-bezier(.34, 1.56, .64, 1) both;
+  animation: trace-pet-crawl 440ms cubic-bezier(.16, 1, .3, 1) both;
 }
 
 .trace-pet-button-hugging .trace-pet-image {
@@ -124,7 +124,7 @@
 }
 
 .trace-pet-button-thinking .trace-pet-image {
-  animation: trace-pet-think 2.3s cubic-bezier(.34, 1.12, .64, 1) infinite;
+  animation: trace-pet-think 2.3s cubic-bezier(.16, 1, .3, 1) infinite;
 }
 
 @keyframes trace-pet-sit-sway {
@@ -173,7 +173,7 @@
   box-shadow: 0 16px 36px rgba(31, 85, 58, .18), inset 0 1px rgba(255,255,255,.88);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  animation: trace-reminder-pop 340ms cubic-bezier(.34, 1.56, .64, 1) 240ms both;
+  animation: trace-reminder-pop 340ms cubic-bezier(.16, 1, .3, 1) 240ms both;
 }
 .trace-reminder-bubble::before {
   position: absolute;
@@ -234,7 +234,7 @@
   border-radius: 50%;
   background: rgba(253, 254, 249, .88);
   box-shadow: 0 3px 8px rgba(31, 85, 58, .1);
-  animation: trace-reminder-dot 260ms cubic-bezier(.34, 1.56, .64, 1) both;
+  animation: trace-reminder-dot 260ms cubic-bezier(.16, 1, .3, 1) both;
 }
 .trace-reminder-bubbles i:nth-child(2) { width: 10px; height: 10px; animation-delay: 70ms; }
 .trace-reminder-bubbles i:nth-child(3) { width: 14px; height: 14px; animation-delay: 140ms; }
@@ -311,7 +311,7 @@
   transform-origin: 50% 50%;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  transition: transform 380ms cubic-bezier(.34, 1.56, .64, 1), opacity 230ms ease;
+  transition: transform 380ms cubic-bezier(.16, 1, .3, 1), opacity 230ms ease;
   will-change: transform, opacity;
 }
 
@@ -410,11 +410,11 @@
 }
 
 .trace-overlay-open .trace-orbit-item {
-  animation: trace-orbit-spread 360ms cubic-bezier(.34, 1.56, .64, 1) var(--trace-orbit-delay) both;
+  animation: trace-orbit-spread 360ms cubic-bezier(.16, 1, .3, 1) var(--trace-orbit-delay) both;
 }
 
 .trace-overlay-collapsing .trace-orbit-item {
-  animation: trace-orbit-collapse 230ms cubic-bezier(.34, 1.56, .64, 1) var(--trace-collapse-delay) both;
+  animation: trace-orbit-collapse 230ms cubic-bezier(.16, 1, .3, 1) var(--trace-collapse-delay) both;
 }
 
 @keyframes trace-orbit-spread {
@@ -455,7 +455,7 @@
   background: rgba(255, 255, 255, .42);
   text-align: left;
   opacity: 0;
-  animation: trace-card-content-in 120ms cubic-bezier(.34, 1.2, .64, 1) calc(var(--trace-orbit-delay) + 100ms) both;
+  animation: trace-card-content-in 120ms cubic-bezier(.16, 1, .3, 1) calc(var(--trace-orbit-delay) + 100ms) both;
 }
 
 @keyframes trace-card-content-in {
@@ -517,6 +517,27 @@
 .trace-compact-observation strong { font-size: 12px; line-height: 1.48; }
 .trace-compact-observation small { color: var(--trace-muted); font-size: 10px; }
 
+.trace-runtime-tools { display: grid; gap: 10px; margin-top: 14px; padding: 13px; border: 1px solid rgba(31,107,75,.16); border-radius: 16px; background: rgba(237,247,240,.74); }
+.trace-runtime-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.trace-runtime-heading strong { display: block; margin-top: 3px; font-size: 13px; }
+.trace-runtime-heading > span { flex: 0 0 auto; padding: 4px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; }
+.trace-runtime-online { background: #d8efe0; color: #116146; }
+.trace-runtime-offline { background: #eee8d8; color: #765d22; }
+.trace-runtime-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.trace-runtime-controls select { min-width: 0; min-height: 36px; border: 1px solid rgba(31,107,75,.18); border-radius: 10px; background: #fffdf7; padding: 6px 8px; color: var(--trace-ink); font: inherit; font-size: 11px; }
+.trace-runtime-tools > small { color: var(--trace-muted); font-size: 10px; line-height: 1.45; }
+.trace-runtime-notice { margin: 0; color: var(--trace-muted); font-size: 10px; line-height: 1.45; }
+.trace-runtime-result { padding: 10px; border: 1px solid rgba(31,107,75,.14); border-radius: 12px; background: #fffdf7; }
+.trace-runtime-result > small { display: block; color: var(--trace-green); font-size: 9px; }
+.trace-runtime-result > strong { display: block; margin-top: 4px; font-size: 11px; line-height: 1.4; }
+.trace-runtime-result > span { display: block; margin-top: 3px; color: var(--trace-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.trace-runtime-result > p { display: -webkit-box; margin: 5px 0; overflow: hidden; color: var(--trace-muted); font-size: 10px; line-height: 1.45; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.trace-runtime-result > footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trace-runtime-result > footer a { color: var(--trace-green-dark); font-size: 10px; text-underline-offset: 3px; }
+.trace-runtime-result > footer small { color: var(--trace-muted); font-size: 9px; }
+.trace-runtime-result > footer button, .trace-runtime-result > button { min-height: 32px; border: 1px solid rgba(31,107,75,.2); border-radius: 9px; background: #edf7f0; color: var(--trace-green-dark); font-size: 10px; cursor: pointer; }
+.trace-runtime-agent { border-color: rgba(230,169,55,.32); background: #fffaf0; }
+
 .trace-panel-header, .trace-section-heading, .trace-observation-card, .trace-action-row, .trace-meta-row {
   display: flex;
   align-items: center;
@@ -541,7 +562,7 @@
 .trace-media-button { display: grid; width: 38px; height: 38px; place-items: center; padding: 0; border: 1px solid #c7d9ca; border-radius: 12px; background: #f4faf4; color: var(--trace-green-dark); font-size: 16px; cursor: pointer; }
 .trace-media-button-recording { border-color: #e2a755; background: #fff4db; color: #9a6617; }
 .trace-recording-wave { display: flex; align-items: center; gap: 2px; height: 16px; }
-.trace-recording-wave i { display: block; width: 3px; height: 6px; border-radius: 99px; background: currentColor; animation: trace-wave 560ms cubic-bezier(.34, 1.1, .64, 1) infinite alternate; }
+.trace-recording-wave i { display: block; width: 3px; height: 6px; border-radius: 99px; background: currentColor; animation: trace-wave 560ms cubic-bezier(.16, 1, .3, 1) infinite alternate; }
 .trace-recording-wave i:nth-child(2) { animation-delay: 80ms; }.trace-recording-wave i:nth-child(3) { animation-delay: 160ms; }.trace-recording-wave i:nth-child(4) { animation-delay: 240ms; }
 @keyframes trace-wave { from { transform: scaleY(.55); opacity: .55; } to { transform: scaleY(1.9); opacity: 1; } }
 .trace-file-input { display: none; }

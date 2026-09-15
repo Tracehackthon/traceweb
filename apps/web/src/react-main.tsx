@@ -8,6 +8,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
+import { agentCapabilities, hasNativeCapabilityBridge, runNativeAgent, searchPublic, type SearchItem, type SearchSource } from './react/capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
@@ -365,6 +366,7 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   useEffect(() => { setName(snapshot.host?.preferences?.displayName || ''); setReduceMotion(Boolean(snapshot.host?.preferences?.reduceMotion)); }, [dialog.type, snapshot.host]);
   if (dialog.type === 'message') return <><p>{dialog.message}</p><footer><RecoveryButton onClick={() => runtime.closeDialog()}>{dialog.confirm ? '取消' : '回到原处'}</RecoveryButton>{dialog.confirm && <RecoveryButton primary onClick={() => { const action = dialog.confirm?.action; runtime.closeDialog(); action?.(); }}>{dialog.confirm.label}</RecoveryButton>}</footer></>;
   if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示空间只使用合成数据，与账号和个人内容完全分开，可以随时恢复。' : browserStorage ? '内容仅保存在当前浏览器，不上传、不跨设备同步。清除网站数据会丢失内容，请定期导出；正式站与各预览地址的数据相互独立。' : '这是你在本机的 Trace 空间。没有开通账号或云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示数据保存在这里' : '你的内容保存在这里'}</h3><p>{snapshot.storage?.location}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
+  if (dialog.type === 'capability' && dialog.capability) return <CapabilityDialog capability={dialog.capability} />;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);
     const linked = snapshot.host?.chain?.sources?.filter((source: any) => source.ownerMatterId === matter?.id) || [];
@@ -373,6 +375,73 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   if (dialog.type === 'work-context') return <><p>这是你确认的本地上下文，尚未发送给外部 Agent。可复制到实际工作中，之后手工带回结果。</p><pre>{dialog.message}</pre><footer><RecoveryButton primary onClick={async (event) => { try { await navigator.clipboard.writeText(dialog.message || ''); (event.currentTarget as HTMLButtonElement).textContent = '已复制 · 尚未发送'; } catch { (event.currentTarget as HTMLButtonElement).textContent = '请手动选择文字复制'; } }}>复制本次上下文</RecoveryButton></footer></>;
   const record = dialog.record || {};
   return <>{record.meta && <p>{record.meta}</p>}{record.before && <><h3>修改前</h3><p>{record.before}</p></>}<h3>{record.title}</h3><p>{record.text}</p>{record.interpretation && <><h3>我的解释</h3><p>{record.interpretation}</p></>}{record.unconfirmed && <><h3>还不确定</h3><p>{record.unconfirmed}</p></>}</>;
+}
+
+function CapabilityDialog({ capability }: { capability: NonNullable<DialogState['capability']> }) {
+  const requestedSource: SearchSource | 'none' = capability.source === 'web' ? 'global' : capability.source;
+  const [source, setSource] = useState<SearchSource>(requestedSource === 'none' ? 'zhihu' : requestedSource);
+  const [items, setItems] = useState<SearchItem[]>([]);
+  const [searchState, setSearchState] = useState(requestedSource === 'none' ? '未选择联网搜索。' : '准备搜索…');
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [kept, setKept] = useState<string[]>([]);
+  const [agentInfo, setAgentInfo] = useState<any>(null);
+  const [agentState, setAgentState] = useState(capability.agent === 'none' ? '这次没有选择 Agent。' : '正在检查 Agent Runtime…');
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [agentResult, setAgentResult] = useState<any>(null);
+  const [profileId, setProfileId] = useState('');
+  const native = hasNativeCapabilityBridge();
+
+  const doSearch = async (nextSource = source) => {
+    setSearchBusy(true); setItems([]); setSearchState(`正在从${nextSource === 'zhihu' ? '知乎' : '全网'}查找 3 条公开来源…`);
+    try {
+      const result = await searchPublic(nextSource, capability.query, 3);
+      setItems(result.items || []); setSearchState(result.items?.length ? `收到 ${result.items.length} 条接口摘要；尚未保存。` : '这次没有返回来源，可以换一个更具体的问题。');
+    } catch (cause) { setSearchState(cause instanceof Error ? cause.message : '搜索没有完成。'); }
+    finally { setSearchBusy(false); }
+  };
+
+  useEffect(() => { if (requestedSource !== 'none') void doSearch(requestedSource); }, []);
+  useEffect(() => {
+    if (capability.agent === 'none') return;
+    void agentCapabilities().then((value) => {
+      const agent = value?.agent || value;
+      setAgentInfo(agent);
+      const profiles = agent?.profiles || [];
+      const selected = capability.agent === 'codex-native'
+        ? profiles.find((profile: any) => profile.kind === 'codex')?.profileId
+        : capability.agent === 'custom'
+          ? profiles.find((profile: any) => profile.kind === 'agent')?.profileId
+          : profiles.find((profile: any) => /harness/i.test(`${profile.profileId} ${profile.label}`))?.profileId;
+      const selectedProfile = selected || agent?.defaultProfileId || profiles[0]?.profileId || '';
+      setProfileId(selectedProfile);
+      setAgentState(agent?.enabled ? `${profiles.length} 个服务端执行器可用；会优先匹配你刚才选择的 Agent 类型。` : native ? 'Agent Runtime 已发现，但当前没有启用执行器。' : '网页已保留交接意图；启动桌宠并连接本机 Runtime 后才能调用 Codex 或自定义 Agent。');
+    }).catch((cause) => setAgentState(cause instanceof Error ? cause.message : 'Agent Runtime 不可用。'));
+  }, [capability.agent]);
+
+  const keep = async (item: SearchItem) => {
+    try { await runtime.keepPublicSource(capability.matterId, item, capability.query); setKept((current) => [...new Set([...current, item.id])]); }
+    catch (cause) { setSearchState(cause instanceof Error ? cause.message : '来源没有保存。'); }
+  };
+  const runAgent = async () => {
+    setAgentBusy(true); setAgentResult(null); setAgentState('正在创建一次有边界的 Agent 运行…');
+    try {
+      const result = await runNativeAgent({ text: capability.query, source: requestedSource, ...(profileId ? { profileId } : {}) });
+      setAgentResult(result); setAgentState(result.status === 'succeeded' ? 'Agent 已返回候选；没有自动写入我的理解。' : result.error?.message || `本次运行：${result.status}`);
+    } catch (cause) { setAgentState(cause instanceof Error ? cause.message : 'Agent 运行没有完成。'); }
+    finally { setAgentBusy(false); }
+  };
+
+  const profiles = agentInfo?.profiles || [];
+  const metric = (item: SearchItem) => [item.vote_up_count == null ? '' : `${item.vote_up_count} 赞同`, item.comment_count == null ? '' : `${item.comment_count} 评论`, item.content_type || ''].filter(Boolean).join(' · ');
+  const agentIntent = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[capability.agent] || '未选择';
+  return <section className="web-capability-flow">
+    <p>原话已经先保存。下面的外部内容仍是候选，只有你明确保留后才会进入这件事。</p>
+    <div className="web-capability-grid">
+      {requestedSource !== 'none' && <section><header><i>知</i><div><h3>公开来源</h3><small>知乎经验与全网资料</small></div></header><div className="web-capability-controls"><select aria-label="搜索范围" value={source} disabled={searchBusy} onChange={(event) => setSource(event.target.value as SearchSource)}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select><RecoveryButton disabled={searchBusy} onClick={() => void doSearch()}>{searchBusy ? '正在查找…' : '重新查找'}</RecoveryButton></div><p role="status">{searchState}</p>{items.map((item) => <article className="web-capability-source" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{metric(item) && <span>{metric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>接口未返回原文链接</small>}<RecoveryButton primary disabled={!item.url || kept.includes(item.id)} onClick={() => void keep(item)}>{!item.url ? '暂不能保留' : kept.includes(item.id) ? '已保留到这件事' : '保留到这件事'}</RecoveryButton></footer></article>)}</section>}
+      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>原生 Agent</h3><small>Codex Harness 与自定义执行器</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>执行位置</dt><dd>{native ? '桌宠 · 本机 Runtime' : '等待桌宠连接'}</dd></div><div><dt>返回方式</dt><dd>未采纳候选</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>服务端执行器<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || profile.profileId} · {profile.kind}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '开始一次 Agent 讨论'}</RecoveryButton>{!native && <small>网页不会读取本机登录或密钥；本次交接意图已经保留，但执行只会由桌宠的本机桥接发起。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改候选' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}</article>}</section>}
+    </div>
+    <footer><RecoveryButton onClick={() => runtime.closeDialog()}>完成，回到这件事</RecoveryButton></footer>
+  </section>;
 }
 
 type ZhihuStatus = { oauth?: { configured?: boolean; status?: string; expires_at?: string | null }; user_content_configured?: boolean; notice?: string };
