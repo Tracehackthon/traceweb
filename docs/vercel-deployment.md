@@ -17,7 +17,11 @@ Vercel 只部署 `apps/web` 的浏览器本地保存版本。`apps/desktop-pet` 
 
 这些值已经写入 `vercel.json`。不要在 Vercel Dashboard 另外维护一套不同命令。
 
-## 首次连接
+## 当前连接
+
+Vercel 项目 `neutronm/traceweb` 已连接 GitHub 仓库 `Tracehackthon/traceweb`。连接后首次推送用于验证从 GitHub `main` 到 Production Deployment 的真实触发链路。
+
+## 重新连接
 
 1. 在 Vercel 中创建或选择项目 `traceweb`。
 2. 通过 Vercel Git Integration 连接 `https://github.com/Tracehackthon/traceweb`。
@@ -32,7 +36,7 @@ Vercel 只部署 `apps/web` 的浏览器本地保存版本。`apps/desktop-pet` 
 - `main` push：Production Deployment。
 - 其它分支／Pull Request：Preview Deployment。
 - 构建和测试失败：保留上一个成功部署，不切换 Production。
-- `vercel.json` 中 `git.deploymentEnabled=true`，仓库本身允许 Git 触发；是否真正生效仍以 Vercel 项目的 Git 连接和一次实际 push 验证为准。
+- `vercel.json` 中 `git.deploymentEnabled=true`，仓库本身允许 Git 触发；真实部署是否成功仍以 Vercel 的构建状态和线上访问结果为准。
 
 ## 线上验收
 

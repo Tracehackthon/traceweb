@@ -24,14 +24,14 @@ npm ci
 → apps/web/dist-vercel
 ```
 
-Vercel 项目连接本仓库后：
+Vercel 项目 `neutronm/traceweb` 已通过原生 Git Integration 连接本仓库：
 
 - push 到 `main` 自动生成 Production Deployment；
 - 其它分支和 Pull Request 自动生成 Preview Deployment；
 - 构建失败不会替换当前成功部署；
 - Vercel 只发布 `apps/web/dist-vercel`，不会上传 SQLite、`.env`、桌宠源码构建目录或测试输出。
 
-首次 Git 连接、线上验证和恢复步骤见 [Vercel 部署说明](docs/vercel-deployment.md)。
+当前连接状态、线上验证和恢复步骤见 [Vercel 部署说明](docs/vercel-deployment.md)。
 
 ## 本地运行 Web
 
