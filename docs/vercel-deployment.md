@@ -19,7 +19,7 @@ Vercel 只部署 `apps/web` 的浏览器本地保存版本。`apps/desktop-pet` 
 
 ## 当前连接
 
-Vercel 项目 `neutronm/traceweb` 已连接 GitHub 仓库 `Tracehackthon/traceweb`，Production Alias 为 <https://traceweb-neutronm.vercel.app>。已经用实际 `main` push 验证从 GitHub 到 Production Deployment 的触发链路。
+Vercel 项目 `neutronm/traceweb` 已连接 GitHub 仓库 `Tracehackthon/traceweb`，正式域名为 <https://trace.neutrom.store>，Vercel Production Alias 为 <https://traceweb-neutronm.vercel.app>。已经用实际 `main` push 验证从 GitHub 到 Production Deployment 的触发链路。
 
 ## 重新连接
 

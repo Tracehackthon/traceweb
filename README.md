@@ -2,7 +2,9 @@
 
 Trace 的独立产品交付仓库：集中维护可由 Vercel 部署的 **Trace Web 应用**，以及与它共享视觉和交互语言的 **Trace 桌宠**。
 
-**在线应用：<https://traceweb-neutronm.vercel.app>**
+**在线应用：<https://trace.neutrom.store>**
+
+Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
 > 这里不承载 Trace 后端、知乎密钥或用户数据库。Web 正式构建使用浏览器本地存储；桌宠是 Electron 桌面程序，不能由 Vercel 在用户桌面直接运行。
 
