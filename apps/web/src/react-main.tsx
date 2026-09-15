@@ -4,7 +4,8 @@ import * as B from './product/bridge.mjs';
 import { ASSETS } from './product/assets.mjs';
 import { h, homeEntries, mountLibrary, recordsOf, titleOf } from './product/library.mjs';
 import { preloadImages, registerFont, clearResourceCache, getResourceStats } from './product/resource-cache.mjs';
-import { runtime } from './react/runtime';
+import { completeDemoMode, runtime } from './react/runtime';
+import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
@@ -254,6 +255,26 @@ function AmbientFrame() {
   </div>;
 }
 
+const demoActions = [
+  { label: '留下一点', route: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'resume' } },
+  { label: '从这里接着', route: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'discussion' } },
+  { label: '找个对照', route: { view: 'compare', matterId: COMPLETE_DEMO.matterId, sessionId: COMPLETE_DEMO.comparisonId } },
+  { label: '我的理解', route: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'understanding' } },
+  { label: '带去用', route: { view: 'worksite', matterId: COMPLETE_DEMO.matterId, workId: COMPLETE_DEMO.workId, screen: 'overview' } },
+  { label: '结果回来', route: { view: 'worksite', matterId: COMPLETE_DEMO.matterId, workId: COMPLETE_DEMO.workId, screen: 'results' } },
+] as const;
+
+function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
+  const [open, setOpen] = useState(true);
+  if (!completeDemoMode || !snapshot.ready) return null;
+  const isCurrent = (item: typeof demoActions[number]) => item.route.view === snapshot.route.view
+    && (!('screen' in item.route) || item.route.screen === snapshot.route.screen);
+  return <aside className="demo-guide" data-open={open ? 'true' : 'false'} aria-label="完整演示动作清单">
+    <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示数据</span><b>6 / 6</b></button>
+    {open && <div className="demo-guide-body"><p>每个动作都有真实产品记录</p><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => runtime.navigate(item.route as RouteMemory)}><span>{index + 1}</span>{item.label}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
+  </aside>;
+}
+
 function RouteOutlet({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<MountedScreen | null>(null);
@@ -339,7 +360,7 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   const [reduceMotion, setReduceMotion] = useState(Boolean(snapshot.host?.preferences?.reduceMotion));
   useEffect(() => { setName(snapshot.host?.preferences?.displayName || ''); setReduceMotion(Boolean(snapshot.host?.preferences?.reduceMotion)); }, [dialog.type, snapshot.host]);
   if (dialog.type === 'message') return <><p>{dialog.message}</p><footer><RecoveryButton onClick={() => runtime.closeDialog()}>{dialog.confirm ? '取消' : '回到原处'}</RecoveryButton>{dialog.confirm && <RecoveryButton primary onClick={() => { const action = dialog.confirm?.action; runtime.closeDialog(); action?.(); }}>{dialog.confirm.label}</RecoveryButton>}</footer></>;
-  if (dialog.type === 'profile') return <><p>{browserStorage ? '内容仅保存在当前浏览器，不上传、不跨设备同步。清除网站数据会丢失内容，请定期导出；正式站与各预览地址的数据相互独立。' : '这是你在本机的 Trace 空间。没有开通账号、云同步或对外授权。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>你的内容保存在这里</h3><p>{snapshot.storage?.location}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p><footer><RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton><RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
+  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '这是与个人内容完全分开的演示空间。这里的内容都是合成演示数据，可以随时恢复。' : browserStorage ? '内容仅保存在当前浏览器，不上传、不跨设备同步。清除网站数据会丢失内容，请定期导出；正式站与各预览地址的数据相互独立。' : '这是你在本机的 Trace 空间。没有开通账号或云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示数据保存在这里' : '你的内容保存在这里'}</h3><p>{snapshot.storage?.location}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p><ZhihuAuthorization demo={completeDemoMode}/><footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);
     const linked = snapshot.host?.chain?.sources?.filter((source: any) => source.ownerMatterId === matter?.id) || [];
@@ -348,6 +369,55 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   if (dialog.type === 'work-context') return <><p>这是你确认的本地上下文，尚未发送给外部 Agent。可复制到实际工作中，之后手工带回结果。</p><pre>{dialog.message}</pre><footer><RecoveryButton primary onClick={async (event) => { try { await navigator.clipboard.writeText(dialog.message || ''); (event.currentTarget as HTMLButtonElement).textContent = '已复制 · 尚未发送'; } catch { (event.currentTarget as HTMLButtonElement).textContent = '请手动选择文字复制'; } }}>复制本次上下文</RecoveryButton></footer></>;
   const record = dialog.record || {};
   return <>{record.meta && <p>{record.meta}</p>}{record.before && <><h3>修改前</h3><p>{record.before}</p></>}<h3>{record.title}</h3><p>{record.text}</p>{record.interpretation && <><h3>我的解释</h3><p>{record.interpretation}</p></>}{record.unconfirmed && <><h3>还不确定</h3><p>{record.unconfirmed}</p></>}</>;
+}
+
+type ZhihuStatus = { oauth?: { configured?: boolean; status?: string; expires_at?: string | null }; user_content_configured?: boolean; notice?: string };
+
+function ZhihuAuthorization({ demo }: { demo: boolean }) {
+  const [status, setStatus] = useState<ZhihuStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [resource, setResource] = useState('');
+  const [items, setItems] = useState<Array<{ id?: string | null; title?: string; summary?: string; url?: string | null }>>([]);
+  const load = async () => {
+    try {
+      const response = await fetch('/api/zhihu/status', { cache: 'no-store', credentials: 'same-origin' });
+      if (!response.ok) throw new Error('知乎授权状态暂时不可用。');
+      setStatus(await response.json()); setError('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '知乎授权状态暂时不可用。'); }
+  };
+  useEffect(() => { if (!demo) void load(); }, [demo]);
+  const start = async () => {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/zhihu/oauth/start', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const value = await response.json();
+      if (!response.ok || !value.login_url) throw new Error(value?.error?.message || '未能发起知乎授权。');
+      window.location.assign(value.login_url);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '未能发起知乎授权。'); setBusy(false); }
+  };
+  const disconnect = async () => {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/zhihu/oauth/disconnect', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
+      if (!response.ok) throw new Error('未能断开知乎授权。');
+      await load();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '未能断开知乎授权。'); }
+    finally { setBusy(false); }
+  };
+  const read = async (kind: 'contents' | 'favorites' | 'followees') => {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/zhihu/user/read', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, limit: 3, offset: '0' }) });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value?.error?.message || '没有读到知乎资料。');
+      setResource(kind); setItems(value.items || []);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '没有读到知乎资料。'); }
+    finally { setBusy(false); }
+  };
+  if (demo) return <section className="web-zhihu-auth"><h3>知乎授权</h3><p>演示空间不会读取真实账号。进入个人空间后，可以单独授权知乎资料。</p><a href="/app">进入个人空间授权</a></section>;
+  const authorized = status?.oauth?.status === 'authorized';
+  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><h3>知乎授权</h3><p>{authorized ? '已授权当前浏览器读取你的知乎资料。不会自动导入；只有你明确选择时才读取。' : status?.oauth?.configured ? '连接后可以由你明确读取创作、关注和收藏。它不是 Trace 云账号登录。' : '线上授权接口已经接好，但后端 Secret 或新的回调地址还没有配置完成。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开授权</RecoveryButton></> : <RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在打开知乎…' : '授权连接知乎'}</RecoveryButton>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>当前接口返回空列表。</p>}<small>只展示本次明确读取的 3 条，没有自动保存到 Trace。</small></div>}<small>{status?.notice || '授权只用于知乎资料访问；Trace 内容仍保存在当前浏览器。'}</small></section>;
 }
 
 function DialogHost({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
@@ -384,7 +454,18 @@ function App() {
     document.documentElement.dataset.reduceMotion = String(runtime.isReducedMotion());
     document.title = route === 'home' ? 'Trace · 把此刻的一点，带到以后' : route === 'matters' ? 'Trace · 在意的事' : document.title;
   }, [snapshot.route.view, snapshot.host?.preferences?.reduceMotion]);
-  return <div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-busy={snapshot.busy ? 'true' : 'false'}><AmbientFrame /><StatusBar snapshot={snapshot} /><Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div>;
+  useEffect(() => {
+    if (!snapshot.ready) return;
+    const url = new URL(location.href);
+    if (!url.searchParams.has('zhihu')) return;
+    const result = url.searchParams.get('zhihu');
+    const reason = url.searchParams.get('reason');
+    url.searchParams.delete('zhihu'); url.searchParams.delete('reason');
+    history.replaceState(history.state, '', url);
+    if (result === 'error') runtime.message(`知乎授权没有完成（${reason || '回调校验失败'}）。请重新发起，不会重放旧授权码。`);
+    else runtime.profile();
+  }, [snapshot.ready]);
+  return <div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-busy={snapshot.busy ? 'true' : 'false'}><AmbientFrame /><DemoGuide snapshot={snapshot} /><StatusBar snapshot={snapshot} /><Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div>;
 }
 
 const mountPoint = document.querySelector('#app');

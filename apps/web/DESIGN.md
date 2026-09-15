@@ -15,6 +15,9 @@ colors:
   shell-control: "#f7fcf0bf"
   ambient-warm-node: "#d8a94c"
   state-warm-node: "#dfb654"
+  intro-deep: "#071d17"
+  intro-green: "#087158"
+  intro-accent: "#47b68c"
   white: "#ffffff"
 typography:
   display:
@@ -44,6 +47,10 @@ typography:
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.55
+  intro-display:
+    fontFamily: '"TraceSerif", Georgia, serif'
+    fontWeight: 400
+    lineHeight: 1.05
 rounded:
   brand: "11px"
   control: "20px"
@@ -93,12 +100,13 @@ components:
 
 **Creative North Star: "留白中的接续"**
 
-Mode: **Operate**。Trace 的当前视觉系统是一张浅矿物白与鼠尾草绿构成的产品表面，而不是一幅山水或环境图片。React shell 只挂载一次共享 ambient field；首页、在意的事、一件事、对照、工作现场与痕迹目录都把真实 DOM/SVG 内容置于其上。三个独立周边组件从画面边缘提供关系、萌芽与沉淀的暗示，中间持续保留大面积可读、可操作的负空间。
+Mode: **Operate**。部署根入口现在先呈现深绿、编辑式排版的产品交互介绍；访客明确选择后才进入浅矿物白与鼠尾草绿构成的产品操作表面。产品 React shell 只挂载一次共享 ambient field；首页、在意的事、一件事、对照、工作现场与痕迹目录都把真实 DOM/SVG 内容置于其上。三个独立周边组件从画面边缘提供关系、萌芽与沉淀的暗示，中间持续保留大面积可读、可操作的负空间。
 
 现有关系线、状态节点、异形玻璃与小鸟继续表达「从哪里来、停在哪里、发生了什么」；它们不是用于填空的背景纹理。暖金只标记节点或已发生的变化，不扩张成主色。复杂产品流程、保存边界和历史事实保持原语义，新的 ambient field 只统一视觉环境，不重写业务状态。
 
 **Key Characteristics:**
 - 浅矿物白基底、淡鼠尾草洗色与深绿文字构成安静、清晰的操作表面。
+- 产品介绍使用深绿现场、真实产品截图和滚动叙事，把「原现场 → 接续 → 结果回来」讲清后再进入产品，而不是用一张营销 Hero 代替产品证据。
 - 右上轨道节点、左下枝叶、右下卵石是三个独立 SVG 周边组件；中心不放大型插画。
 - 只有右上轨道以 10 秒周期进行低频微位移和微泛光呼吸；其余装饰保持静止。
 - 小鸟与关系线保留产品语义；装饰层永远 `aria-hidden`、不接收指针，也不阻塞路由或状态流。
@@ -107,7 +115,8 @@ Mode: **Operate**。Trace 的当前视觉系统是一张浅矿物白与鼠尾草
 
 ### 当前实现与事实边界
 
-- 默认入口仍是 [web-main.js](src/web-main.js)，它加载 [react-main.tsx](src/react-main.tsx) 中的 React shell；共享 ambient field 在 route outlet 之外挂载，因此换路由不会重建背景世界。
+- 默认入口仍是 [web-main.js](src/web-main.js)，但会按路径拆分表面：`/` 加载产品交互介绍，`/app/demo` 与 `/app` 加载 [react-main.tsx](src/react-main.tsx) 中的 React shell，`/video` 加载预留视频页。路由 CSS 在对应模块前显式载入，避免首屏出现未着色内容。
+- `/app/demo` 和 `/app` 复用同一套真实产品组件与命令边界，但使用两个独立 IndexedDB；演示空间右侧固定六动作导航，个人空间不继承任何演示记录。
 - [web.css](src/product/web.css) 明确把首页、事项、chain、compare、worksite、目录与加载态的 `background-image` 置为 `none`。`ASSETS` 当前只映射字体与小鸟，不含背景角色。
 - 旧 `environment*.png` 与锁定记录可以继续留在仓库作为历史/审计资产，但既不是当前 primary/legacy runtime 的视觉入口，也不是新增页面应复用的系统组件。
 - 自动模型回复、联网搜索、外部 Agent 真正执行、账号和云同步仍未接入；视觉上的高亮、关联或本地保存不能冒充外部送达和结论采用。
@@ -183,6 +192,17 @@ Mode: **Operate**。Trace 的当前视觉系统是一张浅矿物白与鼠尾草
 - 小鸟只使用已锁定的栖息与起飞姿态。它与关系线指向对象/停点，不增加第三种鸟身份，也不烘焙进 ambient SVG。
 
 ## Components
+
+### 产品介绍与视频入口
+
+- **介绍首屏**：左侧深绿叙事板与右侧真实知乎阅读现场组成一屏；三段真实 Electron Overlay 可点选，移动端改为上下阅读而不是缩小桌面画布。
+- **证据链路**：六张真实 Trace Web 截图随滚动切换，文案明确区分真实界面、人工演示数据和当前尚未连接的外部能力。
+- **理解前后对照**：范围控件直接比较 v1 与确认后的 v2；键盘与指针使用同一原生 range 语义。
+- **视频页**：`/video` 是稳定地址。`public/video/trace-demo.mp4` 缺失时显示可交付的占位状态，存在时自动切换为原生播放器。
+
+### 完整演示导航
+
+`.demo-guide` 仅在 `/app/demo` 出现，固定列出「留下一点、从这里接着、找个对照、我的理解、带去用、结果回来」六个动作及 6/6 完整状态。每个入口打开同一份合成事项在权威产品组件中的对应记录，不使用静态截图冒充可操作产品。恢复演示只重建演示数据库，不触碰 `/app` 的个人数据。
 
 ### AmbientFrame 与 route surface
 

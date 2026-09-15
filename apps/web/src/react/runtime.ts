@@ -1,11 +1,13 @@
 import * as B from '../product/bridge.mjs';
 import { workspaceRequest, storageLabel } from './workspace-storage';
 import { homeEntries, mattersView, recordsOf, titleOf } from '../product/library.mjs';
+import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
 const uid = (kind: string) => `${kind}-${crypto.randomUUID()}`;
 const allowed: ViewName[] = ['home', 'matters', 'chain', 'compare', 'worksite', 'works', 'search', 'all', 'discussion'];
+export const completeDemoMode = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 
 type HarnessHandoff = {
   observationId: string | null;
@@ -148,7 +150,7 @@ export class WebRuntime {
       if (!response.ok) throw new Error(`读取本机内容失败（${response.status}），没有重置数据。`);
       const data = await response.json();
       if (!Number.isInteger(data.revision)) throw new Error('存储响应不正确');
-      this.host = data.host || B.createBridge();
+      this.host = data.host || (completeDemoMode ? createCompleteDemoWorkspace() : B.createBridge());
       this.revision = data.revision;
       this.storage = data.storage;
       const recovered = B.recoverPendingComparisons(this.host);
@@ -156,6 +158,7 @@ export class WebRuntime {
         this.host = recovered;
         await this.save(this.host);
       }
+      if (!data.host && completeDemoMode) await this.save(this.host);
       this.route = fromUrl();
       await this.resumeHarnessHandoff();
       this.ready = true;
@@ -658,6 +661,11 @@ export class WebRuntime {
         this.setStatus('saved', '设置已保存');
       },
     );
+  }
+
+  resetCompleteDemo(): void {
+    if (!completeDemoMode) return;
+    void this.commit(() => createCompleteDemoWorkspace(), () => this.navigate({ view: 'home' }, { replace: true }));
   }
 
   getTitleOfMatter(matter: any): string { return titleOf(matter); }

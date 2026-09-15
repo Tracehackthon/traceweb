@@ -17,6 +17,7 @@
     "test:browser-storage": "node scripts/browser-storage-e2e.cjs",
     "test": "npm --prefix apps/web test",
     "test:e2e": "node scripts/product-e2e.cjs",
+    "test:experience": "node scripts/experience-e2e.cjs",
     "test:ui-renovation": "node scripts/ui-renovation-e2e.cjs"
   },
   "devDependencies": {

@@ -6,6 +6,7 @@
   "outputDirectory": "apps/web/dist-vercel",
   "git": { "deploymentEnabled": true },
   "rewrites": [
+    { "source": "/callback", "destination": "/api/oauth-callback" },
     { "source": "/((?!api/|assets/|home/|matters/|product/|legacy\\.html|.*\\.[^/]+$).*)", "destination": "/index.html" }
   ],
   "headers": [

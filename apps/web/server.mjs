@@ -35,7 +35,9 @@ const mimeTypes = new Map([
   ['.mjs', 'text/javascript; charset=utf-8'],
   ['.css', 'text/css; charset=utf-8'],
   ['.png', 'image/png'],
+  ['.webp', 'image/webp'],
   ['.svg', 'image/svg+xml'],
+  ['.mp4', 'video/mp4'],
   ['.woff2', 'font/woff2'],
   ['.woff', 'font/woff'],
   ['.ttf', 'font/ttf'],
@@ -83,11 +85,11 @@ const server = http.createServer(async (request, response) => {
   const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname
   if (asset && !fs.existsSync(asset) && staticRoot === distRoot && !path.extname(pathname)) asset = path.join(staticRoot, 'index.html')
   const allowedAsset = asset && (staticRoot === distRoot
-    ? (asset === path.join(staticRoot, 'index.html') || asset === path.join(staticRoot, 'legacy.html') || asset.startsWith(path.join(staticRoot, 'assets') + path.sep) || asset.startsWith(path.join(staticRoot, 'public') + path.sep) || asset.startsWith(path.join(staticRoot, 'home') + path.sep) || asset.startsWith(path.join(staticRoot, 'matters') + path.sep) || asset.startsWith(path.join(staticRoot, 'product') + path.sep))
+    ? (asset === path.join(staticRoot, 'index.html') || asset === path.join(staticRoot, 'legacy.html') || ['assets', 'public', 'home', 'matters', 'product', 'decor', 'evidence', 'scene', 'real', 'fonts', 'video'].some((directory) => asset.startsWith(path.join(staticRoot, directory) + path.sep)))
     : (['index.html','legacy.html'].includes(path.basename(asset)) && path.dirname(asset) === root || asset.startsWith(path.join(root,'src') + path.sep) || asset.startsWith(path.join(root,'public') + path.sep)))
   if (!allowedAsset || !fs.existsSync(asset) || !fs.statSync(asset).isFile()) {
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
-    response.end('Not found')
+    response.end(request.method === 'HEAD' ? undefined : 'Not found')
     return
   }
   const headers = staticHeaders(asset)
@@ -99,6 +101,7 @@ const server = http.createServer(async (request, response) => {
   }
   if (request.headers['if-none-match'] === headers.etag) { response.writeHead(304, headers); response.end(); return }
   response.writeHead(200, headers)
+  if (request.method === 'HEAD') { response.end(); return }
   fs.createReadStream(asset).pipe(response)
   } catch (error) {
     console.error(error)

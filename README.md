@@ -1,8 +1,13 @@
 # Trace Web
 
-Trace 的独立产品交付仓库：集中维护可由 Vercel 部署的 **Trace Web 应用**，以及与它共享视觉和交互语言的 **Trace 桌宠**。
+Trace 的独立产品交付仓库：集中维护可由 Vercel 部署的 **Trace 产品交互介绍、完整 Web 应用、视频路由**，以及与它共享视觉和交互语言的 **Trace 桌宠**。
 
 **在线应用：<https://trace.neutrom.store>**
+
+- 产品交互介绍：<https://trace.neutrom.store/>
+- 六个动作的完整演示数据：<https://trace.neutrom.store/app/demo>
+- 个人浏览器空间：<https://trace.neutrom.store/app>
+- 视频展示：<https://trace.neutrom.store/video>
 
 Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
@@ -12,7 +17,7 @@ Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
 | 目录 | 交付物 | 运行方式 |
 | --- | --- | --- |
-| [`apps/web`](apps/web/) | Trace 浏览器应用，包含首页、事项、对照、理解、工作结果，以及鸟形交互入口 | Vercel 静态部署；同一 origin 的 IndexedDB |
+| [`apps/web`](apps/web/) | Trace 产品介绍与浏览器应用，包含首页、事项、对照、理解、工作结果、知乎授权入口和预留视频页 | Vercel 静态页面 + 最小同源 Serverless OAuth；应用数据使用 IndexedDB |
 | [`apps/desktop-pet`](apps/desktop-pet/) | Trace 原生桌宠与 DeepSeek Harness Web Overlay | 本机 Electron／Harness 插件构建 |
 
 Web 与桌宠共用已经确认的刘看山、栖息鸟、起飞鸟、字体和交互素材，不从历史原型或构建目录取运行资源。
@@ -46,7 +51,7 @@ npm ci
 npm run dev
 ```
 
-开发服务器默认位于 `http://127.0.0.1:4186`。如需验证 Vercel 使用的浏览器存储版本：
+开发服务器默认位于 `http://127.0.0.1:4186`。根地址先进入产品交互介绍；`/app/demo` 使用一套与个人空间隔离的完整演示数据；`/app` 是当前浏览器的个人空间；`/video` 固定为视频展示地址。如需验证 Vercel 使用的浏览器存储版本：
 
 ```sh
 npm test
@@ -70,10 +75,24 @@ npm run desktop
 
 ## 数据边界
 
-- Web 数据属于当前浏览器配置和当前 origin；清理网站数据可能删除本地内容。
+- 个人空间数据属于当前浏览器配置和当前 origin；清理网站数据可能删除本地内容。
+- 完整演示使用独立 IndexedDB，不会混入个人空间；演示中的来源、讨论、理解、对照、工作与结果均明确标记为合成数据。
 - Preview、Vercel 默认域名和自定义域名拥有不同的浏览器存储空间。
-- Vercel 静态版不连接 Trace 本机 SQLite、知乎 OAuth、Agent Runtime 或 Codex。
+- Vercel 版不连接 Trace 本机 SQLite、Agent Runtime 或 Codex。仓库包含同源知乎 OAuth 与最小用户资料读取接口；只有部署平台配置后端 Secret、并把知乎回调登记为 `https://trace.neutrom.store/callback` 后才会启用。知乎授权不是 Trace 云账号，也不提供跨设备同步。
 - 不提交 `.env*`、Token、数据库、`.vercel/`、构建目录和测试输出。
+
+## 知乎授权部署配置
+
+Serverless 接口把 App Key、Access Secret、授权码与 OAuth Token 留在后端；浏览器只得到授权状态和用户明确请求的少量资料。部署平台需要配置：
+
+```text
+ZHIHU_OAUTH_APP_ID=669
+ZHIHU_OAUTH_APP_KEY=<Vercel Secret>
+ZHIHU_OAUTH_REDIRECT_URI=https://trace.neutrom.store/callback
+ZHIHU_ACCESS_SECRET=<Vercel Secret>
+```
+
+知乎活动页面登记的回调必须和上面的地址逐字一致。没有配置时，「个人与设置」会显示未配置状态，不会伪造登录成功或返回演示账号。
 
 ## 来源与维护
 
