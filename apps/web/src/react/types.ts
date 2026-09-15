@@ -33,8 +33,9 @@ export interface WebStatus {
 }
 
 export interface DialogState {
-  type: 'profile' | 'sources' | 'work-context' | 'message' | 'record';
+  type: 'profile' | 'sources' | 'work-context' | 'message' | 'record' | 'connections';
   title: string;
+  connection?: 'zhihu' | 'agent';
   message?: string;
   confirm?: { label: string; action: () => void };
   record?: {

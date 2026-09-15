@@ -14,7 +14,7 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 const server = http.createServer((req, res) => {
   const pathname = new URL(req.url, 'http://localhost').pathname;
   let file = pathname === '/__test/browser-workspace.mjs' ? path.join(root, 'apps/web/src/product/browser-workspace.mjs')
-    : path.resolve(dist, '.' + (pathname === '/' ? '/index.html' : pathname));
+    : path.resolve(dist, '.' + ((pathname === '/' || pathname === '/app' || pathname === '/app/demo') ? '/index.html' : pathname));
   if ((!file.startsWith(dist + path.sep) && pathname !== '/__test/browser-workspace.mjs') || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
   res.writeHead(200, { 'content-type': mime[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
   fs.createReadStream(file).pipe(res);
@@ -30,10 +30,10 @@ const server = http.createServer((req, res) => {
     page = await context.newPage();
     context.on('page', p => p.on('pageerror', error => errors.push(error.message)));
     page.on('pageerror', error => errors.push(error.message));
-    context.on('request', req => { if (new URL(req.url()).pathname.startsWith('/api/')) requests.push(req.url()); });
+    context.on('request', req => { if (new URL(req.url()).pathname.startsWith('/api/web/')) requests.push(req.url()); });
     const state = p => p.evaluate(async () => (await import('/__test/browser-workspace.mjs')).readBrowserWorkspace());
     const saved = async p => { await p.waitForTimeout(550); await p.locator('.web-status[data-state=saved]').waitFor(); };
-    await page.goto(base);
+    await page.goto(base + '/app');
     await page.locator('#capture-input').waitFor();
     check('static empty workspace loads without an API', (await state(page)).host === null);
     const original = 'Vercel 浏览器保存验证：这次内容会在刷新后留下吗？';
@@ -64,7 +64,7 @@ const server = http.createServer((req, res) => {
     await saved(page);
     const workState = await state(page), workId = Object.keys(workState.host.worksite.works)[0];
     check('work result persisted without changing understanding', workState.host.worksite.sessions[workId].results.length === 1 && workState.host.chain.matters[0].understandingVersion === 1);
-    await page.goto(base + '/?view=home'); await page.locator('#capture-input').waitFor();
+    await page.goto(base + '/app?view=home'); await page.locator('#capture-input').waitFor();
     await page.getByRole('button', { name: '个人与设置', exact: true }).click();
     check('settings disclose browser scope and data deletion', (await page.locator('.web-dialog').innerText()).includes('清除网站数据会丢失内容'));
     const downloadPromise = page.waitForEvent('download');
@@ -77,10 +77,10 @@ const server = http.createServer((req, res) => {
     await page.locator('.web-dialog [type=submit]').click();
     await saved(page);
     check('preferences saved', (await state(page)).host.preferences.displayName === '浏览器验证者');
-    await page.goto(base + '/?view=home');
+    await page.goto(base + '/app?view=home');
     await page.locator('#capture-input').waitFor();
     const second = await context.newPage();
-    await second.goto(base); await second.locator('#capture-input').waitFor();
+    await second.goto(base + '/app'); await second.locator('#capture-input').waitFor();
     await second.locator('#capture-input').fill('另一标签页的新内容'); await saved(second);
     await page.locator('#capture-input').fill('过时标签页试图覆盖');
     await page.locator('.web-status[data-state=error]').waitFor();
@@ -111,9 +111,9 @@ const server = http.createServer((req, res) => {
     check('changed command replay rejected', adapter.reused === 409);
     check('concurrent writers have exactly one winner', adapter.winners === 1 && adapter.conflicts === 1);
     const isolated = await browser.newContext(); const isolatedPage = await isolated.newPage();
-    await isolatedPage.goto(base); await isolatedPage.locator('#capture-input').waitFor();
+    await isolatedPage.goto(base + '/app'); await isolatedPage.locator('#capture-input').waitFor();
     check('separate browser profile does not share data', (await state(isolatedPage)).host === null);
-    const handoffURL = base + '/?' + new URLSearchParams({ from: 'deepseek-harness', observationId: 'ci-handoff-1', text: 'CI 验证原始交接，不推断结论。', source: 'CI synthetic fixture', status: 'unconfirmed' });
+    const handoffURL = base + '/app?' + new URLSearchParams({ from: 'deepseek-harness', observationId: 'ci-handoff-1', text: 'CI 验证原始交接，不推断结论。', source: 'CI synthetic fixture', status: 'unconfirmed' });
     await isolatedPage.goto(handoffURL); await isolatedPage.locator('[data-selection=originalText]').waitFor(); await saved(isolatedPage);
     const handed = await state(isolatedPage);
     check('upstream harness handoff preserves literal input without a conclusion', handed.host.chain.matters.length === 1 && handed.host.chain.matters[0].originalText === 'CI 验证原始交接，不推断结论。' && handed.host.chain.matters[0].understanding === '');
@@ -135,6 +135,12 @@ const server = http.createServer((req, res) => {
     check('corrupt record fails without an empty fallback', corrupt.status === 503 && corrupt.body.error.code === 'STORAGE_CORRUPT');
     await page.reload(); await page.locator('.web-status[data-state=error]').waitFor();
     check('corrupt storage blocks UI instead of resetting', await page.locator('#capture-input').count() === 0);
+    const failedFirstPaint = await page.evaluate(() => ({
+      loadingPosition: getComputedStyle(document.querySelector('.react-route-loading')).position,
+      loadingDisplay: getComputedStyle(document.querySelector('.react-route-loading')).display,
+      ornamentWidth: document.querySelector('.trace-ambient-orbit').getBoundingClientRect().width,
+    }));
+    check('failed first paint keeps the shell and ornaments styled', failedFirstPaint.loadingPosition === 'absolute' && failedFirstPaint.loadingDisplay === 'grid' && failedFirstPaint.ornamentWidth > 0 && failedFirstPaint.ornamentWidth < 500, failedFirstPaint);
     check('no workspace data requests leave browser', requests.length === 0);
     check('no page errors', errors.length === 0);
   } catch (error) {

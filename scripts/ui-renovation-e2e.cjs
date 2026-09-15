@@ -127,11 +127,11 @@ async function run() {
   await shot(deep, 'cold-matters-1280.png');
   await deepContext.close();
 
-  // A deliberately slow environment image proves the old surface remains
-  // mounted until the incoming route is ready.
-  let delayedImageRequests = 0;
-  await cold.route('**/matters/environment.png', async (route) => {
-    delayedImageRequests += 1;
+  // A deliberately slow critical route stylesheet proves the previous screen
+  // remains mounted until the incoming screen is ready.
+  let delayedStyleRequests = 0;
+  await cold.route('**/assets/matters-*.css', async (route) => {
+    delayedStyleRequests += 1;
     await sleep(460);
     await route.continue();
   });
@@ -141,15 +141,15 @@ async function run() {
   await waitMatters(cold);
   const transitionSamples = await stopSamples(cold);
   measurements.slowImageTransitionMs = Date.now() - transitionStarted;
-  measurements.slowImageRequests = delayedImageRequests;
+  measurements.slowImageRequests = delayedStyleRequests;
   measurements.slowImageSamples = transitionSamples.length;
   measurements.slowImageBlankFrames = transitionSamples.filter((row) => row.appChildren === 0 || row.hostChildren === 0).length;
-  check('slow image keeps previous route mounted', delayedImageRequests > 0 && transitionSamples.length > 4 && measurements.slowImageBlankFrames === 0, {
-    requests: delayedImageRequests,
+  check('slow route style keeps the previous screen mounted', delayedStyleRequests > 0 && transitionSamples.length > 4 && measurements.slowImageBlankFrames === 0, {
+    requests: delayedStyleRequests,
     samples: transitionSamples.length,
     blankFrames: measurements.slowImageBlankFrames,
   });
-  await cold.unroute('**/matters/environment.png');
+  await cold.unroute('**/assets/matters-*.css');
   await shot(cold, 'matters-after-slow-image-1440.png');
 
   // Warm revisit uses the same image/font cache and does not grow dynamic
@@ -196,20 +196,18 @@ async function run() {
   check('rapid A-B-A cancels stale route', rapidState.route === 'home' && rapidState.matters === 0 && rapidState.roots === 1, { rapidState });
   await rapidContext.close();
 
-  // Image error leaves the previous screen and a recoverable retry action.
+  // Non-critical image errors must not replace a usable route with a global
+  // recovery screen. Decorative assets can fail independently.
   const imageErrorContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const imageError = await pageFor(imageErrorContext);
   await imageError.goto(`${base}/?view=home`, { waitUntil: 'domcontentloaded' });
   await waitHome(imageError);
   await imageError.route('**/matters/environment.png', async (route) => route.abort('failed'));
   await imageError.locator('.prototype-caption[data-action=matters]').click();
-  await imageError.locator('.react-route-error').waitFor({ timeout: 10000 });
-  check('image failure is recoverable without clearing old route', await imageError.locator('.react-route-error').isVisible() && await imageError.locator('.home-viewport').count() === 1 && await imageError.locator('#app').count() === 1);
+  await waitMatters(imageError);
+  check('image failure preserves a usable route without a global error', await imageError.locator('.react-route-error').count() === 0 && await imageError.locator('.matters-shell').count() === 1 && await imageError.locator('#app').count() === 1);
   await shot(imageError, 'matters-image-error.png');
   await imageError.unroute('**/matters/environment.png');
-  await imageError.locator('.react-route-error button').click();
-  await waitMatters(imageError);
-  check('image retry mounts the requested route', await imageError.locator('.matters-shell').count() === 1);
   await imageErrorContext.close();
 
   // Dynamic module failure follows the same recoverable path.

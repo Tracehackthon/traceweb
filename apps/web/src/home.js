@@ -3,7 +3,7 @@ import { createState, transition, ENTRIES, LAYOUTS, PATHS, NODE_POSITIONS } from
 import { icon, mark } from './home-icons.js'
 import { mountSceneGlass } from './home/scene-glass.js'
 
-export function mountHome({ root = document.querySelector('#app'), snapshot, entries = {}, onOpen, onContinue, onSource, onWork, onAll, onSearch, onCapture, onProfile, onWorks, onMatters, onDraft, product = false, assets = {}, services = {} } = {}) {
+export function mountHome({ root = document.querySelector('#app'), snapshot, entries = {}, onOpen, onContinue, onSource, onWork, onAll, onSearch, onCapture, onProfile, onWorks, onMatters, onZhihu, onAgent, onDraft, product = false, assets = {}, services = {} } = {}) {
 const controller = new AbortController()
 const timers = new Set()
 const setTimeout = (callback, delay) => { const id = window.setTimeout(() => { timers.delete(id); callback() }, delay); timers.add(id); return id }
@@ -53,7 +53,7 @@ mount.innerHTML = `
       <form class="home-composer" id="capture-form">
         <label class="sr-only" for="capture-input">留下一点</label>
         <textarea id="capture-input" rows="1" placeholder="写一句，贴一段，或者带回一个结果……" maxlength="3000"></textarea>
-        <div class="composer-bottom"><div class="source-pills">${product?`<span class="web-capture-hint">不必先想清楚，原话会被保留。</span>`:`<button type="button" data-action="source">${icon('link')}知乎原文</button><button type="button" data-action="project">${icon('layers')}Codex · harness</button>`}</div><button type="submit" class="send-orb" aria-label="留下这段想法" disabled>${icon('arrow')}</button></div>
+        <div class="composer-bottom"><div class="source-pills">${product?`<span class="web-capture-hint">原话会先被保留</span><button class="capability-pill" type="button" data-action="zhihu"><span class="capability-icon">${icon('link')}</span><span><strong>知乎</strong><small>连接状态</small></span></button><button class="capability-pill" type="button" data-action="agent"><span class="capability-icon">${icon('play')}</span><span><strong>Codex</strong><small>原生 Agent</small></span></button>`:`<button type="button" data-action="source">${icon('link')}知乎原文</button><button type="button" data-action="project">${icon('layers')}Codex · harness</button>`}</div><button type="submit" class="send-orb" aria-label="留下这段想法" disabled>${icon('arrow')}</button></div>
       </form>
       <svg class="scene-paths" viewBox="0 0 1672 941" aria-hidden="true">
         <defs><linearGradient id="flow-color"><stop offset="0" stop-color="#fff5b0" stop-opacity="0"/><stop offset=".5" stop-color="#e9a733"/><stop offset="1" stop-color="#fff5b0" stop-opacity="0"/></linearGradient><radialGradient id="node-gold"><stop stop-color="#ffc45e"/><stop offset="1" stop-color="#e69c22"/></radialGradient><filter id="node-halo" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="10"/></filter><path id="home-motion-target" d="${fullPath}"/><g id="home-path-targets">${PATHS.overview.map((d,i) => `<path id="home-path-target-${i}" d="${d}"/>`).join('')}</g></defs>
@@ -341,6 +341,8 @@ listen(mount,'click',event=>{
   if(action==='all'&&onAll){onAll();return}
   if(action==='search'&&onSearch){onSearch();return}
   if(action==='about'&&onProfile){onProfile();return}
+  if(action==='zhihu'&&onZhihu){onZhihu();return}
+  if(action==='agent'&&onAgent){onAgent();return}
   if(action==='project'&&onWorks){onWorks();return}
   if(action==='matters'&&onMatters){onMatters();return}
   if(product && action==='discuss' && onContinue){onContinue(state.active,'discussion');return}

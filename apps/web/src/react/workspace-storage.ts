@@ -1,5 +1,8 @@
-// This is a build-time choice, never an automatic fallback after an API error.
-export const browserStorage = import.meta.env.VITE_TRACE_STORAGE === 'browser';
+// The hosted build uses browser storage. The complete demo always uses its
+// own IndexedDB namespace, including during local development, so synthetic
+// records can never be written into a maintainer's personal SQLite workspace.
+const completeDemoStorage = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
+export const browserStorage = import.meta.env.VITE_TRACE_STORAGE === 'browser' || completeDemoStorage;
 export const storageLabel = browserStorage ? '当前浏览器' : '本机';
 
 export async function workspaceRequest(url: string, options: RequestInit = {}): Promise<Response> {

@@ -437,6 +437,10 @@ export class WebRuntime {
 
   profile(): void { this.showDialog({ type: 'profile', title: '个人与设置' }); }
 
+  connections(connection: 'zhihu' | 'agent' = 'zhihu'): void {
+    this.showDialog({ type: 'connections', title: '连接能力', connection });
+  }
+
   sources(): void {
     const matter = this.matter();
     if (!matter) return;
