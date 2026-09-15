@@ -1,5 +1,6 @@
 import { build } from 'esbuild'
-import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { build as viteBuild } from 'vite'
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -74,12 +75,18 @@ await Promise.all([
 ])
 
 const discussionOutDir = resolve(desktopOutDir, 'discussion')
-await mkdir(discussionOutDir, { recursive: true })
-await Promise.all([
-  copyFile(resolve(discussionSourceDir, 'index.html'), resolve(discussionOutDir, 'index.html')),
-  cp(resolve(discussionSourceDir, 'src'), resolve(discussionOutDir, 'src'), { recursive: true }),
-  cp(resolve(discussionSourceDir, 'public'), resolve(discussionOutDir, 'public'), { recursive: true }),
-])
+await viteBuild({
+  root: discussionSourceDir,
+  configFile: resolve(discussionSourceDir, 'vite.config.ts'),
+  base: './',
+  define: { 'import.meta.env.VITE_TRACE_STORAGE': JSON.stringify('browser') },
+  build: {
+    outDir: discussionOutDir,
+    emptyOutDir: true,
+    manifest: false,
+    rollupOptions: { input: resolve(discussionSourceDir, 'index.html') },
+  },
+})
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 console.log(`Built ${manifest.name}@${manifest.version}`)

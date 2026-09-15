@@ -225,7 +225,7 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
     text('work-title',current.work?.title||'当前没有接入的工作');
     text('work-agent',current.work?`${current.work.agent||'Agent'} · ${current.work.project||'未选择项目'}`:'尚未连接');
     text('demo-status',current.isDemo?'示例':'');text('prototype-demo',current.isDemo?' · 示例内容':'');
-    q('.worksite-agent-button span').textContent=current.work?.connected?`回到 ${current.work?.agent||'Agent'}`:'查看本次带入内容';
+    q('.worksite-agent-button span').textContent=current.work?.connection?.status==='returned_for_review'?'结果已回来':current.work?.connected?'接回 Codex 结果':'交给 Codex';
     text('intake-count',`· ${current.intake?.length||0}`);
     const decision=current.decision||{};
     text('decision-title',decision.title||'暂无具体取舍');text('decision-short',decision.title||'暂无具体取舍');text('decision-description',!current.isDemo&&!decision.id?'本次尚无工作取舍或产物依据。':decision.description||'外部 Agent 尚未连接，不会自动生成工作影响。');
@@ -295,7 +295,7 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
     if(SCREENS.includes(type)||type==='open-intake'||type==='other-intake')pendingOrigin=(el.closest('[data-surface]')||el).getBoundingClientRect();
     if(type==='home')callExternal(onHome,undefined,'首页尚未连接。');
     else if(SCREENS.includes(type))dispatch({type:'NAVIGATE',screen:type});
-    else if(type==='agent'){if(typeof onReturnToAgent!=='function')showNotice('此工作尚未连接外部 Agent。');else callExternal(onReturnToAgent,current.work,'此工作尚未连接外部 Agent。');}
+    else if(type==='agent'){if(typeof onReturnToAgent!=='function')showNotice('请先启动桌宠，再把这次工作交给 Codex。');else callExternal(onReturnToAgent,current.work,'这次工作还没有连接 Codex。');}
     else if(type==='profile'&&onProfile)callExternal(onProfile,current,'个人设置尚未连接。');
     else if(type==='switch'&&onWorkspaces)callExternal(onWorkspaces,current,'工作列表尚未连接。');
     else if(type==='create-work')callExternal(onCreateWork,current,'工作创建入口尚未连接。');

@@ -31,8 +31,8 @@
 .worksite-root .worksite-nav-divider{height:25px;width:1px;background:#8fa5ae70;margin:0 6px}
 .worksite-root .worksite-task-anchor{position:absolute;left:60px;top:102px;z-index:8;max-width:1050px;pointer-events:none}
 .worksite-root .worksite-task-anchor>p{font-size:20px;color:var(--worksite-secondary);margin-bottom:7px}
-.worksite-root .worksite-task-anchor h1{font-size:53px;line-height:1.45;letter-spacing:1px;max-width:1010px;max-height:154px;overflow:auto}
-.worksite-root .worksite-task-meta{display:flex;align-items:center;gap:23px;color:var(--worksite-secondary);font-size:18px;margin-top:0}
+.worksite-root .worksite-task-anchor h1{display:-webkit-box;font-size:42px;line-height:1.22;letter-spacing:.3px;max-width:1000px;max-height:2.44em;overflow:hidden;overflow-wrap:anywhere;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.worksite-root .worksite-task-meta{display:flex;align-items:center;gap:23px;color:var(--worksite-secondary);font-size:18px;margin-top:9px}
 .worksite-root .worksite-project{display:flex;align-items:center;gap:13px;padding:6px 17px;border:1px solid #abcbd15c;border-radius:28px;background:#ffffff87;font:600 23px/1.7 var(--worksite-serif);color:var(--worksite-ink)}
 .worksite-root .worksite-project .worksite-icon{width:27px;height:27px}
 .worksite-root .worksite-meta-divider{height:25px;width:1px;background:#8cabb890}
@@ -329,7 +329,7 @@
 .worksite-root.worksite-narrow .worksite-nav-divider,.worksite-root.worksite-narrow .worksite-header nav>.worksite-icon{display:none}
 .worksite-root.worksite-narrow .worksite-task-anchor{position:relative;inset:auto;margin-bottom:24px;max-width:none;pointer-events:auto}
 .worksite-root.worksite-narrow .worksite-task-anchor>p{font-size:15px;margin-bottom:5px}
-.worksite-root.worksite-narrow .worksite-task-anchor h1{font-size:clamp(27px,5vw,43px);line-height:1.5;max-height:none;overflow:visible;letter-spacing:0}
+.worksite-root.worksite-narrow .worksite-task-anchor h1{display:block;font-size:clamp(27px,5vw,43px);line-height:1.4;max-height:none;overflow:visible;letter-spacing:0;-webkit-line-clamp:initial}
 .worksite-root.worksite-narrow .worksite-task-meta{gap:12px;font-size:12px;flex-wrap:wrap;margin-top:9px}
 .worksite-root.worksite-narrow .worksite-project{font-size:16px;padding:4px 12px;gap:8px}
 .worksite-root.worksite-narrow .worksite-project .worksite-icon{width:20px;height:20px}

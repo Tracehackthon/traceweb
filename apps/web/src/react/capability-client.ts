@@ -35,4 +35,38 @@ export async function runNativeAgent(input: { text: string; source: SearchSource
   return bridge.requestCapability({ operation: 'agent.run', ...input });
 }
 
+export type NativeWorkEnvironment = {
+  connected: boolean;
+  projectName: string;
+  agentLabel: string;
+  locationLabel: string;
+};
+
+export async function nativeWorkEnvironment(): Promise<NativeWorkEnvironment | null> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return null;
+  return bridge.requestCapability({ operation: 'work.environment' });
+}
+
+export async function runNativeWork(input: {
+  workId: string;
+  matterId: string;
+  title: string;
+  text: string;
+  role: 'reference' | 'trial';
+  note?: string;
+  source?: SearchSource | 'none';
+  profileId?: string;
+}): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌宠，再把这次工作交给本机 Codex。');
+  return bridge.requestCapability({ operation: 'work.run', ...input });
+}
+
+export async function readNativeWork(workId: string): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return null;
+  return bridge.requestCapability({ operation: 'work.read', workId });
+}
+
 export function hasNativeCapabilityBridge(): boolean { return Boolean(nativeBridge()?.requestCapability); }

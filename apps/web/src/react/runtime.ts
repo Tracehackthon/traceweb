@@ -2,6 +2,7 @@ import * as B from '../product/bridge.mjs';
 import { workspaceRequest, storageLabel } from './workspace-storage';
 import { homeEntries, mattersView, recordsOf, titleOf } from '../product/library.mjs';
 import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
+import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork } from './capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -10,6 +11,7 @@ const allowed: ViewName[] = ['home', 'matters', 'chain', 'compare', 'worksite', 
 export const completeDemoMode = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 
 type HarnessHandoff = {
+  origin: 'deepseek-harness' | 'trace-native';
   observationId: string | null;
   text: string;
   status: string | null;
@@ -22,10 +24,12 @@ type HarnessHandoff = {
  */
 function readHarnessHandoff(): HarnessHandoff | null {
   const params = new URLSearchParams(location.search);
-  if (params.get('from') !== 'deepseek-harness') return null;
+  const origin = params.get('from');
+  if (origin !== 'deepseek-harness' && origin !== 'trace-native') return null;
   const text = (params.get('text') || '').trim();
   if (!text) return null;
   return {
+    origin,
     observationId: params.get('observationId'),
     text,
     status: params.get('status'),
@@ -101,6 +105,7 @@ export class WebRuntime {
   private continuation: (() => void) | null = null;
   private startPromise: Promise<void> | null = null;
   private routeRoot: HTMLElement | null = null;
+  private nativeWorkReady = false;
   // Matters keeps a short-lived presentation state for the approved
   // overview → growth → reentry interaction. The canonical matter remains in
   // the bridge; leaving this route discards only the presentation state.
@@ -183,7 +188,7 @@ export class WebRuntime {
 
     const existing = this.host.chain.matters.find((item: any) => {
       const marker = item.externalHandoff;
-      if (marker?.origin !== 'deepseek-harness') return false;
+      if (marker?.origin !== handoff.origin) return false;
       return handoff.observationId
         ? marker.observationId === handoff.observationId
         : marker.text === handoff.text && marker.source === handoff.source;
@@ -194,7 +199,7 @@ export class WebRuntime {
       matterId = existing.id;
     } else {
       matterId = uid('matter');
-      const sourceTitle = handoff.source || 'DeepSeek Harness';
+      const sourceTitle = handoff.source || (handoff.origin === 'trace-native' ? 'Trace 桌宠' : 'DeepSeek Harness');
       const next = B.captureInput(this.host, {
         matterId,
         text: handoff.text,
@@ -202,7 +207,7 @@ export class WebRuntime {
           id: uid('source'),
           title: sourceTitle,
           excerpt: handoff.text,
-          context: '从 DeepSeek Harness 接续的原始现场。',
+          context: handoff.origin === 'trace-native' ? '从 Trace 桌宠接续的原始现场。' : '从 DeepSeek Harness 接续的原始现场。',
         },
       });
       if (next.error) throw new Error(next.error.message || '未能接住来自 Harness 的观察。');
@@ -210,7 +215,7 @@ export class WebRuntime {
       // This is provenance only. It never changes the user’s original text or
       // assigns a judgement based on the mock Harness status.
       captured.externalHandoff = {
-        origin: 'deepseek-harness',
+        origin: handoff.origin,
         observationId: handoff.observationId,
         text: handoff.text,
         source: handoff.source,
@@ -472,7 +477,10 @@ export class WebRuntime {
     }
     if (this.route.view === 'compare') value = B.selectComparison(this.host, this.route.sessionId);
     if (this.route.view === 'worksite') value = this.selectWorksite();
-    if (value) value.notice = (value.notice || '').replaceAll('本次会话', '本机').replaceAll('本地原型', '本地记录');
+    if (value) {
+      value.notice = (value.notice || '').replaceAll('本次会话', '本机').replaceAll('本地原型', '本地记录');
+      value.nativeConnected = this.nativeWorkReady;
+    }
     return value;
   }
 
@@ -493,8 +501,14 @@ export class WebRuntime {
   };
 
   onCapture = (text: string, options: { source?: string; agent?: string } = {}): void => {
+    void this.captureWithCapabilities(text, options);
+  };
+
+  private async captureWithCapabilities(text: string, options: { source?: string; agent?: string } = {}): Promise<void> {
     const matterId = uid('matter');
-    void this.commit((state) => {
+    const environment = options.agent && options.agent !== 'none' ? await nativeWorkEnvironment().catch(() => null) : null;
+    this.nativeWorkReady = environment?.connected === true;
+    await this.commit((state) => {
       let next = B.captureInput(state, { matterId, text });
       const matter = next.chain?.matters?.find((item: any) => item.id === matterId);
       if (matter) matter.captureIntent = {
@@ -506,7 +520,7 @@ export class WebRuntime {
       if (matter?.captureIntent.agent !== 'none') {
         const agent = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[matter.captureIntent.agent];
         next = B.dispatchChain(next, { matterId, action: { type: 'HANDOFF_DRAFT', patch: {
-          destination: { agent, project: matter.captureIntent.agent === 'custom' ? '待配置项目' : 'Trace Web', task: `接续：${Array.from(text).slice(0, 26).join('')}` },
+          destination: { agent: environment?.connected ? environment.agentLabel : agent, project: environment?.connected ? environment.projectName : '当前项目', task: `接续：${Array.from(text).slice(0, 26).join('')}` },
           selectedText: text,
           role: 'reference',
           note: '本次只准备可检查的交接内容；确认前不会发送或执行外部 Agent。',
@@ -521,7 +535,7 @@ export class WebRuntime {
       const agent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as 'codex-native' | 'codex-harness' | 'custom' : 'none';
       if (!completeDemoMode && (source !== 'none' || agent !== 'none')) this.showDialog({ type: 'capability', title: '让来源与 Agent 参与', capability: { matterId, query: text, source, agent } });
     });
-  };
+  }
 
   keepPublicSource(matterId: string, source: any, query: string): Promise<void> {
     return this.commit((state) => B.keepPublicSource(state, { matterId, source, query }));
@@ -536,6 +550,7 @@ export class WebRuntime {
     }
     if (['CLEAR_FOCUS', 'FRESH_CONTEXT', 'RESUME_CONTEXT'].includes(action.type)) delete this.route.anchor;
     if (action.type === 'OPEN_COMPARISON' || (action.type === 'NAVIGATE' && action.screen === 'comparison')) { this.openCompare(action.focus); return; }
+    if (action.type === 'NAVIGATE' && action.screen === 'handoff') { void this.prepareHandoff(); return; }
     if (action.type === 'NAVIGATE' && ['work', 'results', 'revised'].includes(action.screen)) {
       const works = Object.values(this.host.worksite.works).filter((work: any) => this.host.worksite.sessions[work.id].intake.some((item: any) => item.matterId === this.route.matterId));
       if (works.length) this.navigate({ view: 'worksite', workId: (works.at(-1) as any).id, matterId: this.route.matterId, screen: action.screen === 'work' ? 'overview' : 'results' });
@@ -544,7 +559,12 @@ export class WebRuntime {
     }
     if (action.type === 'CONFIRM_HANDOFF') {
       const handoff = B.selectChain(this.host, this.route.matterId).handoff;
-      void this.commit((state) => (B.createWorkFromHandoff as any)(state, { matterId: this.route.matterId, workId: uid('work'), destination: handoff.destination, role: handoff.role, note: handoff.note }), (next) => this.navigate(next.route));
+      const workId = uid('work');
+      const matterId = this.route.matterId;
+      void this.commit((state) => (B.createWorkFromHandoff as any)(state, { matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }), (next) => {
+        this.navigate(next.route);
+        if (hasNativeCapabilityBridge() && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
+      });
       return;
     }
     if (action.type === 'OPEN' && action.id !== this.route.matterId) { this.navigate({ view: 'chain', matterId: action.id, screen: action.screen || 'resume' }); return; }
@@ -559,6 +579,69 @@ export class WebRuntime {
       return;
     }
     void this.commit(change, (next) => next.chain.screen !== this.route.screen ? this.navigate({ ...this.route, screen: next.chain.screen }) : undefined);
+  };
+
+  private async prepareHandoff(): Promise<void> {
+    if (!this.host || !this.route.matterId) return;
+    const matterId = this.route.matterId;
+    const current = B.selectChain(this.host, matterId);
+    const environment = await nativeWorkEnvironment().catch(() => null);
+    this.nativeWorkReady = environment?.connected === true;
+    const task = current.handoff?.destination?.task || `接续：${Array.from(current.matter?.originalText || current.matter?.title || '这件事').slice(0, 26).join('')}`;
+    const agent = current.handoff?.destination?.agent || (environment?.connected ? environment.agentLabel : 'Codex');
+    const project = environment?.connected ? environment.projectName : current.handoff?.destination?.project || '当前项目';
+    const next = B.dispatchChain(this.host, { matterId, action: { type: 'HANDOFF_DRAFT', patch: { destination: { agent, project, task } } } });
+    if (next.error) { this.message(next.error.message); return; }
+    this.draft(next);
+    this.navigate({ ...this.route, screen: 'handoff' });
+  }
+
+  private async executeNativeWork(workId: string, matterId: string): Promise<void> {
+    if (!this.host) return;
+    const work = this.host.worksite.works[workId];
+    const session = this.host.worksite.sessions[workId];
+    const intake = session?.intake?.find((item: any) => item.matterId === matterId);
+    if (!work || !intake) return;
+    this.showDialog({ type: 'message', title: 'Codex 正在处理', message: '这次工作已经交给本机 Codex。你可以关闭提示继续浏览，结果完成后会回到工作现场。' });
+    try {
+      const matter = this.host.chain.matters.find((item: any) => item.id === matterId);
+      const source = matter?.captureIntent?.source === 'web' ? 'global' : matter?.captureIntent?.source || 'none';
+      const returned = await runNativeWork({ workId, matterId, title: work.title, text: intake.sourceText, role: intake.role, note: intake.note, source });
+      if (!returned?.result) throw new Error('Codex 已接收工作，但结果还没有回到 Trace。');
+      this.closeDialog();
+      await this.commit((state) => {
+        let next = B.dispatchWorksite(state, { workId, action: { type: 'RESULT_DRAFT', patch: { matterId, ...returned.result } } });
+        if (next.error) return next;
+        next = clone(next);
+        next.worksite.works[workId].connected = true;
+        next.worksite.works[workId].connection = { hostType: 'codex', status: 'returned_for_review' };
+        return next;
+      }, () => this.navigate({ view: 'worksite', workId, matterId, screen: 'results' }));
+    } catch (cause) {
+      this.message(cause instanceof Error ? cause.message : 'Codex 工作没有完成，可以从工作现场重新接回。');
+    }
+  }
+
+  returnToNativeWork = (work: any): void => {
+    if (!work?.id || !this.host) return;
+    const session = this.host.worksite.sessions[work.id];
+    const matterId = session?.intake?.[0]?.matterId;
+    if (!matterId) { this.workContext(); return; }
+    void (async () => {
+      const known = await readNativeWork(work.id).catch(() => null);
+      if (known?.result) {
+        await this.commit((state) => {
+          let next = B.dispatchWorksite(state, { workId: work.id, action: { type: 'RESULT_DRAFT', patch: { matterId, ...known.result } } });
+          if (next.error) return next;
+          next = clone(next);
+          next.worksite.works[work.id].connected = true;
+          next.worksite.works[work.id].connection = { hostType: 'codex', status: 'returned_for_review' };
+          return next;
+        }, () => this.navigate({ view: 'worksite', workId: work.id, matterId, screen: 'results' }));
+        return;
+      }
+      await this.executeNativeWork(work.id, matterId);
+    })();
   };
 
   private openCompare(focus?: SelectionAnchor): void {

@@ -111,7 +111,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   }
   function handoff() {
     const m=current.matter||{}, ho=current.handoff||{}, dest=ho.destination||{};
-    return `<main class="chain-handoff-layout" data-key="main"><section class="chain-handoff-context"><div class="chain-heading"><h1>我的理解<b>。</b></h1><p>个人草稿 · ${m.understandingDraft===m.understanding&&m.understanding?'已保存':'草稿 · 尚未确认为当前理解'}</p></div><div class="chain-glass chain-handoff-summary">${row('',m.understanding || '暂无已保存的理解，可以直接写。')}${row('还没分清',m.stop || '尚未留下停点。','stop')}${current.incoming?.text ? `<div class="chain-inference">${icon('bulb')}这次带来：${h(current.incoming.text)}</div>`:''}</div>${composer('先写下这次准备怎样尝试……')}</section><section class="chain-handoff-side chain-glass"><div class="chain-side-heading"><h1>带去这次工作</h1>${btn('back','关闭','close','icon-only')}</div><div class="chain-panel-scroll"><fieldset class="chain-destination"><legend>目的地</legend>${smallInput('agent',dest.agent,'Agent')}${smallInput('project',dest.project,'项目')}${smallInput('task',dest.task,'任务')}</fieldset><label class="chain-label">选中的内容${field('handoff-text',ho.selectedText,'选择这次实际要带入的文字','chain-handoff-text','rows="3"')}<small>来源：${h(title())}</small></label><fieldset class="chain-role"><legend>我希望这次</legend>${[['trial','这次准备试','pen'],['reference','作为参考','file'],['exclude','这次不用','no']].map(([key,label,name])=>btn('role',label,name,ho.role===key?'selected':'',`data-role="${key}" aria-pressed="${ho.role===key}"`)).join('')}</fieldset><label class="chain-label">补充说明（可选）${field('handoff-note',ho.note,'想观察什么，或不希望怎样使用？','chain-handoff-note','rows="2"')}</label><label class="chain-label">范围<select class="chain-field" data-field="scope" aria-label="范围"><option value="current-task">仅本次任务</option></select><small>试一次，不变成长期需求。</small></label></div><footer class="chain-handoff-actions">${btn('confirm-handoff','带到本次工作',null,'primary',ho.selectedText?.trim() && ho.role!=='exclude'?'':'disabled')}${btn('exclude-handoff','先不带入',null)}</footer></section></main>`;
+    return `<main class="chain-handoff-layout" data-key="main"><section class="chain-handoff-context"><div class="chain-heading"><h1>我的理解<b>。</b></h1><p>个人草稿 · ${m.understandingDraft===m.understanding&&m.understanding?'已保存':'草稿 · 尚未确认为当前理解'}</p></div><div class="chain-glass chain-handoff-summary">${row('',m.understanding || '暂无已保存的理解，可以直接写。')}${row('还没分清',m.stop || '尚未留下停点。','stop')}${current.incoming?.text ? `<div class="chain-inference">${icon('bulb')}这次带来：${h(current.incoming.text)}</div>`:''}</div>${composer('先写下这次准备怎样尝试……')}</section><section class="chain-handoff-side chain-glass"><div class="chain-side-heading"><h1>带去这次工作</h1>${btn('back','关闭','close','icon-only')}</div><div class="chain-panel-scroll"><section class="chain-destination-summary" aria-label="工作去向"><span class="chain-native-mark">C›_</span><div><strong>${h(dest.agent||'Codex')}</strong><span>${current.nativeConnected?'当前项目已自动识别':'启动桌宠后自动识别当前项目'}</span></div><small>不会把项目路径、登录信息或系统参数放进页面。</small></section><label class="chain-label">这次请它做什么${smallInput('task',dest.task,'例如：核对条件并给出可复核结果')}</label><label class="chain-label">选中的内容${field('handoff-text',ho.selectedText,'选择这次实际要带入的文字','chain-handoff-text','rows="3"')}<small>来源：${h(title())}</small></label><fieldset class="chain-role"><legend>我希望这次</legend>${[['trial','这次准备试','pen'],['reference','作为参考','file'],['exclude','这次不用','no']].map(([key,label,name])=>btn('role',label,name,ho.role===key?'selected':'',`data-role="${key}" aria-pressed="${ho.role===key}"`)).join('')}</fieldset><label class="chain-label">补充说明（可选）${field('handoff-note',ho.note,'想观察什么，或不希望怎样使用？','chain-handoff-note','rows="2"')}</label><label class="chain-label">使用范围<select class="chain-field" data-field="scope" aria-label="使用范围"><option value="current-task">只用于这次工作</option></select><small>不会自动变成长期要求。</small></label></div><footer class="chain-handoff-actions">${btn('confirm-handoff',current.nativeConnected&&/^Codex(?:\s|$|原生)/i.test(dest.agent||'Codex')?'交给 Codex':'保存工作准备',null,'primary',ho.selectedText?.trim() && ho.role!=='exclude' && dest.task?.trim()?'':'disabled')}${btn('exclude-handoff','先不带入',null)}</footer></section></main>`;
   }
   function work() {
     const ho=current.handoffSnapshot || current.handoff || {},dest=ho.destination||{};
@@ -163,7 +163,16 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
     }
     resize();
   }
-  function resize() { if (disposed) return;const scale=Math.min(root.clientWidth/1672,root.clientHeight/941);stage.style.transform=`translate(-50%, -50%) scale(${scale})`; }
+  function resize() {
+    if (disposed) return;
+    const narrowHandoff = current.screen === 'handoff' && root.clientWidth < 760;
+    root.classList.toggle('chain-narrow', narrowHandoff);
+    if (narrowHandoff) stage.style.transform = 'none';
+    else {
+      const scale=Math.min(root.clientWidth/1672,root.clientHeight/941);
+      stage.style.transform=`translate(-50%, -50%) scale(${scale})`;
+    }
+  }
   function openModal(type,id) {returnFocus=document.activeElement;modal={type,id};render();queueMicrotask(()=>modalLayer.querySelector('.chain-modal textarea, .chain-modal input, .chain-modal button')?.focus());}
   function closeModal() {modal=null;render();if(returnFocus?.isConnected)returnFocus.focus();}
   function selectText(element) {
@@ -244,7 +253,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
       }
       current=nextView;render();
     },
-    destroy(){if(disposed)return;disposed=true;abort.abort();observer.disconnect();glass?.destroy();animation?.cancel?.();root.replaceChildren();root.classList.remove('chain-root');root.style.removeProperty('--chain-background');},
+    destroy(){if(disposed)return;disposed=true;abort.abort();observer.disconnect();glass?.destroy();animation?.cancel?.();root.replaceChildren();root.classList.remove('chain-root','chain-narrow');root.style.removeProperty('--chain-background');},
   };
 }
 

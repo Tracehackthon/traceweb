@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 import { createRuntimeCapabilityClient, validateRuntimeOrigin } from '../../desktop-pet/src/desktop/runtime-client.mjs'
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -28,10 +30,22 @@ test('desktop runtime client discovers search and Agent independently', async ()
   })
   const value = await client.request({ operation: 'capabilities' })
   assert.equal(value.connected, true)
+  assert.equal('origin' in value, false)
   assert.equal(value.search.enabled, true)
   assert.equal(value.agent.profiles[0].kind, 'codex')
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname).sort(), ['/api/agent/capabilities', '/api/search/capabilities'])
   assert.equal(calls.every((call) => call.init.headers.origin === 'http://127.0.0.1:4417'), true)
+})
+
+test('desktop runtime client never sends backend paths or protocol fields to the renderer in errors', async () => {
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4416',
+    fetchImpl: async () => response({ error: { message: 'projectDir C:\\private\\repo failed with contextHash abc' } }, 500),
+  })
+  await assert.rejects(
+    client.request({ operation: 'search', source: 'zhihu', query: '边界', count: 1 }),
+    (error) => error.message === '本机 Trace 没有完成这次请求（500）',
+  )
 })
 
 test('desktop runtime client executes the bounded product to Agent chain', async () => {
@@ -84,4 +98,60 @@ test('desktop runtime client routes public searches by explicit source', async (
     { pathname: '/api/search/zhihu', body: { query: '产品判断', count: 2 } },
     { pathname: '/api/search/global', body: { query: '产品判断', count: 2 } },
   ])
+})
+
+test('desktop bridge auto-binds the current project and returns a Codex work result without exposing paths', async () => {
+  const calls = []
+  const projectDir = path.resolve(fileURLToPath(new URL('../../..', import.meta.url)))
+  let phase = 'empty'
+  const baseHost = () => ({
+    chain: {
+      matters: [{ id: 'matter-1', originalText: '核对这次工作里的条件。' }],
+      sessions: { 'matter-1': { contextMode: 'resume', contextEpoch: 0 } },
+    },
+    worksite: {
+      works: { 'work-1': { id: 'work-1', title: '核对条件', agent: 'Codex', project: 'traceweb', connected: phase !== 'created', ...(phase === 'returned' ? { connection: { status: 'returned_for_review' } } : {}) } },
+      sessions: { 'work-1': {
+        ...(phase === 'created' ? {} : { codexDelivery: { deliveryId: 'delivery-1', contextHash: 'a'.repeat(64) } }),
+        ...(phase === 'returned' ? { codexReturns: [{ result: { fact: '已核对条件。', interpretation: '来自 Codex。', unconfirmed: '仍需用户确认。', proposedUnderstanding: '' } }] } : {}),
+      } },
+    },
+  })
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4420',
+    projectDir,
+    wait: async () => {},
+    now: () => 0,
+    fetchImpl: async (url, init) => {
+      const body = init.body ? JSON.parse(init.body) : undefined
+      calls.push({ pathname: url.pathname, body })
+      if (url.pathname === '/api/product/workspace') return response(phase === 'empty' ? { revision: 0, host: null } : { revision: phase === 'created' ? 1 : phase === 'received' ? 2 : 3, host: baseHost() })
+      if (url.pathname === '/api/product/commands') { phase = 'created'; return response({ revision: 1, host: baseHost() }) }
+      if (url.pathname === '/api/product/codex/receive') { phase = 'received'; return response({ receipt: { deliveryId: 'delivery-1', contextHash: 'a'.repeat(64) }, context: { kind: 'trace.codex-context' } }) }
+      if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', label: 'Codex', kind: 'codex' }] })
+      if (url.pathname === '/api/agent/runs') return response({ run: { runId: 'run-1', status: 'succeeded', profile: { label: 'Codex' }, result: { answer: '已核对条件。', uncertainties: ['仍需用户确认。'] } } }, 202)
+      if (url.pathname === '/api/product/codex/return') { phase = 'returned'; return response({ receipt: { status: 'returned_for_review' } }) }
+      return response({ error: { message: 'not found' } }, 404)
+    },
+  })
+
+  const environment = await client.request({ operation: 'work.environment' })
+  assert.deepEqual(environment, { connected: true, projectName: 'traceweb', agentLabel: 'Codex', locationLabel: '当前项目' })
+  const returned = await client.request({ operation: 'work.run', workId: 'work-1', matterId: 'matter-1', title: '核对条件', text: '核对这次工作里的条件。', role: 'reference', source: 'none' })
+  assert.equal(returned.status, 'returned_for_review')
+  assert.equal(returned.result.fact, '已核对条件。')
+  assert.equal(JSON.stringify(returned).includes(projectDir), false)
+  assert.deepEqual(calls.map((call) => call.pathname), [
+    '/api/product/workspace',
+    '/api/product/commands',
+    '/api/product/codex/receive',
+    '/api/product/workspace',
+    '/api/agent/capabilities',
+    '/api/agent/runs',
+    '/api/product/codex/return',
+    '/api/product/workspace',
+  ])
+  assert.equal(calls[1].body.operations[1].destination.project, 'traceweb')
+  assert.equal(calls[2].body.projectDir, projectDir)
+  assert.deepEqual(calls[6].body.result.artifacts, [])
 })

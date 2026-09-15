@@ -65,7 +65,8 @@ npm run build:vercel
 - 在个人空间首页保存原话时选择「知乎搜索」或「全网搜索」，Web 会在原话保存成功后调用同源 `/api/search/*`，显示知乎开放平台返回的标题、作者、公开摘要、赞同／评论数与原文链接。
 - 搜索结果默认不写入事项。只有点击「保留到这件事」才保存来源、查询和获取时间；不会自动生成对照关系或改写“我的理解”。
 - 选择 Codex 原生、Codex Harness 或自定义 Agent 会保存本次交接意图。普通网页不访问本机登录或密钥；桌宠通过受限 Electron IPC 连接 loopback `trace-runtime`，从服务端 profile 选择真正的 `codex` / `model` / `agent` 执行器。
-- 桌宠的「查找来源」调用本机 `/api/search/zhihu` 或 `/api/search/global`；「交给 Agent」会依次创建产品事项、创建 Agent run，并轮询到终态。返回内容仍是未采纳候选。
+- 桌宠的「查找来源」调用本机 `/api/search/zhihu` 或 `/api/search/global`。从最新 Trace Web 选择 Codex 时，Bridge 会自动识别桌宠启动位置所属的 Git 项目，并把当前原话和任务依次送入 `product/commands → product/codex/receive → agent/runs → product/codex/return`。
+- 页面不会展示或接收项目绝对路径、cwd、endpoint、model、登录信息、密钥和上下文哈希。Codex 返回的事实、解释和待确认项先进入工作复核区，不会自动写成“我的理解”。相同工作可以在页面重开后接回，不会仅凭中间运行成功冒充最终交付完成。
 
 启动本机能力后端的环境与 profile 以 [`trace_backend`](https://github.com/Tracehackthon/trace_backend) 的 Runtime 文档为准。桌宠默认只连接 `http://127.0.0.1:4173`；如使用其它本机端口，可设置 `TRACE_BACKEND_ORIGIN`，该值只接受 loopback HTTP origin。
 
@@ -80,7 +81,9 @@ npm run build
 npm run desktop
 ```
 
-桌宠会以透明、无边框、置顶的 Electron Overlay 运行；点击角色后可以展开 Trace 卡片与内置讨论页，并在本机 Runtime 可用时显示知乎／全网搜索和 Agent profile。当前没有安装包签名和自动更新，不把源码构建等同于可发布安装包。
+桌宠会以透明、无边框、置顶的 Electron Overlay 运行；点击角色后可以展开 Trace 卡片与最新内置 Web，并在本机 Runtime 可用时显示知乎／全网搜索和 Agent profile。从项目目录启动时，Bridge 会向上寻找最近的 `.git` 并自动填写当前项目；也可以用 `TRACE_PROJECT_DIR` 指定项目。项目路径只在本机主进程与 Runtime 之间传递，不进入 Renderer。
+
+完整的桌宠构建、项目识别和 Codex 往返验证步骤见 [`apps/desktop-pet/README.md`](apps/desktop-pet/README.md)。当前没有安装包签名和自动更新，不把源码构建等同于可发布安装包。
 
 ## 数据边界
 
