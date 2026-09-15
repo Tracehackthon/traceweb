@@ -23,6 +23,10 @@ const safeSourceURL = (source) => {
 };
 const sourceProvenance = (source) => source?.origin === 'provider-snapshot' && source?.provider === 'zhihu'
   ? `知乎开放平台公开摘要${source.author ? ` · ${source.author}` : ''}${source.fetchedAt ? ` · 获取于 ${new Date(source.fetchedAt).toLocaleDateString('zh-CN')}` : ''}` : '';
+const sourceRole = (source, matter) => {
+  const relation = (matter?.observations || []).find(item => item.sourceId === source?.id)?.relation;
+  return relation ? `作为“${RELATIONS[relation] || relation}”对照` : '保留为原现场';
+};
 
 /** Presentational module; the reducer owns all domain state. */
 export function mountChainScreen({root, view, onAction, onHome, onMatters, onBack, onWorkspaces, assets={}, services={}, demo=false}) {
@@ -34,7 +38,9 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   const listen = (target,event,handler,options={}) => target.addEventListener(event,handler,{...options,signal:abort.signal});
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   root.classList.add('chain-root');
-  const stage = document.createElement('div'); stage.className='chain-stage'; root.replaceChildren(stage);
+  const stage = document.createElement('div'); stage.className='chain-stage';
+  const modalLayer = document.createElement('div'); modalLayer.className='chain-modal-layer';
+  root.replaceChildren(stage,modalLayer);
   const background = value => value ? `url("${String(value).replace(/["\\\n\r]/g, '\\$&')}")` : 'none';
   root.style.setProperty('--chain-background',background(assets.background));
   // Keep one canonical face per family across all route adapters.  The cache
@@ -50,6 +56,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   const originalText = () => current.matter?.originalText || current.matter?.whyCare || '';
   const hasHistory = () => Boolean(current.matter?.understanding || current.matter?.stop || current.matter?.revisions?.length || current.matter?.results?.length);
   const isDemo = () => demo || current.isDemo === true;
+  const sourceEvidence = (source, matter=current.matter) => sourceProvenance(source) ? `<button type="button" class="chain-source-evidence" data-action="source" data-source="${h(source.id)}"><i>知</i><span><strong>知乎公开内容参与了这件事</strong><small>${h(source.author || '知乎作者')} · ${h(sourceRole(source,matter))}</small></span>${icon('next')}</button>` : btn('source','查看原现场','file','subtle',source?`data-source="${h(source.id)}"`:'');
 
   function header() {
     const simple = current.screen==='paused' || current.screen==='handoff';
@@ -70,7 +77,8 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   }
   function resume() {
     const context=current.context||{},m=current.matter||{},fresh=current.contextMode==='fresh';
-    const original=`<section class="chain-context-row"><span class="chain-round">${icon('file')}</span><div><h2>${hasHistory()?'当时留下的原表达':'刚才留下的原话'}</h2><p data-selection="originalText" data-key="original-expression" tabindex="0" aria-label="可选择的原表达">${h(originalText())}</p>${firstSource()?btn('source','查看原现场','file','subtle'):''}</div></section>`;
+    const source=firstSource();
+    const original=`<section class="chain-context-row"><span class="chain-round">${icon('file')}</span><div><h2>${hasHistory()?'当时留下的原表达':'刚才留下的原话'}</h2><p data-selection="originalText" data-key="original-expression" tabindex="0" aria-label="可选择的原表达">${h(originalText())}</p>${source?sourceEvidence(source,m):''}</div></section>`;
     const understanding=m.understanding&&!fresh?row(`我的理解 · v${m.understandingVersion??0}`,m.understanding,'pen',btn('understanding','继续修改','pen','subtle')):'';
     const relations=(m.observations||[]).length&&!fresh?`<section class="chain-context-row"><span class="chain-round">${icon('link')}</span><div><h2>已经接到这里的材料</h2>${m.observations.map(o=>`<p>${h(RELATIONS[o.relation]||o.relation||'关联')} · ${h(o.text||getSource(o.sourceId)?.title||'已保留材料')}</p>`).join('')}${btn('provenance','查看关联与来路','file','subtle')}</div></section>`:'';
     return common(`<div class="chain-panel-scroll">${fresh?`<div class="chain-fresh">本次未带入旧理解；原记录仍可按需查看。${btn('resume-context','恢复使用旧理解','undo','bare')}</div>`:original}${context.stop?row('上次停在这里',context.stop,'stop'):!fresh&&!hasHistory()?'<p class="chain-footnote">还没有形成理解。可以继续写，也可以直接选中原话找个对照。</p>':''}${understanding}${relations}</div><div class="chain-panel-actions">${btn('comparison','找个对照','balance')}${btn('understanding','我想先自己写','pen')}${btn('discussion','继续写一句','message','subtle')}${hasHistory()?btn(fresh?'resume-context':'fresh',fresh?'恢复使用旧理解':'这次先不带入旧理解',null,'text-link'):''}</div>`);
@@ -87,7 +95,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   }
   function comparison() {
     const c=current.comparison, source=getSource(c?.sourceId)||firstSource();
-    return `<main class="chain-comparison-layout" data-key="main"><aside class="chain-context-side chain-glass"><p>正在分清</p><h1>${h(current.focus?.text || current.matter?.stop || title())}</h1><span class="chain-short-rule"></span><p>接到：${h(c?.target || current.matter?.stop || '当前问题')}</p></aside><section class="chain-comparison-main chain-glass"><div>${btn('back','回到刚才','back','bare')}<h1>找个对照</h1></div><div class="chain-panel-scroll"><h2 class="chain-material-heading">${icon('file')}${h(source?.title || '示例材料 · 原文片段')}</h2><blockquote>${h(source?.excerpt || '暂无来源。可以粘贴一段材料。')}</blockquote><div class="chain-comparison-explanation"><h2>${icon('bulb')}可能挑战这一处</h2><div class="chain-inference">${h(c?.reason || '先核对这段材料与当前问题的具体关系。')}${chip('这是推断','question')}</div><p>还不能说明：${h((c?.uncertain || '材料中的说法已经被采纳。').replace(/^还不能说明[：:]?\s*/,''))}</p></div><div class="chain-relation-edit"><label class="chain-label">准备接为<select class="chain-field" data-key="field-relation" data-field="relation">${Object.entries(RELATIONS).map(([key,label])=>`<option value="${key}" ${c?.relation===key?'selected':''}>${label}</option>`).join('')}</select></label>${smallInput('target',c?.target,'对照位置')}</div></div><footer class="chain-comparison-actions">${btn('link-comparison','接到这里','link','primary')}${btn('reject-comparison','这次无关','close')}${btn('source','查看原文','file','bare',source?`data-source="${h(source.id)}"`:'disabled')}<small>关系确认不等于采纳材料结论。</small></footer></section></main>`;
+    return `<main class="chain-comparison-layout" data-key="main"><aside class="chain-context-side chain-glass"><p>正在分清</p><h1>${h(current.focus?.text || current.matter?.stop || title())}</h1><span class="chain-short-rule"></span><p>接到：${h(c?.target || current.matter?.stop || '当前问题')}</p></aside><section class="chain-comparison-main chain-glass"><div>${btn('back','回到刚才','back','bare')}<h1>找个对照</h1></div><div class="chain-panel-scroll">${sourceProvenance(source)?`<div class="chain-comparison-source"><i>知</i><span><strong>知乎公开内容</strong><small>${h(source.author || '知乎作者')} · 正在作为对照参与</small></span></div>`:''}<h2 class="chain-material-heading">${icon('file')}${h(source?.title || '示例材料 · 原文片段')}</h2><blockquote>${h(source?.excerpt || '暂无来源。可以粘贴一段材料。')}</blockquote><div class="chain-comparison-explanation"><h2>${icon('bulb')}可能挑战这一处</h2><div class="chain-inference">${h(c?.reason || '先核对这段材料与当前问题的具体关系。')}${chip('这是推断','question')}</div><p>还不能说明：${h((c?.uncertain || '材料中的说法已经被采纳。').replace(/^还不能说明[：:]?\s*/,''))}</p></div><div class="chain-relation-edit"><label class="chain-label">准备接为<select class="chain-field" data-key="field-relation" data-field="relation">${Object.entries(RELATIONS).map(([key,label])=>`<option value="${key}" ${c?.relation===key?'selected':''}>${label}</option>`).join('')}</select></label>${smallInput('target',c?.target,'对照位置')}</div></div><footer class="chain-comparison-actions">${btn('link-comparison','接到这里','link','primary')}${btn('reject-comparison','这次无关','close')}${btn('source','查看知乎原文','file','bare',source?`data-source="${h(source.id)}"`:'disabled')}<small>知乎提供材料，关系和判断仍由你确认。</small></footer></section></main>`;
   }
   function paused() {
     const m=current.matter||{};
@@ -121,7 +129,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   function modalHTML() {
     if (!modal) return '';
     const m=current.matter||{}; let heading='', body='';
-    if (modal.type==='source') { const s=getSource(modal.id)||firstSource(),url=safeSourceURL(s),provenance=sourceProvenance(s); heading='原文片段'; body=`${provenance?`<p class="chain-source-provenance">${h(provenance)}</p>`:''}<h3>${h(s?.title || '暂无来源')}</h3><blockquote>${h(s?.excerpt || m.originalText || '')}</blockquote>${url?`<a class="chain-source-link" href="${h(url)}" target="_blank" rel="noreferrer">打开知乎原文 ${icon('external')}</a>`:''}<p class="chain-footnote">接口返回的是公开摘要快照，不代表完整原文，也不会自动成为“我的理解”。</p>`; }
+    if (modal.type==='source') { const s=getSource(modal.id)||firstSource(),url=safeSourceURL(s),provenance=sourceProvenance(s),zhihu=Boolean(provenance); heading=zhihu?'知乎原文摘录':'原文片段'; body=`${zhihu?`<div class="chain-source-identity"><i>知</i><span><strong>知乎公开内容</strong><small>${h(s.author || '知乎作者')} · ${h(sourceRole(s,m))}</small></span></div><p class="chain-source-provenance">${h(provenance)}</p>`:''}<h3>${h(s?.title || '暂无来源')}</h3><blockquote>${h(s?.excerpt || m.originalText || '')}</blockquote>${url?`<a class="chain-source-link" href="${h(url)}" target="_blank" rel="noreferrer">打开知乎原文 ${icon('external')}</a>`:''}<p class="chain-footnote">${zhihu?'知乎在这里提供可核对的公开材料；接口返回的是摘要快照，不代表完整原文，也不会自动成为“我的理解”。':'这份材料不会自动成为“我的理解”。'}</p>`; }
     if (modal.type==='provenance') { heading='原文与来路'; body=`<h3>原话</h3><blockquote>${h(m.originalText||m.whyCare||'尚未留下原话。')}</blockquote><h3>来源材料</h3>${(m.sources||[]).map(s=>`<details><summary>${h(s.title)}</summary>${sourceProvenance(s)?`<small>${h(sourceProvenance(s))}</small>`:''}<p>${h(s.excerpt)}</p>${safeSourceURL(s)?`<a class="chain-source-link" href="${h(safeSourceURL(s))}" target="_blank" rel="noreferrer">打开知乎原文 ${icon('external')}</a>`:''}</details>`).join('')||'<p>暂无来源。可以粘贴一段材料。</p>'}<h3>对照关系</h3>${(m.observations||[]).map(o=>`<p>${h(RELATIONS[o.relation]||o.relation)} · ${h(o.text)}</p>`).join('')||'<p>暂无已确认对照。</p>'}<h3>留下的旁支</h3>${(m.branches||[]).map(b=>`<blockquote>${h(b.text)}<small>来处：${h(b.origin?.text || b.origin?.field || '')}</small></blockquote>`).join('')||'<p>暂无旁支。</p>'}`; }
     if (modal.type==='revision-history') { heading='理解修订'; body=(m.revisions||[]).map(r=>`<section class="chain-history-item"><h3>原来的理解</h3><p>${h(r.before?.text ?? r.before?.understanding ?? r.before)}</p><h3>这次修订为</h3><p>${h(r.after?.text ?? r.after?.understanding ?? r.after)}</p></section>`).join('')||'<p>暂无修订。</p>'; }
     if (modal.type==='result-history') { heading='查看使用经历'; body=(m.results||[]).map(r=>`<section class="chain-history-item"><h3>事实</h3><p>${h(r.fact)}</p><h3>解释</h3><p>${h(r.interpretation)}</p><h3>未确认</h3><p>${h(r.unconfirmed)}</p></section>`).join('')||'<p>还没有带回实际结果。</p>'; }
@@ -136,9 +144,11 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
     if (changing) { glass?.destroy();glass=null;modal=null;suggestionDraft=''; }
     const renderer={reading,resume,discussion,comparison,understanding,paused,reentry,handoff,work,results,revised}[current.screen]||reading;
     const fresh=document.createElement('template');
-    fresh.innerHTML=`${!['reading','work'].includes(current.screen)?header():''}${scenery()}${renderer()}<footer class="chain-prototype-label" data-key="truth">${isDemo()?'完整演示 · 含知乎公开来源快照 · 与你的事项分开':''}</footer>${current.notice && current.screen!=='paused' ? `<div class="chain-notice" data-key="notice" role="status"><span>${h(current.notice)}</span>${btn('clear-notice','关闭','close','icon-only')}</div>`:''}${modalHTML()}`;
+    fresh.innerHTML=`${!['reading','work'].includes(current.screen)?header():''}${scenery()}${renderer()}<footer class="chain-prototype-label" data-key="truth">${isDemo()?'完整演示 · 含知乎公开来源快照 · 与你的事项分开':''}</footer>${current.notice && current.screen!=='paused' ? `<div class="chain-notice" data-key="notice" role="status"><span>${h(current.notice)}</span>${btn('clear-notice','关闭','close','icon-only')}</div>`:''}`;
+    const modalFresh=document.createElement('template');modalFresh.innerHTML=modalHTML();
     stage.dataset.screen=current.screen;
     patchDOM(stage,fresh.content,element=>element===composition);
+    patchDOM(modalLayer,modalFresh.content,element=>element===composition);
     root.style.setProperty('--chain-background',background(current.screen==='paused' ? (assets.overviewBackground||assets.background):assets.background));
     if (changing) {
       lastScreen=current.screen;lastId=current.selectedId;
@@ -151,7 +161,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
     resize();
   }
   function resize() { if (disposed) return;const scale=Math.min(root.clientWidth/1672,root.clientHeight/941);stage.style.transform=`translate(-50%, -50%) scale(${scale})`; }
-  function openModal(type,id) {returnFocus=document.activeElement;modal={type,id};render();queueMicrotask(()=>stage.querySelector('.chain-modal textarea, .chain-modal input, .chain-modal button')?.focus());}
+  function openModal(type,id) {returnFocus=document.activeElement;modal={type,id};render();queueMicrotask(()=>modalLayer.querySelector('.chain-modal textarea, .chain-modal input, .chain-modal button')?.focus());}
   function closeModal() {modal=null;render();if(returnFocus?.isConnected)returnFocus.focus();}
   function selectText(element) {
     if (composition) return;
@@ -161,7 +171,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
     if (name==='article') {const source=current.availableSources?.[0];dispatch({type:'CAPTURE_EXCERPT',text:selection.text,sourceId:source?.id});readingOpen=true;render();}
     else {selectionFocus={field:name,...selection};dispatch({type:'FOCUS',...selectionFocus});}
   }
-  listen(stage,'click',event=>{
+  listen(root,'click',event=>{
     const button=event.target.closest('[data-action]');if(!button || button.disabled)return;
     const action=button.dataset.action;
     const direct={collapse:'COLLAPSE',reopen:'REOPEN','undo-collapse':'UNDO_COLLAPSE',fresh:'FRESH_CONTEXT','resume-context':'RESUME_CONTEXT','clear-focus':'CLEAR_FOCUS',branch:'BRANCH','focus-understanding':'FOCUS_TO_UNDERSTANDING',back:'BACK','save-understanding':'SAVE_UNDERSTANDING','accept-suggestion':'ACCEPT_SUGGESTION','dismiss-suggestion':'DISMISS_SUGGESTION','undo-suggestion':'UNDO_SUGGESTION','link-comparison':'LINK_COMPARISON','reject-comparison':'REJECT_COMPARISON','confirm-handoff':'CONFIRM_HANDOFF','exclude-handoff':'EXCLUDE_HANDOFF','commit-revision':'COMMIT_REVISION','keep-result':'KEEP_RESULT_ONLY','try-again':'TRY_AGAIN','undo-revision':'UNDO_REVISION','clear-notice':'CLEAR_NOTICE'};
@@ -204,18 +214,18 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
     if(key==='material-draft')materialDraft=text;
     render();
   }
-  listen(stage,'input',inputEvent);
-  listen(stage,'change',event=>{if(event.target instanceof HTMLSelectElement)inputEvent(event);});
-  listen(stage,'compositionstart',event=>{composition=event.target;});
-  listen(stage,'compositionend',event=>{composition=null;inputEvent(event);});
-  listen(stage,'mouseup',event=>{const element=event.target.closest('[data-selection]');if(element)selectText(element);});
-  listen(stage,'keyup',event=>{if(event.key==='Shift'||event.key.startsWith('Arrow')){const element=event.target.closest('[data-selection]');if(element)selectText(element);}});
-  listen(stage,'select',event=>{if(event.target.dataset.selection==='understanding')selectText(event.target);});
-  listen(stage,'submit',event=>{event.preventDefault();if(event.target.dataset.form==='send'&&current.composer?.text?.trim())dispatch({type:'SEND'});});
-  listen(stage,'keydown',event=>{
+  listen(root,'input',inputEvent);
+  listen(root,'change',event=>{if(event.target instanceof HTMLSelectElement)inputEvent(event);});
+  listen(root,'compositionstart',event=>{composition=event.target;});
+  listen(root,'compositionend',event=>{composition=null;inputEvent(event);});
+  listen(root,'mouseup',event=>{const element=event.target.closest('[data-selection]');if(element)selectText(element);});
+  listen(root,'keyup',event=>{if(event.key==='Shift'||event.key.startsWith('Arrow')){const element=event.target.closest('[data-selection]');if(element)selectText(element);}});
+  listen(root,'select',event=>{if(event.target.dataset.selection==='understanding')selectText(event.target);});
+  listen(root,'submit',event=>{event.preventDefault();if(event.target.dataset.form==='send'&&current.composer?.text?.trim())dispatch({type:'SEND'});});
+  listen(root,'keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();if(modal)closeModal();else if(current.focus||selectionFocus){selectionFocus=null;dispatch({type:'CLEAR_FOCUS'});}else if(['comparison','handoff'].includes(current.screen)){if(onBack)onBack(current);else dispatch({type:'BACK'});}return;}
     if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&!composition&&event.target.dataset.field==='composer'){event.preventDefault();if(current.composer?.text?.trim())dispatch({type:'SEND'});}
-    if(event.key==='Tab'&&modal){const focusable=[...stage.querySelectorAll('.chain-modal button:not([disabled]), .chain-modal input, .chain-modal textarea, .chain-modal select, .chain-modal summary')];const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}
+    if(event.key==='Tab'&&modal){const focusable=[...modalLayer.querySelectorAll('.chain-modal button:not([disabled]), .chain-modal input, .chain-modal textarea, .chain-modal select, .chain-modal summary')];const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}
   });
   const observer=new ResizeObserver(resize);observer.observe(root);
   render();

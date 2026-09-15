@@ -71,7 +71,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       };
     });
     check('complete demo home presents four canonical matters without guide overlap', demoHome.matters === 4 && demoHome.guideOpen === 'false' && !demoHome.guideOverlapsBubble, demoHome);
-    check('complete demo identifies its cached Zhihu participation without a visitor search', demoHome.source === 'zhihu' && demoHome.agent === 'codex-harness' && await page.getByText('知乎来源快照 · 2 条 · 演示不联网', { exact: true }).count() === 1 && capabilityRequests.length === 0, demoHome);
+    check('complete demo makes cached Zhihu participation visible without a visitor search', demoHome.source === 'zhihu' && demoHome.agent === 'codex-harness' && await page.getByText('知乎参与这件事', { exact: true }).count() === 1 && await page.getByText('2 份公开来源 · 原现场与对照', { exact: true }).count() === 1 && capabilityRequests.length === 0, demoHome);
     if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'demo-home-desktop.png'), animations: 'disabled' });
     await page.locator('.demo-guide-toggle').click();
     const actionButtons = page.locator('.demo-guide nav button');
@@ -85,10 +85,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       ['结果回来', '.worksite-viewport', '[data-field=result-fact]'],
     ];
     for (const [label, selector, text] of expectations) {
+      if (!await page.locator('.demo-guide nav button').first().isVisible().catch(() => false)) await page.locator('.demo-guide-toggle').click();
       await page.locator('.demo-guide nav button', { hasText: label }).click();
       await page.locator(selector).waitFor({ timeout: 10000 });
       if (label === '留下一点') {
-        await page.getByRole('button', { name: '查看原现场' }).click();
+        await page.locator('.chain-source-evidence').click();
         const sourceLink = page.getByRole('link', { name: '打开知乎原文' });
         await sourceLink.waitFor({ timeout: 10000 });
         check('demo source exposes real Zhihu author, summary boundary and canonical link', /拾光者/.test(await page.locator('.chain-modal').innerText()) && (await sourceLink.getAttribute('href')) === 'https://www.zhihu.com/question/585059015/answer/2076093417847898217');
@@ -137,6 +138,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const mobileHome = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth, controls: [...document.querySelectorAll('.capture-select')].map((element) => ({ height: element.getBoundingClientRect().height, value: element.querySelector('select')?.value, clientWidth: element.querySelector('select')?.clientWidth, scrollWidth: element.querySelector('select')?.scrollWidth })) }));
     check('mobile home keeps both capability targets stable, readable and reachable', mobileHome.scrollWidth <= mobileHome.innerWidth + 1 && mobileHome.controls.length === 2 && mobileHome.controls.every((control) => control.height >= 44 && control.scrollWidth <= control.clientWidth + 1), mobileHome);
     if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'demo-home-mobile.png'), animations: 'disabled' });
+    await page.locator('.capture-demo-state').click();
+    await page.locator('.chain-source-evidence').click();
+    const mobileSourceModal = await page.locator('.chain-modal').boundingBox();
+    check('mobile Zhihu source opens as a readable native-size sheet', Boolean(mobileSourceModal && mobileSourceModal.width >= 350 && mobileSourceModal.height >= 430), mobileSourceModal);
+    const chromeBehindModal = await page.evaluate(() => [...document.querySelectorAll('.demo-guide,.web-status,.web-context-menu,.web-continuity')].every((element) => getComputedStyle(element).opacity === '0' && getComputedStyle(element).pointerEvents === 'none'));
+    check('source sheet removes competing app chrome while open', chromeBehindModal);
+    if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'demo-source-mobile.png'), animations: 'disabled' });
     await page.goto(base, { waitUntil: 'networkidle' });
     await page.locator('#opening-title').waitFor();
     const mobile = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth, header: document.querySelector('.site-header')?.getBoundingClientRect().height }));

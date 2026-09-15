@@ -260,9 +260,9 @@ function AmbientFrame() {
 }
 
 const demoActions = [
-  { label: '留下一点', route: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'resume' } },
+  { label: '留下一点', source: '知乎原现场', route: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'resume' } },
   { label: '从这里接着', route: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'discussion' } },
-  { label: '找个对照', route: { view: 'compare', matterId: COMPLETE_DEMO.matterId, sessionId: COMPLETE_DEMO.comparisonId } },
+  { label: '找个对照', source: '知乎对照', route: { view: 'compare', matterId: COMPLETE_DEMO.matterId, sessionId: COMPLETE_DEMO.comparisonId } },
   { label: '我的理解', route: { view: 'chain', matterId: COMPLETE_DEMO.matterId, screen: 'understanding' } },
   { label: '带去用', route: { view: 'worksite', matterId: COMPLETE_DEMO.matterId, workId: COMPLETE_DEMO.workId, screen: 'overview' } },
   { label: '结果回来', route: { view: 'worksite', matterId: COMPLETE_DEMO.matterId, workId: COMPLETE_DEMO.workId, screen: 'results' } },
@@ -274,8 +274,8 @@ function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapsh
   const isCurrent = (item: typeof demoActions[number]) => item.route.view === snapshot.route.view
     && (!('screen' in item.route) || item.route.screen === snapshot.route.screen);
   return <aside className="demo-guide" data-open={open ? 'true' : 'false'} aria-label="完整演示动作清单">
-    <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示数据</span><b>6 / 6</b></button>
-    {open && <div className="demo-guide-body"><p>产品状态为合成演示 · 含知乎公开来源快照</p><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => runtime.navigate(item.route as RouteMemory)}><span>{index + 1}</span>{item.label}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
+    <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示</span><b>6 / 6</b></button>
+    {open && <div className="demo-guide-body"><div className="demo-guide-source"><i>知</i><span><strong>知乎参与了这条思考链</strong><small>公开来源分别进入原现场与对照</small></span></div><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => { setOpen(false); runtime.navigate(item.route as RouteMemory); }}><span>{index + 1}</span><b>{item.label}</b>{'source' in item && item.source ? <small>{item.source}</small> : null}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
   </aside>;
 }
 
