@@ -24,6 +24,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     browser = await chromium.launch({ executablePath: process.env.TRACE_CHROMIUM_EXECUTABLE || undefined, headless: true });
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     page = await context.newPage();
+    const capabilityRequests = [];
+    page.on('request', (request) => { if (/\/api\/zhihu\//.test(request.url())) capabilityRequests.push(request.url()); });
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('requestfailed', (request) => {
       const expectedEmptyVideoProbe = request.method() === 'HEAD' && new URL(request.url()).pathname === '/video/trace-demo.mp4';
@@ -32,22 +34,46 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     await page.goto(base, { waitUntil: 'networkidle' });
     await page.locator('#opening-title').waitFor();
-    check('root opens product interaction introduction', /为什么停在这里/.test(await page.locator('#opening-title').innerText()));
+    check('root opens the product thesis', /让值得思考的想法/.test(await page.locator('#opening-title').innerText()));
     const renderedIntroduction = await page.evaluate(() => ({
-      openingBackground: getComputedStyle(document.querySelector('.opening')).backgroundColor,
+      openingBackground: getComputedStyle(document.querySelector('.intro-hero')).backgroundColor,
       headingFontSize: Number.parseFloat(getComputedStyle(document.querySelector('#opening-title')).fontSize),
-      criticalImages: [...document.querySelectorAll('.origin-page, .origin-overlay')].map((image) => ({ src: image.getAttribute('src'), complete: image.complete, width: image.naturalWidth })),
+      criticalImages: [...document.querySelectorAll('img[data-critical="true"]')].map((image) => ({ src: image.getAttribute('src'), complete: image.complete, width: image.naturalWidth })),
     }));
-    check('introduction route stylesheet is applied', renderedIntroduction.openingBackground !== 'rgba(0, 0, 0, 0)' && renderedIntroduction.headingFontSize >= 48, renderedIntroduction);
+    check('introduction route stylesheet is applied', renderedIntroduction.headingFontSize >= 48, renderedIntroduction);
     check('introduction evidence images are loaded', renderedIntroduction.criticalImages.every((image) => image.complete && image.width > 0), renderedIntroduction);
     check('introduction links complete demo, personal space and video', await page.locator('a[href="/app/demo"]').count() >= 2 && await page.locator('a[href="/app"]').count() >= 1 && await page.locator('a[href="/video"]').count() >= 2);
-    await page.locator('.origin-controls button').nth(2).click();
-    check('introduction source interaction changes the real overlay state', await page.locator('.origin-overlay[data-kind=receipt]').getAttribute('data-visible') === 'true');
-    await page.screenshot({ path: path.join(review, 'desktop.png'), animations: 'disabled' });
+    await page.locator('.format-step').nth(2).click();
+    check('form-factor interaction grows from the quiet entry to a saved bubble', await page.locator('.format-preview').getAttribute('data-stage') === 'bubble');
+    await page.locator('.thinking-tabs button').nth(2).click();
+    check('Zhihu thinking journey exposes relation-aware comparison', await page.locator('.thinking-panel').getAttribute('data-stage') === 'compare' && await page.locator('.sample-results article').count() === 3);
+    await page.locator('.work-loop-nav button').nth(3).click();
+    check('work journey reaches user-confirmed understanding revision', await page.locator('.work-copy').getByText('确认以后', { exact: false }).count() === 1);
+    await page.evaluate(() => scrollTo(0, 0));
+    if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'desktop.png'), animations: 'disabled' });
 
+    await page.setViewportSize({ width: 2048, height: 1088 });
     await page.goto(`${base}/app/demo`, { waitUntil: 'domcontentloaded' });
-    await page.locator('.demo-guide').waitFor({ timeout: 10000 });
+    await page.locator('.demo-guide-toggle').waitFor({ timeout: 10000 });
     await page.locator('.web-status[data-state=saved]').waitFor({ timeout: 10000 });
+    await page.locator('#capture-source').waitFor({ timeout: 10000 });
+    const demoHome = await page.evaluate(() => {
+      const box = (selector) => { const rect = document.querySelector(selector)?.getBoundingClientRect(); return rect ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom } : null; };
+      const intersects = (a, b) => a && b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      const guide = box('.demo-guide');
+      const bubbles = [...document.querySelectorAll('.thought-bubble[data-matter-id]')].map((item) => { const rect = item.getBoundingClientRect(); return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }; });
+      return {
+        matters: bubbles.length,
+        guideOpen: document.querySelector('.demo-guide')?.dataset.open,
+        guideOverlapsBubble: bubbles.some((bubble) => intersects(guide, bubble)),
+        source: document.querySelector('#capture-source')?.value,
+        agent: document.querySelector('#capture-agent')?.value,
+      };
+    });
+    check('complete demo home presents four canonical matters without guide overlap', demoHome.matters === 4 && demoHome.guideOpen === 'false' && !demoHome.guideOverlapsBubble, demoHome);
+    check('complete demo labels the selected synthetic capability path', demoHome.source === 'zhihu' && demoHome.agent === 'codex-harness' && await page.getByText('演示数据 · 未联网', { exact: true }).count() === 1, demoHome);
+    if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'demo-home-desktop.png'), animations: 'disabled' });
+    await page.locator('.demo-guide-toggle').click();
     const actionButtons = page.locator('.demo-guide nav button');
     check('complete demo exposes all six actions', await actionButtons.count() === 6);
     const expectations = [
@@ -67,49 +93,54 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       } else await page.getByText(text, { exact: false }).first().waitFor({ timeout: 10000 });
       check(`demo action renders its data: ${label}`, true);
     }
-    await page.screenshot({ path: path.join(out, 'demo-results-desktop.png'), animations: 'disabled' });
+    if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(out, 'demo-results-desktop.png'), animations: 'disabled' });
 
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded' });
     await page.locator('#capture-input').waitFor({ timeout: 10000 });
     check('personal space does not inherit demo records', await page.locator('.thought-bubble[data-matter-id]').count() === 0);
-    const zhihuShortcut = page.locator('.capability-pill[data-action=zhihu]');
-    const agentShortcut = page.locator('.capability-pill[data-action=agent]');
-    check('home composer exposes Zhihu and native Agent choices', await zhihuShortcut.isVisible() && await agentShortcut.isVisible());
-    await zhihuShortcut.click();
+    const sourceSelect = page.locator('#capture-source');
+    const agentSelect = page.locator('#capture-agent');
+    const optionShape = await page.evaluate(() => ({ source: [...document.querySelectorAll('#capture-source option')].map((item) => item.textContent), agent: [...document.querySelectorAll('#capture-agent option')].map((item) => item.textContent) }));
+    check('home composer exposes one source dropdown and one Agent dropdown', await sourceSelect.isVisible() && await agentSelect.isVisible() && JSON.stringify(optionShape.source) === JSON.stringify(['不联网', '知乎搜索', '全网搜索']) && JSON.stringify(optionShape.agent) === JSON.stringify(['不交给 Agent', 'Codex 原生', 'Codex Harness', '自定义 Agent']), optionShape);
+    const capabilityCallsBefore = capabilityRequests.length;
+    await sourceSelect.selectOption('zhihu');
+    await agentSelect.selectOption('codex-native');
+    check('selecting source and Agent does not call external capability APIs or open the old dashboard', capabilityRequests.length === capabilityCallsBefore && await page.locator('.web-connection-center').count() === 0 && await page.locator('.web-dialog[open]').count() === 0, { capabilityCallsBefore, capabilityCallsAfter: capabilityRequests.length });
+    await page.locator('#capture-input').fill('测试一次从知乎问题到 Codex 原生交接的完整输入路径');
+    await page.locator('#capture-input').press('Enter');
+    await page.locator('.chain-handoff-layout').waitFor({ timeout: 10000 });
+    const handoffFields = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.chain-destination [data-field]')].map((input) => [input.dataset.field, input.value])));
+    check('capture saves first and opens a prefilled, unconnected Codex handoff', handoffFields.agent === 'Codex 原生' && handoffFields.project === 'Trace Web' && /接续：测试一次/.test(handoffFields.task) && capabilityRequests.length === capabilityCallsBefore, handoffFields);
+    await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded' });
+    await page.locator('.profile-button').waitFor({ timeout: 10000 });
+    await page.locator('.profile-button').click();
     await page.locator('.web-dialog[open] .web-zhihu-auth').waitFor({ timeout: 10000 });
     await page.locator('.web-auth-error').waitFor({ timeout: 10000 });
     const zhihuDialogText = await page.locator('.web-dialog').innerText();
-    check('Zhihu search and account access both expose their real boundaries', await page.getByRole('button', { name: '授权连接知乎' }).isDisabled() && /知乎 \/ 全网搜索/.test(zhihuDialogText) && /尚未直连/.test(zhihuDialogText) && /当前 Web 不会联网搜索/.test(zhihuDialogText) && /当前环境未启用知乎接口/.test(zhihuDialogText) && !/Unexpected token|SyntaxError/.test(zhihuDialogText));
-    await page.getByRole('button', { name: '关闭' }).click();
-    check('closing connection center restores trigger focus', await zhihuShortcut.evaluate((element) => document.activeElement === element));
-    await agentShortcut.click();
-    const agentDialogText = await page.locator('.web-dialog').innerText();
-    check('native Agent choice names Codex without faking a live connection', /Codex/.test(agentDialogText) && /尚未直连/.test(agentDialogText) && /不会直接创建 Codex 任务/.test(agentDialogText));
-    await page.getByRole('button', { name: '关闭' }).click();
-    await page.locator('.profile-button').click();
-    await page.locator('.web-dialog[open] .web-zhihu-auth').waitFor({ timeout: 10000 });
-    check('personal settings keeps fail-closed Zhihu authorization controls', await page.getByRole('button', { name: '授权连接知乎' }).isDisabled());
+    check('personal settings separates Zhihu account data from public search', await page.getByRole('button', { name: '连接我的知乎' }).isDisabled() && /我的知乎内容/.test(zhihuDialogText) && /公开搜索与这项设置彼此独立/.test(zhihuDialogText) && !/游客|Unexpected token|SyntaxError/.test(zhihuDialogText));
 
     await page.goto(`${base}/video`, { waitUntil: 'networkidle' });
     await page.locator('#video-title').waitFor();
     check('video route is reserved and explains the expected asset', await page.getByText('视频位置已经准备好', { exact: false }).count() === 1);
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`${base}/app`, { waitUntil: 'networkidle' });
+    await page.goto(`${base}/app/demo`, { waitUntil: 'networkidle' });
     await page.locator('#capture-input').waitFor();
-    const mobileHome = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth, buttons: [...document.querySelectorAll('.capability-pill')].map((element) => element.getBoundingClientRect().height) }));
-    check('mobile home keeps both capability targets stable and reachable', mobileHome.scrollWidth <= mobileHome.innerWidth + 1 && mobileHome.buttons.length === 2 && mobileHome.buttons.every((height) => height >= 44), mobileHome);
+    const mobileHome = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth, controls: [...document.querySelectorAll('.capture-select')].map((element) => ({ height: element.getBoundingClientRect().height, value: element.querySelector('select')?.value, clientWidth: element.querySelector('select')?.clientWidth, scrollWidth: element.querySelector('select')?.scrollWidth })) }));
+    check('mobile home keeps both capability targets stable, readable and reachable', mobileHome.scrollWidth <= mobileHome.innerWidth + 1 && mobileHome.controls.length === 2 && mobileHome.controls.every((control) => control.height >= 44 && control.scrollWidth <= control.clientWidth + 1), mobileHome);
+    if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'demo-home-mobile.png'), animations: 'disabled' });
     await page.goto(base, { waitUntil: 'networkidle' });
     await page.locator('#opening-title').waitFor();
     const mobile = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth, header: document.querySelector('.site-header')?.getBoundingClientRect().height }));
     check('mobile introduction has no horizontal overflow', mobile.scrollWidth <= mobile.innerWidth + 1, mobile);
-    await page.screenshot({ path: path.join(review, 'mobile.png'), animations: 'disabled' });
+    if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'mobile.png'), animations: 'disabled' });
     check('no page errors across introduction, demo, personal and video routes', errors.length === 0, { errors });
     fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ base, checks, errors, serverLog: log }, null, 2));
     console.log(`DONE ${out}`);
   } catch (error) {
     console.error(error.stack || error); checks.push({ name: 'run error', passed: false, error: error.stack || String(error) });
-    if (page) await page.screenshot({ path: path.join(out, 'failure.png') }).catch(() => undefined);
+    if (page && !process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(out, 'failure.png') }).catch(() => undefined);
     fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ base, checks, errors, serverLog: log }, null, 2));
     process.exitCode = 1;
   } finally { await browser?.close(); server.kill(); console.log(`EVIDENCE ${out}`); }

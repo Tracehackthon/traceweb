@@ -15,15 +15,14 @@
 .scene-bird{position:absolute;left:0;top:0;z-index:7;width:0;height:0;pointer-events:none}.scene-bird img{position:absolute;width:118px;height:auto;left:-84px;top:-64px;filter:drop-shadow(0 3px 2px #1b453c15)}.bird-flying{display:none}.scene-bird.flying .bird-perched{display:none}.scene-bird.flying .bird-flying{display:block}.profile-button{position:absolute;bottom:23px;left:16px;width:38px;height:38px;border-radius:50%;background:#38696020;display:grid;place-items:center;color:#466760;z-index:8}.profile-button .icon{width:22px;height:22px}.scene-back{position:absolute;bottom:25px;left:78px;display:flex;gap:8px;align-items:center;font-size:15px;color:#416555;z-index:8}.scene-back .icon{width:19px;height:19px}.prototype-caption{position:absolute;bottom:15px;right:24px;font-size:11px;letter-spacing:.2px;color:#587365;opacity:.8;z-index:8;padding:7px}.prototype-caption:hover{opacity:1}
 .utility-panel{position:fixed;top:86px;right:30px;width:420px;max-width:calc(100vw - 32px);max-height:calc(100vh - 120px);overflow:auto;z-index:30;background:#f6fbf5f0;backdrop-filter:blur(24px);border:1px solid white;border-radius:25px;padding:24px;box-shadow:0 20px 65px #345b4326}.utility-panel header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}.utility-panel h2{font:600 23px/1.5 var(--serif);margin:0}.utility-panel header button{padding:6px;display:grid;place-items:center}.utility-panel h3{font:600 21px/1.5 var(--serif);margin:13px 0}.utility-panel p{font-size:15px;line-height:1.9;color:#4e6a61}.utility-panel blockquote{margin:16px 0;padding:18px;background:#dceadb70;border-radius:14px;font:500 18px/1.8 var(--serif)}.utility-tag{font-size:12px;color:#527861}.utility-primary{padding:12px 20px;border-radius:24px;background:#0d5b44;color:white;font-size:14px;margin-top:10px}.search-field{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #72988255;border-radius:15px;background:white}.search-field .icon{width:20px;height:20px}.search-field input{width:100%;min-width:0;border:0;outline:0;background:none;font-size:15px}.search-result{display:flex;width:100%;text-align:left;gap:15px;padding:18px 3px;border-bottom:1px solid #6582751a;align-items:center}.search-result:hover{background:#e8f2e6}.search-result strong{display:block;font:550 17px/1.5 var(--serif)}.search-result small{display:block;font-size:13px;color:#5c756b;margin-top:5px}.empty-search{text-align:center;padding:30px 5px}.state-previews{display:flex;flex-direction:column}.state-previews button{display:flex;justify-content:space-between;align-items:center;text-align:left;padding:15px 4px;border-bottom:1px solid #78977a22;font-size:15px}.state-previews .icon{width:18px;height:18px;transform:rotate(90deg)}.home-toast{position:fixed;bottom:35px;left:50%;transform:translate(-50%,15px);padding:13px 24px;border:1px solid #ffffffa0;border-radius:25px;background:#f7fcf6ee;box-shadow:0 8px 40px #264d3826;font-size:14px;color:#214c3e;max-width:calc(100vw - 32px);z-index:40;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}.home-toast.visible{opacity:1;transform:translate(-50%,0)}
 @keyframes light-flow{from{stroke-dashoffset:1}to{stroke-dashoffset:-1}}
-.scene{background:none}.scene-nodes-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}.home-hero h1{font-size:66px;transform:translateX(47px)}.home-hero p{transform:translateX(15px);margin-top:5px}.home-composer .send-orb:disabled{opacity:1;filter:none}
+.scene{background:none}.scene-nodes-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}.home-hero h1{font-size:66px}.home-hero p{margin-top:5px}.home-composer .send-orb:disabled{opacity:1;filter:none}
 .thought-bubble[data-entry=fresh] .bubble-content{padding-left:23px;padding-right:15px;gap:10px}.thought-bubble[data-entry=fresh] strong{font-size:16px}.thought-bubble[data-entry=handoff] .bubble-content{padding-right:16px;gap:10px}.thought-bubble[data-entry=handoff] strong{font-size:18px}.thought-bubble[data-entry=work] .bubble-subtitle{font-size:14px}.thought-bubble[data-entry=insight] .bubble-content{padding:27px 24px;gap:10px}.thought-bubble[data-entry=insight] .bubble-icon{width:40px;height:40px}.thought-bubble[data-entry=insight] strong{font-size:19px}.thought-bubble[data-entry=practice] .bubble-content{padding:23px 20px;gap:10px}.thought-bubble[data-entry=practice] .bubble-icon{width:38px;height:38px}.thought-bubble[data-entry=practice] strong{font-size:18px}
 .scene[data-state=thinking] .thought-bubble[data-entry=thought] .bubble-subtitle,.scene[data-state=work] .thought-bubble[data-entry=thought] .bubble-subtitle{font-size:13px}.scene[data-state=thinking] [data-entry=work]{visibility:hidden}.result-bubble .bubble-content{padding:33px 27px 25px 62px}.return-copy strong{font-size:24px;line-height:1.45}.return-copy p{font-size:16px;line-height:1.6}.return-copy small{font-size:14px}.result-badge{font-size:14px}
 #detail-content{height:100%;display:flex;flex-direction:column}.detail-topline,.detail-card h2,.work-meta,.detail-composer,.detail-actions{flex-shrink:0}.detail-context{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#abcabb transparent}.context-row{flex-shrink:0}
 .detail-context{gap:13px}.context-row p{line-height:1.55;overflow-wrap:anywhere}.work-detail #detail-content{padding-top:18px}.work-detail h2{margin-top:2px;margin-bottom:5px}.work-detail .work-meta{margin-bottom:14px}.work-detail .detail-context{gap:10px}.work-detail .context-row p{font-size:17px;line-height:1.5}.work-detail .context-row h3{font-size:19px}.scene[data-state=thinking] [data-entry=handoff] strong,.scene[data-state=work] [data-entry=handoff] strong{font-size:16px}.scene[data-state=return] [data-entry=handoff] strong{font-size:16px}.scene[data-state=return] [data-entry=fresh] strong{font-size:14px}
 .scene-bird .bird-perched{width:97.74px;left:-69.48px;top:-52.92px}.scene-bird .bird-flying{width:104.04px;left:-67.5px;top:-85.95px}
-@media(max-width:1050px){.home-hero h1{font-size:72px}.home-hero p{font-size:25px}.home-nav>button{font-size:21px}.home-nav .project-pill{font-size:18px}.bubble-subtitle{font-size:21px}.thought-bubble[data-entry=fresh] .bubble-subtitle,.thought-bubble[data-entry=handoff] .bubble-subtitle{font-size:18px}.prototype-caption{font-size:16px}.detail-composer textarea{font-size:23px}.detail-actions button{font-size:20px}.context-row p{font-size:21px;line-height:1.45}.detail-context{gap:17px}.home-composer textarea{font-size:24px}.source-pills button{font-size:18px}.utility-panel{top:66px;right:16px}.scene-back{font-size:20px}}
+@media(max-width:1050px) and (min-width:721px){.utility-panel{top:66px;right:16px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition:none!important}}
-@media(max-width:1050px){.detail-card{min-width:1000px;min-height:575px;margin-left:-100px;margin-top:-25px}.detail-context{gap:10px}.work-detail .context-row p{font-size:21px}.work-detail .context-row h3{font-size:21px}}
 
 /* Phase 2: one scene-space focus layer.  Only this SVG group is morphed;
    readable copy and controls stay in their unscaled DOM surfaces. */
@@ -38,30 +37,31 @@
 .trace-react-shell button:active:not(:disabled){transform:translateY(1px) scale(.985)}
 @media(prefers-reduced-motion:reduce){.scene-motion-layer{transition:none}.trace-react-shell button,.trace-react-shell a{transition:none}.trace-react-shell button:active:not(:disabled){transform:none}}
 
-/* Product capability shortcuts belong to the capture flow rather than a
-   separate dashboard. They expose real boundaries before a user commits any
-   text, while keeping the composer visually quieter than a toolbar. */
-.home-page .home-composer{height:136px;padding-top:19px;padding-bottom:14px}
-.home-page .home-composer textarea{height:32px}
-.home-page .source-pills{align-items:center;gap:9px;margin-top:11px}
-.home-page .source-pills .web-capture-hint{margin-right:3px;font-size:12px;color:#6c8078;white-space:nowrap}
-.home-page .source-pills .capability-pill{min-height:46px;padding:6px 13px 6px 8px;gap:9px;border-color:#668d7a26;border-radius:15px;background:#f7fbf5a6;text-align:left;justify-content:flex-start;box-shadow:inset 0 1px 0 #fff}
-.home-page .source-pills .capability-pill:hover{background:#fffef4;box-shadow:0 7px 18px #2f624d13,inset 0 1px 0 #fff}
-.home-page .capability-pill>span:last-child{display:grid;gap:1px}
-.home-page .capability-pill strong{font-size:13px;line-height:1.2;font-weight:650;color:#174c3c}
-.home-page .capability-pill small{font-size:10px;line-height:1.2;color:#6a7d76}
-.home-page .capability-icon{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;background:#e4efe8;color:#0e5b45}
-.home-page .capability-icon .icon{width:17px;height:17px}
-.home-page .home-composer .send-orb{bottom:15px}
+/* Two native selects keep the capture path stable across keyboard, touch and
+   scaled scene coordinates.  The visible surface stays faithful to the
+   approved single-row composer instead of turning into a connection panel. */
+.home-page .home-composer{height:121px;padding:22px 26px 17px 32px}
+.home-page .home-composer textarea{height:30px}
+.home-page .source-pills{align-items:center;gap:9px;margin-top:13px}
+.home-page .capture-select{position:relative;height:36px;display:flex;align-items:center;gap:7px;padding:0 27px 0 8px;border:1px solid #607f6b24;border-radius:18px;background:#ffffff78;box-shadow:inset 0 1px 0 #fff;color:#174c3c}
+.home-page .capture-select:focus-within{outline:2px solid #257c65;outline-offset:2px;background:#fffef4}
+.home-page .capture-select select{height:34px;min-width:104px;max-width:160px;border:0;outline:0;background:transparent;appearance:none;color:#174c3c;font:600 13px/1.2 var(--sans);cursor:pointer}
+.home-page .capture-select:nth-child(2) select{min-width:128px}
+.home-page .capability-icon{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;background:#e4efe8;color:#0e5b45;flex:0 0 auto}
+.home-page .capability-icon .icon{width:15px;height:15px}
+.home-page .select-chevron{position:absolute;right:10px;top:7px;font-size:15px;line-height:1;color:#557269;pointer-events:none}
+.home-page .capture-demo-state{font-size:11px;line-height:1.2;color:#6c8078;white-space:nowrap}
+.home-page .home-composer .send-orb{bottom:14px}
 @media(max-width:720px){
-  .scene[data-viewport=compact] .home-composer{height:168px;padding:17px 18px 14px}
+  .scene[data-viewport=compact] .home-composer{height:154px;padding:17px 18px 14px}
   .scene[data-viewport=compact] .home-composer textarea{height:48px;min-height:48px;padding-right:48px}
   .scene[data-viewport=compact] .composer-bottom{display:block}
-  .scene[data-viewport=compact] .source-pills{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:6px;padding-right:52px}
-  .scene[data-viewport=compact] .source-pills .web-capture-hint{grid-column:1/-1;margin:0 0 1px;font-size:11px;line-height:1.2}
-  .scene[data-viewport=compact] .source-pills .capability-pill{width:100%;min-width:0;min-height:44px;padding:5px 8px;gap:6px}
-  .scene[data-viewport=compact] .capability-icon{width:29px;height:29px;border-radius:9px}
-  .scene[data-viewport=compact] .capability-pill strong{font-size:12px}
-  .scene[data-viewport=compact] .capability-pill small{display:none}
+  .scene[data-viewport=compact] .source-pills{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:7px;margin-top:7px;padding-right:52px}
+  .scene[data-viewport=compact] .capture-select{width:100%;height:44px;gap:5px;padding-left:6px;padding-right:20px;border-radius:15px}
+  .scene[data-viewport=compact] .capture-select select,.scene[data-viewport=compact] .capture-select:nth-child(2) select{width:100%;min-width:0;max-width:none;height:42px;font-size:12px}
+  .scene[data-viewport=compact] .capability-icon{width:22px;height:22px;border-radius:7px}
+  .scene[data-viewport=compact] .capability-icon .icon{width:13px;height:13px}
+  .scene[data-viewport=compact] .select-chevron{right:7px}
+  .scene[data-viewport=compact] .capture-demo-state{grid-column:1/-1;font-size:10px;margin-top:-2px}
   .scene[data-viewport=compact] .home-composer .send-orb{right:14px;bottom:14px}
 }

@@ -437,10 +437,6 @@ export class WebRuntime {
 
   profile(): void { this.showDialog({ type: 'profile', title: '个人与设置' }); }
 
-  connections(connection: 'zhihu' | 'agent' = 'zhihu'): void {
-    this.showDialog({ type: 'connections', title: '连接能力', connection });
-  }
-
   sources(): void {
     const matter = this.matter();
     if (!matter) return;
@@ -496,8 +492,30 @@ export class WebRuntime {
     this.draft(next);
   };
 
-  onCapture = (text: string): void => {
-    void this.commit((state) => B.captureInput(state, { matterId: uid('matter'), text }), (next) => this.navigate(next.route));
+  onCapture = (text: string, options: { source?: string; agent?: string } = {}): void => {
+    void this.commit((state) => {
+      const matterId = uid('matter');
+      let next = B.captureInput(state, { matterId, text });
+      const matter = next.chain?.matters?.find((item: any) => item.id === matterId);
+      if (matter) matter.captureIntent = {
+        source: ['zhihu', 'web'].includes(options.source || '') ? options.source : 'none',
+        agent: ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent : 'none',
+        connected: false,
+        synthetic: completeDemoMode,
+      };
+      if (matter?.captureIntent.agent !== 'none') {
+        const agent = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[matter.captureIntent.agent];
+        next = B.dispatchChain(next, { matterId, action: { type: 'HANDOFF_DRAFT', patch: {
+          destination: { agent, project: matter.captureIntent.agent === 'custom' ? '待配置项目' : 'Trace Web', task: `接续：${Array.from(text).slice(0, 26).join('')}` },
+          selectedText: text,
+          role: 'reference',
+          note: '本次只准备可检查的交接内容；确认前不会发送或执行外部 Agent。',
+        } } });
+        next = B.dispatchChain(next, { matterId, action: { type: 'NAVIGATE', screen: 'handoff' } });
+        next.route = { ...next.route, view: 'chain', matterId, screen: 'handoff' };
+      }
+      return next;
+    }, (next) => this.navigate(next.route));
   };
 
   onChainAction = (action: any): void => {

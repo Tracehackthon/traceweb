@@ -1,6 +1,6 @@
 import { mark, icon } from '../home-icons.js';
 export const h = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export const titleOf = matter => matter?.title || (matter?.originalText || matter?.whyCare || '未命名的事').split('\n')[0];
+export const titleOf = matter => matter?.title || (matter?.whyCare || matter?.originalText || '未命名的事').split('\n')[0];
 export const short = (value,n=70) => Array.from(value||'').slice(0,n).join('')+(Array.from(value||'').length>n?'…':'');
 const label = {matter:'在意的事',expression:'原表达',understanding:'当前理解',discussion:'补充',source:'对照材料',result:'工作结果',revision:'修订记录',work:'工作现场',branch:'旁支'};
 export function recordsOf(host) {

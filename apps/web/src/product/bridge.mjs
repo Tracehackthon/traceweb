@@ -10,7 +10,7 @@ const matter = (host, id) => host.chain.matters.find(item => item.id === id);
 const failure = (host, code, message) => ({ ...host, error: { code, message } });
 const withoutMatters = ({ matters, ...local }) => local;
 const keyOK = value => nonempty(value) && !['__proto__', 'constructor', 'prototype'].includes(value);
-const titleOf = item => item.title || String(item.originalText || '').split(/\r?\n/)[0];
+const titleOf = item => item.title || String(item.whyCare || item.originalText || '').split(/\r?\n/)[0];
 
 export function createBridge() {
   const chain = createChainState();

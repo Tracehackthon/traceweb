@@ -1,6 +1,7 @@
 ---
 name: Trace Web — Ambient Field
 description: 浅矿物白与鼠尾草绿上的接续空间，以三个独立周边组件围合留白而不是渲染整幅背景图。
+platform: web
 colors:
   ink: "#123e35"
   body-ink: "#173c32"
@@ -91,8 +92,8 @@ components:
     backgroundColor: "{colors.glass-surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.home-composer}"
-    padding: "19px 26px 14px 32px"
-    height: "136px"
+    padding: "22px 26px 17px 32px"
+    height: "121px"
     width: "762px"
   home-composer-mobile:
     backgroundColor: "{colors.glass-surface}"
@@ -100,14 +101,14 @@ components:
     typography: "{typography.mobile-input}"
     rounded: "{rounded.mobile-surface}"
     padding: "17px 18px 14px"
-    height: "168px"
-  capability-entry:
+    height: "154px"
+  capture-select:
     backgroundColor: "{colors.capability-surface}"
     textColor: "{colors.ink}"
     typography: "{typography.label}"
-    rounded: "{rounded.capability}"
-    padding: "6px 13px 6px 8px"
-    height: "46px"
+    rounded: "18px"
+    padding: "0 27px 0 8px"
+    height: "36px"
   connection-state-unavailable:
     backgroundColor: "{colors.state-unavailable-surface}"
     textColor: "{colors.state-unavailable-ink}"
@@ -157,11 +158,13 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 ### 当前实现与事实边界
 
 - 默认入口仍是 [web-main.js](src/web-main.js)，但会按路径拆分表面：`/` 加载产品交互介绍，`/app/demo` 与 `/app` 加载 [react-main.tsx](src/react-main.tsx) 中的 React shell，`/video` 加载预留视频页。base shell 的 [web.css](src/product/web.css) 随 React 入口静态加载，局部路由 CSS 再于对应模块挂载前加载；即使路由资源失败，加载态、错误态与恢复操作也不会退回无样式页面。
-- `/app/demo` 和 `/app` 复用同一套真实产品组件与命令边界。托管 Web 为两者使用独立的 IndexedDB 命名空间；即使本地开发中的 `/app` 连接个人 SQLite，`/app/demo` 也固定使用独立演示 IndexedDB，不会把合成数据写入个人 SQLite。演示空间右侧固定六动作导航，个人空间不继承任何演示记录。
+- `/app/demo` 和 `/app` 复用同一套真实产品组件与命令边界。托管 Web 为两者使用独立的 IndexedDB 命名空间；即使本地开发中的 `/app` 连接个人 SQLite，`/app/demo` 也固定使用独立演示 IndexedDB，不会把合成数据写入个人 SQLite。完整 demo v2 含 4 个 matters 与 2 个 works；其中主事项具有六动作可直达的完整链路。所有演示数据都标记为 `synthetic` / `演示数据 · 未联网`；个人空间不继承任何演示记录。
 - [web.css](src/product/web.css) 明确把首页、事项、chain、compare、worksite、目录与加载态的 `background-image` 置为 `none`。`ASSETS` 当前只映射字体与小鸟，不含背景角色。
 - 旧 `environment*.png` 与锁定记录可以继续留在仓库作为历史/审计资产，但既不是当前 primary/legacy runtime 的视觉入口，也不是新增页面应复用的系统组件。
-- `/app` 首页 composer 内显式提供「知乎」和「Codex 原生 Agent」连接状态入口。连接中心把公开搜索、个人资料授权与 Agent 交接拆成独立能力：知乎 / 全网搜索与 Codex 均标为「尚未直连」；知乎个人资料 OAuth 才根据部署真实显示「需配置 / 未授权 / 已授权」。
-- 自动模型回复、联网搜索、外部 Agent 真正执行、账号和云同步仍未接入。公开材料只能手工带入；Codex 入口只准备可检查、可复制的交接上下文，不创建任务、不伪造回执；视觉上的高亮、关联或本地保存也不能冒充外部送达和结论采用。
+- 首页 composer 不再打开 ConnectionCenter，而是内嵌两个紧凑原生 `capture-select`。搜索下拉包含「不联网 / 知乎搜索 / 全网搜索」；Agent 下拉包含「不交给 Agent / Codex 原生 / Codex Harness / 自定义 Agent」。原生 `<select>` 保留浏览器键盘、触控与表单语义，避免在当前 imperative DOM 与 React 边界增加 portal 和焦点恢复风险。
+- 公开「知乎搜索 / 全网搜索」与个人 OAuth 分开。只有个人空间设置中的「我的知乎内容」提供 OAuth，根据真实接口状态显示服务未配置、未连接或已连接；演示空间既不出现授权卡，也不伪造游客身份。
+- 自动模型回复、联网搜索、外部 Agent 真正执行、账号和云同步仍未接入。搜索下拉只保存本次意图；选中 Agent 时只在本地预填可检查的 handoff，不发送、不创建任务、不伪造回执。视觉高亮、关联或本地保存也不能冒充外部送达和结论采用。
+- 能力选择器的可复用视觉方向图保存在 `artifacts/ui-components/trace-capability-kit.png`，生成图说明、哈希及 Radix UI / React Aria / Base UI / Ariakit 调研记录保存在 `artifacts/ui-components/README.md`。该资产不是当前运行时背景。
 
 ## Colors
 
@@ -181,7 +184,7 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 - **矿物基底**（`mineral-base`）：`body` 与 shell 的统一底色。
 - **高光与洗色**（`mineral-highlight`、`sage-wash`、`white`）：组合成 ambient field 的径向与线性渐变，不作为整幅位图的替身。
 - **半透明表面**（`glass-surface`、`shell-control`）：分别用于首页 composer 与 shell 控件；透明度必须让底层洗色可见，但不能降低正文对比。
-- **能力与状态表面**（`capability-surface`、`state-*-surface`）：能力入口维持接近 composer 的轻玻璃感；「需配置 / 尚未直连」各使用一档中性灰绿，「未授权」使用克制暖黄，「可准备交接 / 已授权」使用浅绿。绿色状态只说明本地可继续的步骤或真实 OAuth 授权，不代表外部搜索或 Agent 已经执行。
+- **选择与授权状态表面**（`capability-surface`、`state-*-surface`）：`capture-select` 维持接近 composer 的轻玻璃感；「服务未配置 / 未连接」使用中性灰绿或克制暖黄，「已连接」使用浅绿。绿色只说明真实 OAuth 状态；下拉选中状态不代表外部搜索或 Agent 已经执行。
 
 **The Warm Node Ration Rule.** 一个局部关系或变化只需要一个暖金焦点；若暖金开始比正文或主操作更先被看见，就已经使用过量。
 
@@ -206,14 +209,15 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 ### 桌面与中间宽度
 
 - 首页在 721px 及以上继续使用 1672 × 941 场景坐标并居中等比缩放；这是桌面构图策略，不是手机适配。
-- 1050px 及以下的旧桌面窄屏排版补偿仍然存在；目录在 800px 及以下从双栏切为单栏。
+- 桌面首页 composer 在场景坐标中是 762 × 121px；输入、两个紧凑下拉和提交 orb 在同一玻璃表面内排布，不再嵌套大型能力卡。
+- 1050px 及以下只保留必要的辅助面板位移，不反向放大标题和 composer 字号；目录在 800px 及以下从双栏切为单栏。
 - 事项、chain、compare 与 worksite 保留各自内容模块和局部缩放/滚动规则，但底层环境已经统一为 ambient field。不要因共享背景而改写它们的阅读顺序、状态机或 canonical matter。
 
 ### 真实 viewport 移动首页
 
 - **720px 断点**：首页不再整体缩放 1672px 场景；scene 改为 `width: 100%`、`height: 100dvh`、`transform: none`，以 16px 左右边距直接排版。
-- 标题、说明、composer、空态、关系线、小鸟与横向 thought cards 都按 viewport 重排。thought cards 使用可横向滚动的 278 × 106px 表面，而不是缩小到不可读。
-- 主要导航、连接能力按钮和固定底部操作以 44px 为最小触控目标；提交 orb 为 48 × 48px。390px 与 320px viewport 已验证输入为 16px、主要触控为 44/48px、无水平 overflow，小鸟保持完整可见。
+- 标题、说明、composer、空态、关系线、小鸟与横向 thought cards 都按 viewport 重排。composer 高 154px；thought cards 使用可横向滚动的 278 × 106px 表面，而不是缩小到不可读。
+- 主要导航、两个 `capture-select` 和固定底部操作以 44px 为最小触控目标；提交 orb 为 48 × 48px。390px 与 320px viewport 已验证输入为 16px、主要触控为 44/48px、无水平 overflow，小鸟保持完整可见。
 - **350px 断点**：隐藏项目胶囊文字、主标题降至 36px，并微调 composer/空态纵向位置；这仍是 viewport 布局，不回退到场景缩放。
 
 **The Real Mobile Layout Rule.** 720px 及以下首页必须重排真实控件；不允许通过缩小桌面场景来伪装适配。尚未按同一矩阵验证的其他复杂路由，不得仅因共享 ambient field 宣称完成移动验收。
@@ -248,7 +252,7 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 
 ### 完整演示导航
 
-`.demo-guide` 仅在 `/app/demo` 出现，固定列出「留下一点、从这里接着、找个对照、我的理解、带去用、结果回来」六个动作及 6/6 完整状态。每个入口打开同一份合成事项在权威产品组件中的对应记录，不使用静态截图冒充可操作产品。恢复演示只重建演示数据库，不触碰 `/app` 的个人数据。
+`.demo-guide` 仅在 `/app/demo` 出现，默认收起，列出「留下一点、从这里接着、找个对照、我的理解、带去用、结果回来」六个动作及 6/6 完整状态。demo v2 用同一套产品命令建立 4 个 matters 和 2 个 works；首页四个气泡分别表现一份理解、一个工作承接、一次全新重读和一个待验证停点；六个直达入口都打开主事项的真实记录，不使用静态截图冒充可操作产品。恢复演示只重建演示数据库，不触碰 `/app` 的个人数据。
 
 ### AmbientFrame 与 route surface
 
@@ -257,8 +261,9 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 ### 操作与输入
 
 - **主 / 次操作**：主操作保持深绿实心或既有深绿渐变，次操作为浅色薄面；hover/active 只提供短促反馈。移动主要触控下限为 44px，圆形提交为 48px。
-- **首页 composer**：桌面为 762 × 136px 玻璃表面，在输入下方并列「知乎」与「Codex」能力入口；移动改为左右 16px、168px 高的真实 viewport 表面，两个能力按钮各保持至少 44px，textarea 为 16px，提交 orb 固定在右下。
-- **连接中心**：双标签对话只陈述当前能力和下一步。能力卡片上的「尚未直连」是不可用边界；「可准备交接」只表示可进入本地确认流程；知乎账号状态徽记按接口结果使用「需配置 / 未授权 / 已授权」，不得把三者合并成含糊的“已连接”。
+- **首页 composer**：桌面为 762 × 121px 玻璃表面，在输入下方并列搜索范围与 Agent 引擎两个 `capture-select`；移动改为左右 16px、154px 高的真实 viewport 表面，两个下拉各保持 44px，textarea 为 16px，提交 orb 固定在右下。
+- **`capture-select`**：原生 `<select>` 与小图标、自定义箭头组成紧凑单行控件。桌面高 36px，移动高 44px；长选项「Codex Harness」必须完整可见，不能为了保留旧能力卡尺寸而截断。
+- **个人知乎授权**：ConnectionCenter 已移除。「我的知乎内容」只在个人空间设置中出现，分开陈述公开搜索与 OAuth，并按服务未配置、未连接或已连接显示真实接口状态。
 - **焦点**：按钮和链接使用可见 `focus-visible` 轮廓；输入由容器 `focus-within` 或输入轮廓表达焦点。shell 对话记录打开前的触发控件，关闭后于下一帧恢复焦点；不能因为局部 input 清除默认 outline 就宣称整站已完成无障碍验证。
 - **目录**：痕迹库卡片保持真实数据、两栏到单栏的响应变化与内容截断；背景透明以露出 ambient field，而不是再次加载事项环境图。
 
@@ -270,9 +275,9 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 | 重新进入 | 当时为什么在意 / 上次真正停在 / 后来发生了什么；原现场、继续与不带回旧理解是独立操作。 |
 | 新的对照 | 当时在意 / 原来的理解 / 新的对照 / 当前停点保持阅读顺序；正文、关系决定与输入分区。 |
 | 搜索 / 全部痕迹 | 结果、分类与数量来自当前保存对象，保留来路、筛选与返回位置，不复制一份演示数据。 |
-| 知乎 / 全网搜索 | 「尚未直连」；当前 Web 不联网搜索，只允许用户手工带入材料。 |
-| 知乎个人资料 OAuth | 按环境真实显示「需配置 / 未授权 / 已授权」；只有明确操作才读取，且不自动保存进 Trace。 |
-| Codex 原生 Agent | 「尚未直连」；只准备可检查、可复制的交接上下文，不创建任务、不伪造回执。 |
+| 不联网 / 知乎搜索 / 全网搜索 | 下拉选择只保存本次搜索意图；当前 Web 不发起联网请求或伪造结果。demo 明示「演示数据 · 未联网」。 |
+| 「我的知乎内容」OAuth | 只在个人空间出现，按环境显示服务未配置、未连接或已连接；只有明确操作才读取，且不自动保存进 Trace。 |
+| 不交给 Agent / Codex 原生 / Codex Harness / 自定义 Agent | 选中 Agent 只在本地预填 handoff 目的地、原话、角色和说明；不发送、不创建外部任务、不伪造回执。 |
 | 工作现场 / 结果回来 | 工作保留当时快照；结果确认后才修订当前理解。视觉高亮不等于外部 Agent 已执行。 |
 
 - **关系与判断分开**：“接为挑战”等关系选择不自动采用材料结论；“这次无关”不删除来源。没有对照源时关系按钮禁用。
@@ -287,7 +292,7 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 - **Do** 在所有主路由复用同一个浅矿物白 / 鼠尾草 ambient field，并在非首页降低装饰存在感。
 - **Do** 把轨道、枝叶、卵石保留为三个独立、可单独定位和降级的 SVG 周边组件，持续保护中央负空间。
 - **Do** 在 720px 及以下使用首页真实 viewport 布局，保持 16px 输入字号、44px 主要触控下限和 48px 提交目标。
-- **Do** 用明确的「尚未直连 / 需配置 / 未授权 / 已授权 / 可准备交接」状态区分搜索、OAuth 与本地交接能力，并在关闭连接中心后恢复触发焦点。
+- **Do** 在 composer 内用两个原生下拉区分搜索意图与 Agent 意图，并用「演示数据 · 未联网」、个人 OAuth 实时状态和本地 handoff 说明守住边界。
 - **Do** 保留小鸟、关系线、异形表面与暖金节点的产品语义，并以 DOM/SVG 文字和控件承载真实状态。
 - **Do** 对持续动效尊重 `prefers-reduced-motion` 与产品内减少动效偏好。
 
@@ -297,4 +302,4 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 - **Don't** 同时动画轨道、枝叶、卵石、小鸟和关系线；持续呼吸只属于右上轨道。
 - **Don't** 用整体缩放 1672px 桌面场景冒充 720px 以下首页适配，也不要把首页 390/320 验证外推为所有复杂路由已验收。
 - **Don't** 用打开页面、悬停、暖金高亮、材料关系选择或本地保存伪造用户已采用判断或外部工作已送达。
-- **Don't** 把手工材料带入写成联网搜索，也不要把可复制的 Codex 交接上下文写成任务已经创建或执行完成。
+- **Don't** 把搜索下拉的选中状态写成联网已发生，也不要把本地预填的 Codex / Harness / 自定义 Agent handoff 写成任务已经创建或执行完成。

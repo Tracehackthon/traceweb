@@ -170,7 +170,7 @@ async function mountRoute(root: HTMLDivElement, route: RouteMemory, module: any)
       else runtime.navigate({ view: 'chain', matterId: entry.matterId, screen: 'handoff' });
     };
     return module.mountHome({
-      root, product: true, entries, snapshot: { captureDraft: host.chain.capture.text || '' }, assets,
+      root, product: true, entries, snapshot: { captureDraft: host.chain.capture.text || '', completeDemoMode }, assets,
       services,
       // The first bubble click is deliberately local (see home.js).  These
       // callbacks are only for explicit actions in the expanded card.
@@ -180,7 +180,6 @@ async function mountRoute(root: HTMLDivElement, route: RouteMemory, module: any)
       onWork: navigateHomeWork,
       onAll: () => runtime.navigate({ view: 'all' }), onSearch: () => runtime.navigate({ view: 'search' }),
       onMatters: () => runtime.navigate({ view: 'matters' }), onWorks: () => runtime.navigate({ view: 'works' }),
-      onZhihu: () => runtime.connections('zhihu'), onAgent: () => runtime.connections('agent'),
       onProfile: () => runtime.profile(), onDraft: runtime.onHomeDraft, onCapture: runtime.onCapture,
     });
   }
@@ -266,13 +265,13 @@ const demoActions = [
 ] as const;
 
 function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   if (!completeDemoMode || !snapshot.ready) return null;
   const isCurrent = (item: typeof demoActions[number]) => item.route.view === snapshot.route.view
     && (!('screen' in item.route) || item.route.screen === snapshot.route.screen);
   return <aside className="demo-guide" data-open={open ? 'true' : 'false'} aria-label="完整演示动作清单">
     <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示数据</span><b>6 / 6</b></button>
-    {open && <div className="demo-guide-body"><p>每个动作都有真实产品记录</p><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => runtime.navigate(item.route as RouteMemory)}><span>{index + 1}</span>{item.label}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
+    {open && <div className="demo-guide-body"><p>同一套真实交互 · 数据为合成演示</p><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => runtime.navigate(item.route as RouteMemory)}><span>{index + 1}</span>{item.label}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
   </aside>;
 }
 
@@ -361,8 +360,7 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   const [reduceMotion, setReduceMotion] = useState(Boolean(snapshot.host?.preferences?.reduceMotion));
   useEffect(() => { setName(snapshot.host?.preferences?.displayName || ''); setReduceMotion(Boolean(snapshot.host?.preferences?.reduceMotion)); }, [dialog.type, snapshot.host]);
   if (dialog.type === 'message') return <><p>{dialog.message}</p><footer><RecoveryButton onClick={() => runtime.closeDialog()}>{dialog.confirm ? '取消' : '回到原处'}</RecoveryButton>{dialog.confirm && <RecoveryButton primary onClick={() => { const action = dialog.confirm?.action; runtime.closeDialog(); action?.(); }}>{dialog.confirm.label}</RecoveryButton>}</footer></>;
-  if (dialog.type === 'connections') return <ConnectionCenter selected={dialog.connection || 'zhihu'} demo={completeDemoMode} snapshot={snapshot} />;
-  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '这是与个人内容完全分开的演示空间。这里的内容都是合成演示数据，可以随时恢复。' : browserStorage ? '内容仅保存在当前浏览器，不上传、不跨设备同步。清除网站数据会丢失内容，请定期导出；正式站与各预览地址的数据相互独立。' : '这是你在本机的 Trace 空间。没有开通账号或云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示数据保存在这里' : '你的内容保存在这里'}</h3><p>{snapshot.storage?.location}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p><ZhihuAuthorization demo={completeDemoMode}/><footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
+  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示空间只使用合成数据，与账号和个人内容完全分开，可以随时恢复。' : browserStorage ? '内容仅保存在当前浏览器，不上传、不跨设备同步。清除网站数据会丢失内容，请定期导出；正式站与各预览地址的数据相互独立。' : '这是你在本机的 Trace 空间。没有开通账号或云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示数据保存在这里' : '你的内容保存在这里'}</h3><p>{snapshot.storage?.location}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);
     const linked = snapshot.host?.chain?.sources?.filter((source: any) => source.ownerMatterId === matter?.id) || [];
@@ -383,27 +381,7 @@ async function readApiJson(response: Response, fallback: string): Promise<any> {
   return value;
 }
 
-function ConnectionCenter({ selected, demo, snapshot }: { selected: 'zhihu' | 'agent'; demo: boolean; snapshot: ReturnType<typeof runtime.getSnapshot> }) {
-  const [active, setActive] = useState<'zhihu' | 'agent'>(selected);
-  useEffect(() => setActive(selected), [selected]);
-  const latestMatter = snapshot.host?.chain?.matters?.at?.(-1);
-  const handoff = () => {
-    runtime.closeDialog();
-    if (latestMatter?.id) runtime.navigate({ view: 'chain', matterId: latestMatter.id, screen: 'handoff' });
-    else window.requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('#capture-input')?.focus());
-  };
-  return <section className="web-connection-center">
-    <p className="web-connection-intro">按这一次的需要连接能力。Trace 只会处理你明确选择的内容，不会自动读取账号或把全部记录交给 Agent。</p>
-    <nav className="web-connection-tabs" aria-label="连接能力">
-      <button type="button" aria-current={active === 'zhihu' ? 'page' : undefined} onClick={() => setActive('zhihu')}><span>知乎</span><small>搜索边界与授权</small></button>
-      <button type="button" aria-current={active === 'agent' ? 'page' : undefined} onClick={() => setActive('agent')}><span>原生 Agent</span><small>Codex 工作交接</small></button>
-    </nav>
-    {active === 'zhihu' ? <div className="web-connection-panel"><div className="web-capability-heading"><div><span className="web-capability-kicker">ZHIHU</span><h3>使用知乎内容</h3></div><span className="web-capability-state">连接边界</span></div><p>公开内容检索与个人资料授权是两类不同能力，分别显示真实状态。</p><div className="web-agent-card web-search-capability"><div className="web-agent-monogram" aria-hidden="true">知</div><div><strong>知乎 / 全网搜索</strong><small>公开内容检索</small></div><span>尚未直连</span></div><div className="web-connection-note is-muted"><strong>当前边界</strong><p>当前 Web 不会联网搜索。你仍可以在“找个对照”中手工带入材料，来源和你的判断会保持分开。</p></div><ZhihuAuthorization demo={demo} compact /></div>
-      : <div className="web-connection-panel"><div className="web-capability-heading"><div><span className="web-capability-kicker">NATIVE AGENT</span><h3>把这一件事带到 Codex</h3></div><span className="web-capability-state" data-state="available">可准备交接</span></div><p>Trace 会先整理你明确选择的原话、当前理解与边界，形成一次可检查的上下文。</p><div className="web-agent-card"><div className="web-agent-monogram" aria-hidden="true">C</div><div><strong>Codex</strong><small>原生 Agent · 推荐</small></div><span>尚未直连</span></div><div className="web-connection-note"><strong>现在能做</strong><p>{latestMatter ? `为「${titleOf(latestMatter)}」进入“带去用”，确认交接内容。` : '先留下一点；Trace 会保留原话，再为它准备交接。'}</p></div><div className="web-connection-note is-muted"><strong>连接边界</strong><p>当前 Web 不会直接创建 Codex 任务，也不会伪造执行回执。确认后的上下文可以复制到实际 Agent，结果再由你带回。</p></div><footer><RecoveryButton onClick={() => setActive('zhihu')}>查看知乎能力</RecoveryButton><RecoveryButton primary onClick={handoff}>{latestMatter ? '准备 Codex 交接' : '先留下一点'}</RecoveryButton></footer></div>}
-  </section>;
-}
-
-function ZhihuAuthorization({ demo, compact = false }: { demo: boolean; compact?: boolean }) {
+function ZhihuAuthorization() {
   const [status, setStatus] = useState<ZhihuStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -415,7 +393,7 @@ function ZhihuAuthorization({ demo, compact = false }: { demo: boolean; compact?
       setStatus(await readApiJson(response, '知乎授权状态暂时不可用。')); setError('');
     } catch (cause) { setError(cause instanceof Error ? cause.message : '知乎授权状态暂时不可用。'); }
   };
-  useEffect(() => { if (!demo) void load(); }, [demo]);
+  useEffect(() => { void load(); }, []);
   const start = async () => {
     setBusy(true); setError('');
     try {
@@ -443,10 +421,9 @@ function ZhihuAuthorization({ demo, compact = false }: { demo: boolean; compact?
     } catch (cause) { setError(cause instanceof Error ? cause.message : '没有读到知乎资料。'); }
     finally { setBusy(false); }
   };
-  if (demo) return <section className="web-zhihu-auth"><div className="web-auth-title"><h3>知乎账号</h3><span>演示空间不读取</span></div><p>演示空间不会读取真实账号。进入个人空间后，可以单独授权知乎资料。</p><a href="/app">进入个人空间授权</a></section>;
   const authorized = status?.oauth?.status === 'authorized';
-  const stateLabel = authorized ? '已授权' : status === null && !error ? '正在检查' : status?.oauth?.configured ? '未授权' : '需配置';
-  return <section className="web-zhihu-auth" data-compact={compact ? 'true' : undefined} data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>知乎账号</h3><span>{stateLabel}</span></div><p>{authorized ? '已授权当前浏览器读取你的知乎资料。不会自动导入；只有你明确选择时才读取。' : status?.oauth?.configured ? '连接后可以由你明确读取创作、关注和收藏。它不是 Trace 云账号登录。' : status === null && !error ? '正在核对当前环境的知乎授权能力…' : '授权入口已实现，但当前部署还没有完成后端 Secret 与回调配置。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开授权</RecoveryButton></> : <RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在打开知乎…' : '授权连接知乎'}</RecoveryButton>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>当前接口返回空列表。</p>}<small>只展示本次明确读取的 3 条，没有自动保存到 Trace。</small></div>}<small>{status?.notice || '授权只用于知乎资料访问；Trace 内容仍保存在当前浏览器。'}</small></section>;
+  const stateLabel = authorized ? '已连接' : status === null && !error ? '正在检查' : status?.oauth?.configured ? '未连接' : '服务未配置';
+  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>我的知乎内容</h3><span>{stateLabel}</span></div><p>{authorized ? '当前浏览器可以按你的明确操作读取知乎资料；不会自动导入。' : status?.oauth?.configured ? '连接后可由你明确读取创作、关注和收藏。公开搜索不需要这项授权。' : status === null && !error ? '正在核对当前环境的知乎授权能力…' : '当前部署尚未启用个人知乎资料授权。公开搜索与这项设置彼此独立。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开连接</RecoveryButton></> : <RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在打开知乎…' : '连接我的知乎'}</RecoveryButton>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>当前接口返回空列表。</p>}<small>只展示本次明确读取的 3 条，没有自动保存到 Trace。</small></div>}<small>{status?.notice || '这项连接只用于个人知乎资料；Trace 内容仍保存在当前浏览器。'}</small></section>;
 }
 
 function DialogHost({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {

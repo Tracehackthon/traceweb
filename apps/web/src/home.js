@@ -3,7 +3,7 @@ import { createState, transition, ENTRIES, LAYOUTS, PATHS, NODE_POSITIONS } from
 import { icon, mark } from './home-icons.js'
 import { mountSceneGlass } from './home/scene-glass.js'
 
-export function mountHome({ root = document.querySelector('#app'), snapshot, entries = {}, onOpen, onContinue, onSource, onWork, onAll, onSearch, onCapture, onProfile, onWorks, onMatters, onZhihu, onAgent, onDraft, product = false, assets = {}, services = {} } = {}) {
+export function mountHome({ root = document.querySelector('#app'), snapshot, entries = {}, onOpen, onContinue, onSource, onWork, onAll, onSearch, onCapture, onProfile, onWorks, onMatters, onDraft, product = false, assets = {}, services = {} } = {}) {
 const controller = new AbortController()
 const timers = new Set()
 const setTimeout = (callback, delay) => { const id = window.setTimeout(() => { timers.delete(id); callback() }, delay); timers.add(id); return id }
@@ -21,6 +21,8 @@ if(product) state=createState('overview')
 let actionRevision = 0
 let toastTimer
 let lastFocus
+let captureSource = snapshot?.captureOptions?.source || (snapshot?.completeDemoMode ? 'zhihu' : 'none')
+let captureAgent = snapshot?.captureOptions?.agent || (snapshot?.completeDemoMode ? 'codex-harness' : 'none')
 const drafts = new Map(snapshot?.drafts || [])
 const materials = new Map()
 const animations = new Set()
@@ -53,7 +55,7 @@ mount.innerHTML = `
       <form class="home-composer" id="capture-form">
         <label class="sr-only" for="capture-input">留下一点</label>
         <textarea id="capture-input" rows="1" placeholder="写一句，贴一段，或者带回一个结果……" maxlength="3000"></textarea>
-        <div class="composer-bottom"><div class="source-pills">${product?`<span class="web-capture-hint">原话会先被保留</span><button class="capability-pill" type="button" data-action="zhihu"><span class="capability-icon">${icon('link')}</span><span><strong>知乎</strong><small>连接状态</small></span></button><button class="capability-pill" type="button" data-action="agent"><span class="capability-icon">${icon('play')}</span><span><strong>Codex</strong><small>原生 Agent</small></span></button>`:`<button type="button" data-action="source">${icon('link')}知乎原文</button><button type="button" data-action="project">${icon('layers')}Codex · harness</button>`}</div><button type="submit" class="send-orb" aria-label="留下这段想法" disabled>${icon('arrow')}</button></div>
+        <div class="composer-bottom"><div class="source-pills">${product?`<label class="capture-select"><span class="capability-icon">${icon('search')}</span><span class="sr-only">搜索范围</span><select id="capture-source" name="sourceMode" aria-label="搜索范围"><option value="none" ${captureSource==='none'?'selected':''}>不联网</option><option value="zhihu" ${captureSource==='zhihu'?'selected':''}>知乎搜索</option><option value="web" ${captureSource==='web'?'selected':''}>全网搜索</option></select><span class="select-chevron" aria-hidden="true">⌄</span></label><label class="capture-select"><span class="capability-icon">${icon('play')}</span><span class="sr-only">Agent 引擎</span><select id="capture-agent" name="agentMode" aria-label="Agent 引擎"><option value="none" ${captureAgent==='none'?'selected':''}>不交给 Agent</option><option value="codex-native" ${captureAgent==='codex-native'?'selected':''}>Codex 原生</option><option value="codex-harness" ${captureAgent==='codex-harness'?'selected':''}>Codex Harness</option><option value="custom" ${captureAgent==='custom'?'selected':''}>自定义 Agent</option></select><span class="select-chevron" aria-hidden="true">⌄</span></label>${snapshot?.completeDemoMode?'<span class="capture-demo-state">演示数据 · 未联网</span>':''}`:`<button type="button" data-action="source">${icon('link')}知乎原文</button><button type="button" data-action="project">${icon('layers')}Codex · harness</button>`}</div><button type="submit" class="send-orb" aria-label="留下这段想法" disabled>${icon('arrow')}</button></div>
       </form>
       <svg class="scene-paths" viewBox="0 0 1672 941" aria-hidden="true">
         <defs><linearGradient id="flow-color"><stop offset="0" stop-color="#fff5b0" stop-opacity="0"/><stop offset=".5" stop-color="#e9a733"/><stop offset="1" stop-color="#fff5b0" stop-opacity="0"/></linearGradient><radialGradient id="node-gold"><stop stop-color="#ffc45e"/><stop offset="1" stop-color="#e69c22"/></radialGradient><filter id="node-halo" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="10"/></filter><path id="home-motion-target" d="${fullPath}"/><g id="home-path-targets">${PATHS.overview.map((d,i) => `<path id="home-path-target-${i}" d="${d}"/>`).join('')}</g></defs>
@@ -67,7 +69,7 @@ mount.innerHTML = `
       <div class="scene-bird" id="scene-bird" aria-hidden="true"><img class="bird-perched" src="${assets.birdPerched || '/home/bird-perched.png'}" alt=""/><img class="bird-flying" src="${assets.birdTakeoff || '/home/bird-takeoff.png'}" alt=""/></div>
       <button class="profile-button" data-action="about" type="button" aria-label="${product?'个人与设置':'关于此原型'}">${icon('user')}</button>
       <button class="scene-back" data-action="home" type="button" hidden>${icon('back')}收回到首页</button>
-      <button class="prototype-caption" data-action="${product?'matters':'preview'}" type="button">${product?'在意的事 · 查看脉络 →':'交互原型 · 示例内容 · 仅本次会话'}</button>
+      ${product?'':'<button class="prototype-caption" data-action="preview" type="button">交互原型 · 示例内容 · 仅本次会话</button>'}
       ${product&&!Object.keys(entries).length?'<div class="web-home-empty"><strong>先留下一点，接续就从这里开始。</strong><span>以后，你的原话、对照与工作结果会在同一件事里相遇。</span></div>':''}
     </div>
     <section class="utility-panel" id="utility-panel" aria-labelledby="utility-title" hidden></section>
@@ -341,8 +343,6 @@ listen(mount,'click',event=>{
   if(action==='all'&&onAll){onAll();return}
   if(action==='search'&&onSearch){onSearch();return}
   if(action==='about'&&onProfile){onProfile();return}
-  if(action==='zhihu'&&onZhihu){onZhihu();return}
-  if(action==='agent'&&onAgent){onAgent();return}
   if(action==='project'&&onWorks){onWorks();return}
   if(action==='matters'&&onMatters){onMatters();return}
   if(product && action==='discuss' && onContinue){onContinue(state.active,'discussion');return}
@@ -364,8 +364,19 @@ listen(mount,'submit',event=>{
   event.preventDefault()
   const input=event.target.querySelector('textarea'),text=input.value.trim()
   if(!text)return
-  if(event.target.id==='capture-form'){if(!prototypePreview&&onCapture){onCapture(text);return}input.value='';event.target.querySelector('[type=submit]').disabled=true;dispatch({type:'CAPTURE',text})}
+  if(event.target.id==='capture-form'){if(!prototypePreview&&onCapture){onCapture(text,{source:captureSource,agent:captureAgent});return}input.value='';event.target.querySelector('[type=submit]').disabled=true;dispatch({type:'CAPTURE',text})}
   else{drafts.delete(draftKey());dispatch({type:state.mode==='work'?'RETURN':'GROW',text})}
+})
+listen(mount,'change',event=>{
+  if(event.target.id==='capture-source'){
+    captureSource=event.target.value
+    notify(captureSource==='none'?'这次只保留原话，不联网。':snapshot?.completeDemoMode?`${captureSource==='zhihu'?'知乎搜索':'全网搜索'}使用合成演示数据，没有发起联网请求。`:`已选择${captureSource==='zhihu'?'知乎搜索':'全网搜索'}；原话仍会先保存，未接通时不会伪造结果。`)
+  }
+  if(event.target.id==='capture-agent'){
+    captureAgent=event.target.value
+    const label={none:'这次先不交给 Agent。','codex-native':'Codex 原生','codex-harness':'Codex Harness',custom:'自定义 Agent'}[captureAgent]
+    notify(captureAgent==='none'?label:`已选择 ${label}；提交后先生成可检查的交接，不冒充外部执行。`)
+  }
 })
 listen(mount,'input',event=>{
   if(event.target.id==='home-search'){updateSearch(event.target.value);return}

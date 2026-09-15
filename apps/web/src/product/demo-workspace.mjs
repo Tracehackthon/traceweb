@@ -13,9 +13,16 @@ import {
 } from './bridge.mjs';
 
 export const COMPLETE_DEMO = Object.freeze({
+  version: 2,
   matterId: 'demo:continuity',
   comparisonId: 'demo:comparison',
   workId: 'demo:work',
+  home: Object.freeze({
+    handoffMatterId: 'demo:evidence-handoff',
+    freshMatterId: 'demo:fresh-look',
+    workMatterId: 'demo:work-interface',
+    workId: 'demo:work-interface:work',
+  }),
 });
 
 function chain(host, type, fields = {}) {
@@ -46,6 +53,38 @@ function work(host, type, fields = {}) {
  */
 export function createCompleteDemoWorkspace() {
   let host = createBridge();
+
+  // These three supporting matters make the home scene a faithful, useful
+  // overview rather than a one-card fixture.  They are built through the same
+  // commands as personal content and intentionally precede the primary matter:
+  // homeEntries reverses creation order into thought / work / fresh / handoff.
+  host = captureInput(host, {
+    matterId: COMPLETE_DEMO.home.handoffMatterId,
+    text: '多 Agent 交接时，怎样既保留原始证据，又不让后来生成的结论冒充事实？',
+  });
+  host = dispatchChain(host, { matterId: COMPLETE_DEMO.home.handoffMatterId, action: { type: 'UNDERSTANDING_DRAFT', text: '交接内容要同时带上原话、当前判断、未确认部分和结果回来的入口。' } });
+  host = dispatchChain(host, { matterId: COMPLETE_DEMO.home.handoffMatterId, action: { type: 'SAVE_UNDERSTANDING' } });
+  host = dispatchChain(host, { matterId: COMPLETE_DEMO.home.handoffMatterId, action: { type: 'STOP_DRAFT', text: '还有一个判断等待验证：怎样证明 Agent 使用的是哪一版上下文？' } });
+
+  host = captureInput(host, {
+    matterId: COMPLETE_DEMO.home.freshMatterId,
+    text: '想重新看一段材料，但先不被自己上一次的理解带走。',
+  });
+
+  host = captureInput(host, {
+    matterId: COMPLETE_DEMO.home.workMatterId,
+    text: '工作 UI 如何承接一段正在变化的理解，而不是复制出另一个聊天窗口？',
+  });
+  host = dispatchChain(host, { matterId: COMPLETE_DEMO.home.workMatterId, action: { type: 'UNDERSTANDING_DRAFT', text: '工作现场应保留带入快照、过程发现与结果回流，而不是替 Agent 重做一套界面。' } });
+  host = dispatchChain(host, { matterId: COMPLETE_DEMO.home.workMatterId, action: { type: 'SAVE_UNDERSTANDING' } });
+  host = createWorkFromHandoff(host, {
+    matterId: COMPLETE_DEMO.home.workMatterId,
+    workId: COMPLETE_DEMO.home.workId,
+    destination: { agent: 'Codex Harness', project: 'Trace Web', task: '验证工作现场的承接方式' },
+    role: 'reference',
+    note: '合成演示工作；只建立本地交接记录，未连接或执行外部 Agent。',
+  });
+
   host = captureInput(host, {
     matterId: COMPLETE_DEMO.matterId,
     text: '我收藏了很多内容，却很少真正回来。我在意的也许不是保存，而是以后还能不能接回当时的问题。',
@@ -103,7 +142,7 @@ export function createCompleteDemoWorkspace() {
   host = work(host, 'OPEN_REVISION_REVIEW');
   host = work(host, 'CONFIRM_REVISION');
   host.route = { view: 'home' };
-  host.preferences = { displayName: '演示访客', reduceMotion: false };
-  host.experience = { kind: 'complete-demo', version: 1, synthetic: true };
+  host.preferences = { displayName: '', reduceMotion: false };
+  host.experience = { kind: 'complete-demo', version: COMPLETE_DEMO.version, synthetic: true };
   return host;
 }
