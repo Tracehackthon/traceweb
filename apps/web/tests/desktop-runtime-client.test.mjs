@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { fileURLToPath } from 'node:url'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createRuntimeCapabilityClient, validateRuntimeOrigin } from '../../desktop-pet/src/desktop/runtime-client.mjs'
 
@@ -100,9 +101,12 @@ test('desktop runtime client routes public searches by explicit source', async (
   ])
 })
 
-test('desktop bridge auto-binds the current project and returns a Codex work result without exposing paths', async () => {
+test('desktop bridge auto-binds the current project and returns a Codex work result without exposing paths', async (t) => {
   const calls = []
-  const projectDir = path.resolve(fileURLToPath(new URL('../../..', import.meta.url)))
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-test-'))
+  const projectDir = path.join(fixtureRoot, 'traceweb')
+  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
   let phase = 'empty'
   const baseHost = () => ({
     chain: {
