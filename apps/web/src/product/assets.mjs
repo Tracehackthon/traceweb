@@ -4,7 +4,15 @@
 // server.  Avoid module-relative `../public` URLs: once bundled, those point
 // inside `/assets/` and cause deep-link image flashes.
 const asset = name => new URL(`/${name}`, typeof document === 'undefined' ? 'http://127.0.0.1/' : document.baseURI).href;
-const shared = Object.freeze({birdPerched:asset('home/bird-perched.png'),birdTakeoff:asset('home/bird-takeoff.png'),serifFont:asset('product/fonts/TraceSerif.woff2'),sansFont:asset('product/fonts/TraceSans.ttf'),fullSerifFont:asset('product/fonts/TraceSerif.woff2'),fullSansFont:asset('product/fonts/TraceSans.ttf')});
+const shared = Object.freeze({
+  birdPerched: asset('home/bird-perched.png'),
+  birdTakeoff: asset('home/bird-takeoff.png'),
+  // The fixed faces cover product chrome; unknown/user-entered glyphs use the
+  // declared system fallbacks. Loading the 28 MB source faces on every route
+  // previously starved route chunks on cold production connections.
+  serifFont: asset('home/fonts/TraceHomeSerif-fixed.woff2'),
+  sansFont: asset('home/fonts/TraceHomeSans-fixed.woff2'),
+});
 export const ASSETS = Object.freeze({
   home:{...shared,serifFont:asset('home/fonts/TraceHomeSerif-fixed.woff2'),sansFont:asset('home/fonts/TraceHomeSans-fixed.woff2'),background:asset('home/environment.png')},
   matters:{...shared,serifFont:asset('matters/fonts/TraceMattersSerif-fixed.woff2'),sansFont:asset('matters/fonts/TraceMattersSans-fixed.woff2'),background:asset('matters/environment.png')},
