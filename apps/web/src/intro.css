@@ -47,3 +47,9 @@
 .work-proof>.agent-focus-capture{border:1px solid #a8beb3;box-shadow:0 24px 54px #183c2f30}
 .native-agent-host figure>.agent-focus-capture{border:1px solid #87a095;box-shadow:0 30px 70px #071d173d}
 @media(max-width:760px){.agent-focus-capture .capture-ambient{filter:blur(2.25px) saturate(.68) brightness(.75) contrast(.93)}.format-preview[data-stage] .preview-surface .agent-focus-capture{height:auto;aspect-ratio:1707/1067}}
+
+/* The format preview has legacy image rules; keep both optical layers aligned. */
+.format-preview[data-stage] .preview-surface .agent-focus-capture>img{position:absolute;inset:0;width:100%;height:100%;margin:0;border:0;box-shadow:none;object-fit:cover;object-position:center}
+.format-preview[data-stage] .preview-surface .agent-focus-capture>.capture-ambient{transform:scale(1.012);filter:blur(3px) saturate(.66) brightness(.73) contrast(.92);opacity:.96}
+.format-preview[data-stage] .preview-surface .agent-focus-capture>.capture-focus{filter:saturate(1.04) brightness(1.025) contrast(1.045)}
+@media(max-width:760px){.format-preview[data-stage] .preview-surface .agent-focus-capture>.capture-ambient{filter:blur(2.25px) saturate(.68) brightness(.75) contrast(.93)}}
