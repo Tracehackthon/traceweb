@@ -235,6 +235,15 @@ export function dispatchComparison(host, { sessionId, action } = {}) {
   if (!session) return failure(host, 'unknown_session', '没有找到本次对照。');
   if (action?.type === 'COMMIT_RESULT') return failure(host, 'host_receipt_only', '请从工作现场确认结果；当前内容没有改变。');
   if (action?.type === 'SEARCH') return failure(host, 'capability_missing', '尚未连接搜索；可以粘贴已有材料，不返回演示候选。');
+  if (action?.type === 'IMPORT_MATERIAL' && (action.material?.provider || action.material?.source || action.material?.url != null)) {
+    let parsed;
+    try { parsed = new URL(action.material.url); } catch { parsed = null; }
+    const valid = action.material.provider === 'zhihu' && ['zhihu', 'global'].includes(action.material.source) &&
+      nonempty(action.material.id) && nonempty(action.material.excerpt) && nonempty(action.material.fetchedAt) &&
+      !Number.isNaN(Date.parse(action.material.fetchedAt)) && parsed?.protocol === 'https:' && !parsed.username && !parsed.password &&
+      (action.material.source !== 'zhihu' || parsed.hostname === 'zhihu.com' || parsed.hostname.endsWith('.zhihu.com'));
+    if (!valid) return failure(host, 'invalid_public_source', '这份公开来源缺少可核对的摘要或来路，未加入对照。');
+  }
   const next = copy(host);
   const local = next.comparisons[sessionId];
   local.model = reduceComparison(local.model, action);
@@ -242,20 +251,24 @@ export function dispatchComparison(host, { sessionId, action } = {}) {
     const candidate = selectComparisonView(local.model).selectedCandidate;
     if (candidate && !next.chain.sources.some(source => source.id === candidate.id))
       next.chain.sources.push({ id: candidate.id, title: candidate.title, kind: candidate.kind, excerpt: candidate.excerpt,
-        context: candidate.context, sourceType: candidate.sourceType, url: null, ownerMatterId: local.matterId, origin: 'user-pasted' });
+        context: candidate.context, sourceType: candidate.sourceType, url: candidate.url,
+        ...(candidate.kind === 'external' ? { provider: candidate.provider, source: candidate.source, author: candidate.author,
+          contentType: candidate.contentType, contentMode: candidate.contentMode, fetchedAt: candidate.fetchedAt } : {}),
+        ownerMatterId: local.matterId, origin: candidate.kind === 'external' ? 'provider-result' : 'user-pasted' });
   }
   next.error = null;
   return next;
 }
 
-export function selectComparison(host, sessionId) {
+export function selectComparison(host, sessionId, capability = {}) {
   const local = host.comparisons[sessionId];
   if (!local) return null;
   const view = selectComparisonView(local.model);
   // The imported module hardcodes isDemo:true even for user-only input.
   // This facade has no demo provider/catalog and never mutates the raw reducer's labels.
-  return { ...view, notice: host.error?.message || view.notice, isDemo: false, search: { ...view.search, isDemo: false, provider: 'unconnected',
-    capabilityAvailable: false }, currentUnderstandingVersion: matter(host, local.matterId)?.understandingVersion,
+  const capabilityAvailable = capability.capabilityAvailable === true;
+  return { ...view, notice: host.error?.message || view.notice, isDemo: false, search: { ...view.search, isDemo: false,
+    provider: capabilityAvailable ? capability.provider || 'connected' : 'unconnected', capabilityAvailable }, currentUnderstandingVersion: matter(host, local.matterId)?.understandingVersion,
     returnTarget: copy(local.returnTarget), hostError: copy(host.error) };
 }
 

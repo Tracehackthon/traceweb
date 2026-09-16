@@ -2,7 +2,7 @@ import * as B from '../product/bridge.mjs';
 import { workspaceRequest, storageLabel } from './workspace-storage';
 import { homeEntries, mattersView, recordsOf, titleOf } from '../product/library.mjs';
 import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
-import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork } from './capability-client';
+import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork, searchPublic } from './capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -475,7 +475,13 @@ export class WebRuntime {
       value = B.selectChain(this.host, this.route.matterId);
       if (value && this.route.anchor?.field === 'originalText') value.focus = this.route.anchor;
     }
-    if (this.route.view === 'compare') value = B.selectComparison(this.host, this.route.sessionId);
+    if (this.route.view === 'compare') {
+      value = B.selectComparison(this.host, this.route.sessionId, {
+        capabilityAvailable: !completeDemoMode,
+        provider: hasNativeCapabilityBridge() ? 'native' : 'web',
+      });
+      if (value) value.pending = Boolean(value.pending || this.busy);
+    }
     if (this.route.view === 'worksite') value = this.selectWorksite();
     if (value) {
       value.notice = (value.notice || '').replaceAll('本次会话', '本机').replaceAll('本地原型', '本地记录');
@@ -658,6 +664,7 @@ export class WebRuntime {
   onComparisonAction = (action: any): void => {
     if (this.busy || !this.host || !this.route.sessionId) return;
     const sessionId = this.route.sessionId;
+    if (action.type === 'SEARCH') { void this.searchComparison(sessionId); return; }
     const change = (state: any) => B.dispatchComparison(state, { sessionId, action });
     if (/_DRAFT$|_PATCH$/.test(action.type)) {
       const next = change(this.host); if (next.error) { this.message(next.error.message); return; }
@@ -689,6 +696,64 @@ export class WebRuntime {
     }
     void this.commit(change);
   };
+
+  private async searchComparison(sessionId: string): Promise<void> {
+    if (this.busy || !this.host || completeDemoMode) return;
+    const current = B.selectComparison(this.host, sessionId, { capabilityAvailable: true, provider: hasNativeCapabilityBridge() ? 'native' : 'web' });
+    const question = String(current?.query?.question || '').trim();
+    const instructions = String(current?.query?.instructions || '').trim();
+    if (!question) { this.message('先写下这次想弄清楚的问题。'); return; }
+    const query = [question, instructions].filter(Boolean).join('；');
+    this.busy = true;
+    this.emit();
+    try {
+      await this.flush();
+      const result = await searchPublic('zhihu', query, 5);
+      const items = (Array.isArray(result?.items) ? result.items : []).filter((item: any) => {
+        if (!item || item.provider !== 'zhihu' || item.source !== 'zhihu' || !String(item.id || '').trim() || !String(item.excerpt || '').trim()) return false;
+        if (['__proto__', 'constructor', 'prototype'].includes(item.id)) return false;
+        try {
+          const url = new URL(item.url);
+          return url.protocol === 'https:' && !url.username && !url.password && (url.hostname === 'zhihu.com' || url.hostname.endsWith('.zhihu.com'));
+        } catch { return false; }
+      });
+      if (!items.length) {
+        this.message('这次没有找到可核对的知乎公开内容。可以换一种说法，或直接粘贴已有材料。');
+        return;
+      }
+      let next = this.host;
+      for (const item of items) {
+        const url = new URL(item.url).href;
+        next = B.dispatchComparison(next, { sessionId, action: { type: 'IMPORT_MATERIAL', material: {
+          id: item.id,
+          title: String(item.title || '').trim() || '知乎公开内容',
+          excerpt: String(item.excerpt).trim(),
+          context: `知乎公开搜索摘要${item.author ? ` · 作者：${String(item.author).trim()}` : ''}；请沿原文核对，关系尚待确认。`,
+          sourceType: '知乎公开内容',
+          url,
+          provider: 'zhihu',
+          source: 'zhihu',
+          author: String(item.author || '').trim(),
+          contentType: String(item.content_type || 'unknown'),
+          contentMode: String(item.content_mode || 'summary'),
+          fetchedAt: String(item.fetched_at || ''),
+        } } });
+        if (next.error) throw new Error(next.error.message || '搜索结果未能加入本次对照。');
+      }
+      next = B.dispatchComparison(next, { sessionId, action: { type: 'BACK_TO_CANDIDATES' } });
+      if (next.error) throw new Error(next.error.message || '搜索结果未能打开。');
+      await this.save(next);
+      this.host = next;
+      this.saved = ++this.dirty;
+      this.setPreferences();
+      this.emit();
+    } catch (cause) {
+      if (!this.pendingPayload) this.message(cause instanceof Error ? cause.message : '知乎搜索暂时没有完成，可以稍后重试。');
+    } finally {
+      this.busy = false;
+      this.emit();
+    }
+  }
 
   onReturnComparison = (): void => {
     if (!this.route.sessionId) return;

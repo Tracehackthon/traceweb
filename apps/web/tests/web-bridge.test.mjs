@@ -422,14 +422,48 @@ test('host can preserve verified Zhihu snapshot provenance without adopting its 
   assert.equal(current(h).observations.length, 0);
 });
 
-test('no fake search capability or externally readable URL', () => {
+test('pure bridge does not fake search, but host-verified external results remain selectable with provenance', () => {
   let h = comparison();
   h = xd(h, 'SEARCH');
   assert.equal(h.error.code, 'capability_missing');
   assert.deepEqual(selectComparison(h, 'cmp:1').candidates, []);
   assert.equal(selectComparison(h, 'cmp:1').search.capabilityAvailable, false);
-  h = xd(h, 'IMPORT_MATERIAL', { material: { excerpt: 'some text', url: 'https://example.invalid' } });
-  assert.equal(h.chain.sources.length, 0);
+  assert.equal(selectComparison(h, 'cmp:1', { capabilityAvailable: true, provider: 'native' }).search.capabilityAvailable, true);
+
+  const invalid = xd(comparison(), 'IMPORT_MATERIAL', { material: {
+    id: 'external:wrong-host', title: '错误来路', excerpt: '不能把其他站点冒充知乎结果。', url: 'https://example.invalid/result',
+    provider: 'zhihu', source: 'zhihu', contentType: 'answer', contentMode: 'summary', fetchedAt: '2026-09-17T00:00:00.000Z',
+  } });
+  assert.equal(invalid.error.code, 'invalid_public_source');
+  assert.equal(invalid.chain.sources.length, 0);
+
+  h = comparison();
+  h = xd(h, 'IMPORT_MATERIAL', { material: {
+    id: 'external:zhihu-answer-2', title: 'AI Agent 应该怎样管理 Git 分支', excerpt: '让 Agent 先在命名分支工作，再经过审查合并。',
+    context: '知乎公开搜索摘要；关系尚待确认。', sourceType: '知乎公开内容', url: 'https://www.zhihu.com/question/1/answer/2',
+    provider: 'zhihu', source: 'zhihu', author: '答主', contentType: 'answer', contentMode: 'summary', fetchedAt: '2026-09-17T00:00:00.000Z',
+  } });
+  h = xd(h, 'IMPORT_MATERIAL', { material: {
+    id: 'external:zhihu-answer-3', title: '团队如何约束自动提交', excerpt: '先限制默认分支写入，再给自动化单独的合并入口。',
+    context: '知乎公开搜索摘要；关系尚待确认。', sourceType: '知乎公开内容', url: 'https://www.zhihu.com/question/1/answer/3',
+    provider: 'zhihu', source: 'zhihu', author: '另一位答主', contentType: 'answer', contentMode: 'summary', fetchedAt: '2026-09-17T00:00:00.000Z',
+  } });
+  h = xd(h, 'BACK_TO_CANDIDATES');
+  const view = selectComparison(h, 'cmp:1', { capabilityAvailable: true, provider: 'native' });
+  assert.equal(view.screen, 'candidates');
+  assert.equal(view.candidates.length, 2);
+  assert.equal(view.candidates[0].kind, 'external');
+  assert.equal(view.candidates[0].url, 'https://www.zhihu.com/question/1/answer/2');
+  assert.equal(view.candidates[0].sourceLabel, '联网来源 · 知乎公开内容');
+  assert.equal(h.chain.sources[0].id, 'external:zhihu-answer-2');
+  assert.equal(h.chain.sources[0].origin, 'provider-result');
+  assert.equal(h.chain.sources[0].provider, 'zhihu');
+  assert.equal(h.chain.sources[0].source, 'zhihu');
+  assert.equal(h.chain.sources[0].author, '答主');
+  assert.equal(h.chain.sources[0].url, 'https://www.zhihu.com/question/1/answer/2');
+  assert.equal(h.chain.sources[0].ownerMatterId, ID);
+  assert.equal(current(h).understanding, BEFORE);
+  assert.deepEqual(current(h).sources, []);
 });
 
 test('return mismatch, stale anchor, invalid range and unsaved draft reject before opening', () => {
