@@ -88,7 +88,7 @@ const server = http.createServer(async (request, response) => {
   // belong to the SPA; only concrete files should bypass the history fallback.
   if (asset && staticRoot === distRoot && !path.extname(pathname) && (!fs.existsSync(asset) || fs.statSync(asset).isDirectory())) asset = path.join(staticRoot, 'index.html')
   const allowedAsset = asset && (staticRoot === distRoot
-    ? (asset === path.join(staticRoot, 'index.html') || asset === path.join(staticRoot, 'legacy.html') || ['assets', 'public', 'home', 'matters', 'product', 'decor', 'evidence', 'scene', 'real', 'fonts', 'video'].some((directory) => asset.startsWith(path.join(staticRoot, directory) + path.sep)))
+    ? (asset === path.join(staticRoot, 'index.html') || asset === path.join(staticRoot, 'legacy.html') || ['assets', 'public', 'home', 'matters', 'product', 'decor', 'showcase', 'brand', 'scene', 'real', 'fonts', 'video'].some((directory) => asset.startsWith(path.join(staticRoot, directory) + path.sep)))
     : (['index.html','legacy.html'].includes(path.basename(asset)) && path.dirname(asset) === root || asset.startsWith(path.join(root,'src') + path.sep) || asset.startsWith(path.join(root,'public') + path.sep)))
   if (!allowedAsset || !fs.existsSync(asset) || !fs.statSync(asset).isFile()) {
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })

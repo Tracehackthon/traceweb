@@ -41,3 +41,17 @@ test('public product copy avoids internal proof and implementation language', as
     '实现完成不等于真实使用有效',
   ]) assert.equal(text.includes(phrase), false, `不应向用户展示内部文案：${phrase}`);
 });
+
+test('product introduction uses current captures, current icon and native-Agent framing', async () => {
+  const intro = await readFile(new URL('../src/intro-main.tsx', import.meta.url), 'utf8');
+  const video = await readFile(new URL('../src/video-main.tsx', import.meta.url), 'utf8');
+  assert.match(intro, /\/showcase\/desktop-zhihu-results\.jpg/);
+  assert.match(intro, /\/showcase\/trace-result-detail\.png/);
+  assert.match(intro, /\/brand\/trace-app-icon-64\.png/);
+  assert.match(intro, /Codex 原生/);
+  assert.match(intro, /Codex Harness/);
+  assert.match(intro, /自定义 Agent/);
+  assert.equal(intro.includes('/evidence/'), false);
+  assert.match(video, /本机 Agent/);
+  assert.match(video, /以 Codex 为例/);
+});

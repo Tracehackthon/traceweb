@@ -74,3 +74,6 @@
   .scene[data-viewport=compact] .capture-demo-state small{font-size:8.5px}
   .scene[data-viewport=compact] .home-composer .send-orb{right:14px;bottom:14px}
 }
+/* Shared current Trace icon. */
+.brand-tile,.wordmark .brand-tile{background:#f7faf7;border:1px solid #cfe0d8;box-shadow:0 6px 16px #174b3b18}
+.brand-tile .trace-app-icon,.wordmark .trace-app-icon{display:block;width:34px;height:34px;object-fit:contain}

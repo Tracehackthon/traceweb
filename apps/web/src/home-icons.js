@@ -17,4 +17,4 @@ const paths = {
   more: '<circle cx="4" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="20" cy="12" r="1"/>',
 }
 export function icon(name, cls = '') { return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.file}</svg>` }
-export const mark = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 11V7a3 3 0 1 0-3 3h16a3 3 0 1 0-3-3v18a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3V11Z"/></svg>'
+export const mark = '<img class="trace-app-icon" src="/brand/trace-app-icon-64.png" alt="" aria-hidden="true">'
