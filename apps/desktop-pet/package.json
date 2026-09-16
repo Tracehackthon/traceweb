@@ -1,6 +1,6 @@
 {
   "name": "@trace/desktop-pet",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "author": "Trace",
   "description": "Trace UI V1 for DeepSeek Harness Web and the native desktop overlay",
@@ -38,8 +38,8 @@
     "desktop": "npm run build && electron lib/desktop/main.mjs",
     "desktop:start": "electron lib/desktop/main.mjs",
     "runtime:stage": "node ../../scripts/stage-desktop-runtime.mjs",
-    "dist:win": "npm run runtime:stage && npm run build && electron-builder --win nsis --x64",
-    "pack:win": "npm run runtime:stage && npm run build && electron-builder --win dir --x64"
+    "dist:win": "npm run runtime:stage && npm run build && node ../../scripts/audit-desktop-package.mjs && electron-builder --win nsis --x64",
+    "pack:win": "npm run runtime:stage && npm run build && node ../../scripts/audit-desktop-package.mjs && electron-builder --win dir --x64"
   },
   "dependencies": {},
   "devDependencies": {
@@ -56,13 +56,18 @@
     "appId": "store.neutrom.trace.desktop",
     "productName": "Trace",
     "artifactName": "Trace-Desktop-${version}-Setup.${ext}",
+    "compression": "maximum",
     "asar": true,
     "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "release"
     },
+    "electronLanguages": [
+      "en-US",
+      "zh-CN"
+    ],
     "files": [
-      "lib/**/*",
+      "lib/desktop/**/*",
       "package.json"
     ],
     "extraMetadata": {

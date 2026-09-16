@@ -8,7 +8,30 @@ const root = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(root, 'lib')
 const desktopOutDir = resolve(outDir, 'desktop')
 const discussionSourceDir = resolve(root, '../web')
+const discussionPublicDir = resolve(discussionSourceDir, 'public')
 const packageId = 'dsh-trace'
+const desktopPublicAssets = [
+  'favicon.ico',
+  'site.webmanifest',
+  'brand/trace-app-icon-16.png',
+  'brand/trace-app-icon-32.png',
+  'brand/trace-app-icon-64.png',
+  'brand/trace-app-icon-192.png',
+  'brand/trace-app-icon-512.png',
+  'home/bird-perched.png',
+  'home/bird-takeoff.png',
+  'home/fonts/TraceHomeSans-fixed.woff2',
+  'home/fonts/TraceHomeSerif-fixed.woff2',
+  'home/licenses/OFL-noto-sans-sc.txt',
+  'home/licenses/OFL-source-han-serif-cn.txt',
+  'matters/fonts/TraceMattersSans-fixed.woff2',
+  'matters/fonts/TraceMattersSerif-fixed.woff2',
+  'matters/licenses/OFL-noto-sans-sc.txt',
+  'matters/licenses/OFL-source-han-serif-cn.txt',
+  'decor/trace-orbit.svg',
+  'decor/trace-pebbles.svg',
+  'decor/trace-sprig.svg',
+]
 
 await rm(outDir, { recursive: true, force: true })
 await mkdir(outDir, { recursive: true })
@@ -61,7 +84,8 @@ await build({
   platform: 'browser',
   target: 'chrome140',
   loader: { '.css': 'text', '.png': 'dataurl' },
-  sourcemap: true,
+  minify: true,
+  sourcemap: false,
   legalComments: 'none',
 })
 
@@ -81,6 +105,7 @@ const discussionOutDir = resolve(desktopOutDir, 'discussion')
 await viteBuild({
   root: discussionSourceDir,
   configFile: resolve(discussionSourceDir, 'vite.config.ts'),
+  publicDir: false,
   base: './',
   define: { 'import.meta.env.VITE_TRACE_STORAGE': JSON.stringify('browser') },
   build: {
@@ -90,6 +115,12 @@ await viteBuild({
     rollupOptions: { input: resolve(discussionSourceDir, 'index.html') },
   },
 })
+
+await Promise.all(desktopPublicAssets.map(async (relative) => {
+  const destination = resolve(discussionOutDir, relative)
+  await mkdir(dirname(destination), { recursive: true })
+  await copyFile(resolve(discussionPublicDir, relative), destination)
+}))
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 console.log(`Built ${manifest.name}@${manifest.version}`)
