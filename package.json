@@ -15,6 +15,7 @@
     "build:pet": "npm --prefix apps/desktop-pet run build",
     "desktop:pet": "npm --prefix apps/desktop-pet run desktop",
     "test:browser-storage": "node scripts/browser-storage-e2e.cjs",
+    "test:demo-storage": "node scripts/demo-storage-compat-e2e.cjs",
     "test": "npm --prefix apps/web test",
     "test:e2e": "node scripts/product-e2e.cjs",
     "test:experience": "node scripts/experience-e2e.cjs",
