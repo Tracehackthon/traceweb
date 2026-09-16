@@ -219,13 +219,21 @@ function RecoveryButton({ children, primary = false, className, ...props }: Reac
 }
 
 function StatusBar({ snapshot }: { snapshot: WorkspaceSnapshot }) {
+  const nativeConnected = hasNativeCapabilityBridge();
+  const statusText = (() => {
+    if (!nativeConnected) return snapshot.status.text;
+    if (snapshot.status.state === 'loading') return '桌宠已连接 · 正在读取本机应用数据…';
+    if (snapshot.status.state === 'saving') return '桌宠已连接 · 正在保存到本机应用…';
+    if (snapshot.status.state === 'saved') return '桌宠已连接 · 内容已保存在本机应用';
+    return `桌宠已连接 · ${snapshot.status.text}`;
+  })();
   const exportRecovery = () => {
     const value = { revision: snapshot.revision, host: snapshot.host, unsaved: snapshot.pending };
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `Trace-recovery-${Date.now()}.json`; link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  return <aside className="web-status" data-state={snapshot.status.state} role="status" aria-live="polite"><i /><span>{snapshot.status.text}</span>{snapshot.status.state === 'error' && <><RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton><RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton><RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton></>}</aside>;
+  return <aside className="web-status" data-state={snapshot.status.state} data-native={nativeConnected ? 'connected' : undefined} role="status" aria-live="polite" title={nativeConnected ? '桌宠与主窗口正在使用同一份当前会话数据' : undefined}><i /><span>{statusText}</span>{snapshot.status.state === 'error' && <><RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton><RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton><RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton></>}</aside>;
 }
 
 function returnLabel(route: RouteMemory): string {

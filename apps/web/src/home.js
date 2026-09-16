@@ -32,6 +32,10 @@ const bubblePaths = [
   'M105 13 C256 -5 394 33 534 22 C721 0 849 -6 936 70 C1018 139 1007 232 911 276 C794 307 634 272 480 281 C265 293 127 266 48 215 C-14 160 5 43 105 13Z',
 ]
 const fullPath = 'M68 4 C267 -3 740 6 928 6 C981 6 998 43 996 86 L996 232 C996 282 970 297 914 296 L85 296 C23 299 3 273 4 227 L4 78 C3 34 19 12 68 4Z'
+const DETAIL_BOUNDS = {
+  thinking: { left: 462, top: 336, width: 805, height: 522 },
+  work: { left: 474, top: 350, width: 773, height: 480 },
+}
 const foot = { overview: [443,407], thinking: [521,379], growth: [867,521], work: [896,344], return: [1210,485] }
 
 document.title = 'Trace · 把此刻的一点，带到以后'
@@ -104,8 +108,9 @@ function motionBox(mode, id) {
   return LAYOUTS[mode]?.[id] || LAYOUTS.overview[id] || LAYOUTS.overview.thought
 }
 function motionGeometry(mode, id, expanded) {
+  const detail = DETAIL_BOUNDS[mode === 'work' ? 'work' : 'thinking']
   const box = expanded
-    ? (mode === 'work' ? { x: 474, y: 350, w: 773, h: 548 } : { x: 462, y: 336, w: 805, h: 522 })
+    ? { x: detail.left, y: detail.top, w: detail.width, h: detail.height }
     : motionBox('overview', id)
   const origin = motionNodeAt('overview', id)
   const destination = expanded ? (foot[mode] || foot.thinking) : origin
@@ -198,7 +203,7 @@ function detailsMarkup() {
   const work = state.mode === 'work'
   const title = work ? selectedEntry().title : currentTitle()
   let rows
-  if (work) rows = row('file','带入工作的判断',state.insight || '工作界面不应该复制一个新的 Agent，而应该显示原生 Agent 当前工作的区域，以及被带入工作的沉淀内容。') + row('message','工作中发生了什么','新的首页方案已经形成，但还没有表现一条思考如何被重新拿起。') + row('sprout','尚未做出的判断','气泡应该原位展开，还是进入独立的详情空间？')
+  if (work) rows = row('file','带入工作的判断',state.insight || '工作界面不应该复制一个新的 Agent，而应该显示原生 Agent 当前工作的区域，以及被带入工作的沉淀内容。') + row('message','工作中发生了什么','新的首页方案已经形成，但还没有表现一条思考如何被重新拿起。') + row('sprout','下一步判断','气泡应该原位展开，还是进入独立的详情空间？')
   else if (state.captured || state.active !== 'thought' || entries[state.active]) rows = row('clock','上次停在',originalContext()) + row('message','为什么现在回来','这件事还没有结束。把此刻出现的感受，接回它原来的现场。') + row('sprout','此刻的变化','你可以继续补充，也可以写下一个新的理解；原型不会替你自动采用判断。')
   else rows = row('clock','上次停在','我还无法判断，自己想保留的是个人表达，还是文章中的原始现场。') + row('message','为什么现在回来','你刚刚收藏了一篇相关回答，其中再次出现了收藏之后很少重新使用的问题。') + row('sprout','此刻的变化','之前关注的是怎样保存，现在可能真正的问题是：什么情形会让它重新出现。')
   return `<div class="detail-topline"><span class="detail-status ${work?'warm-status':''}"><i></i>${work?'正在接续工作':'正在接续'}</span><button type="button" class="detail-close" data-action="home" aria-label="收起详情">${icon('close')}</button></div>
@@ -206,7 +211,7 @@ function detailsMarkup() {
     ${work?`<div class="work-meta"><span>${icon('box')}项目 · harness</span><span>${icon('layers')}Agent · Codex</span><span>${icon('clock')}刚有新变化</span></div>`:''}
     <div class="detail-context">${rows}</div>
     <form id="detail-form" class="detail-composer"><label for="detail-input" class="sr-only">${work?'带回工作结果':'接着这里说'}</label><span class="input-link">${icon('link')}</span><textarea id="detail-input" rows="1" maxlength="3000" placeholder="${work?'补充实践发现，或者把结果带回来……':'接着这里说，或者带回一个新的变化……'}">${escape(drafts.get(draftKey())||'')}</textarea><button class="send-orb" type="submit" aria-label="${work?'带回结果':'形成新的理解'}" ${drafts.get(draftKey())?.trim()?'':'disabled'}>${icon('arrow')}</button></form>
-    <div class="detail-actions">${work?`<button type="button" data-action="native-work">${icon('play')}回到 Codex 继续</button><button type="button" data-action="reconsider">${icon('layers')}更新判断</button><button type="button" data-action="result-input">${icon('briefcase')}带回结果</button>`:`<button type="button" data-action="discuss">${icon('play')}继续想</button><button type="button" data-action="source">${icon('layers')}查看原现场</button><button type="button" data-action="work">${icon('briefcase')}带去工作</button>`}</div>`
+    <div class="detail-actions">${work?`<button type="button" data-action="native-work">${icon('play')}查看完整工作</button><button type="button" data-action="reconsider">${icon('layers')}更新判断</button><button type="button" data-action="result-input">${icon('briefcase')}带回结果</button>`:`<button type="button" data-action="discuss">${icon('play')}继续想</button><button type="button" data-action="source">${icon('layers')}查看原现场</button><button type="button" data-action="work">${icon('briefcase')}带去工作</button>`}</div>`
 }
 
 function render(immediate=false, oldState=null) {
@@ -251,7 +256,7 @@ function render(immediate=false, oldState=null) {
     $('#detail-content').style.removeProperty('opacity')
     $('#detail-content').innerHTML=detailsMarkup()
     detail.classList.toggle('work-detail',state.mode==='work')
-    const dest=state.mode==='work'?{left:474,top:350,width:773,height:548}:{left:462,top:336,width:805,height:522}
+    const dest=DETAIL_BOUNDS[state.mode==='work'?'work':'thinking']
     if(!immediate && oldState && !['thinking','work'].includes(oldState.mode)) {
       const origin=LAYOUTS[oldState.mode][state.active] || LAYOUTS.overview.thought
       Object.assign(detail.style,{left:`${origin[0]}px`,top:`${origin[1]}px`,width:`${origin[2]}px`,height:`${origin[3]}px`})
@@ -349,6 +354,8 @@ listen(mount,'click',event=>{
   if(product && action==='resume' && onContinue){onContinue(state.active,'resume');return}
   if(product && action==='source' && onSource){onSource(state.active);return}
   if(product && action==='work' && onWork){onWork(state.active);return}
+  if(product && action==='native-work' && onWork){onWork(state.active);return}
+  if(product && action==='reconsider' && onContinue){onContinue(state.active,'understanding');return}
   if(['search','all','project','source','about','preview'].includes(action)){openUtility(action);return}
   if(action==='home')dispatch({type:'CLOSE'})
   if(action==='close-utility')closeUtility()
