@@ -159,7 +159,7 @@
 }
 
 .trace-reminder-bubble {
-  position: fixed;
+  position: absolute;
   box-sizing: border-box;
   z-index: 6;
   display: grid;

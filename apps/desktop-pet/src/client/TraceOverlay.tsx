@@ -244,7 +244,7 @@ function getOrbitPositions(petPosition: PetPosition, viewport: Viewport, items: 
   })
 }
 
-function getReminderPlacement(petPosition: PetPosition, viewport: Viewport): ReminderPlacement {
+function getReminderPlacement(petPosition: PetPosition, viewport: Viewport, preferredSide?: ReminderPlacement['side']): ReminderPlacement {
   const width = Math.max(0, Math.min(232, viewport.width - 32))
   const height = 72
   const gap = 42
@@ -254,30 +254,29 @@ function getReminderPlacement(petPosition: PetPosition, viewport: Viewport): Rem
   }
   const clampLeft = (left: number) => Math.min(Math.max(16, left), Math.max(16, viewport.width - width - 16))
   const clampTop = (top: number) => Math.min(Math.max(16, top), Math.max(16, viewport.height - height - 16))
-  const avoidReadingCenter = (left: number) => {
-    const centerStart = viewport.width * .42
-    const centerEnd = viewport.width * .58
-    const overlapsReadingZone = left < centerEnd && left + width > centerStart
-    if (!overlapsReadingZone) return clampLeft(left)
-    const pushedLeft = petCenter.x < viewport.width / 2
-      ? centerEnd + 18
-      : centerStart - width - 18
-    return clampLeft(pushedLeft)
-  }
   const top = petPosition.y - gap - height
-  if (top >= 16) {
-    return { side: 'top', style: { left: `${avoidReadingCenter(petCenter.x - width / 2)}px`, top: `${top}px`, width: `${width}px` } }
-  }
   const bottom = petPosition.y + petSize.height + gap
-  if (bottom + height <= viewport.height - 16) {
-    return { side: 'bottom', style: { left: `${avoidReadingCenter(petCenter.x - width / 2)}px`, top: `${bottom}px`, width: `${width}px` } }
-  }
+  const side = preferredSide ?? (top >= 16 ? 'top' : bottom + height <= viewport.height - 16 ? 'bottom' : 'inside')
+  const globalLeft = clampLeft(petCenter.x - width / 2)
+  const toRelativeStyle = (globalTop: number): CSSProperties => ({
+    left: `${globalLeft - petPosition.x}px`,
+    top: `${clampTop(globalTop) - petPosition.y}px`,
+    width: `${width}px`,
+  })
+
+  if (side === 'top') return { side, style: toRelativeStyle(top) }
+  if (side === 'bottom') return { side, style: toRelativeStyle(bottom) }
+
   const inwardLeft = petCenter.x < viewport.width / 2
     ? petPosition.x + petSize.width + 18
     : petPosition.x - width - 18
   return {
     side: 'inside',
-    style: { left: `${clampLeft(inwardLeft)}px`, top: `${clampTop(petCenter.y - height / 2)}px`, width: `${width}px` },
+    style: {
+      left: `${clampLeft(inwardLeft) - petPosition.x}px`,
+      top: `${clampTop(petCenter.y - height / 2) - petPosition.y}px`,
+      width: `${width}px`,
+    },
   }
 }
 
@@ -339,6 +338,7 @@ export function TraceOverlay() {
   const [discussionNotice, setDiscussionNotice] = useState('')
   const [capabilities, setCapabilities] = useState<any>({ connected: false, loading: true })
   const [reminder, setReminder] = useState<TraceReminder | null>(null)
+  const [reminderSide, setReminderSide] = useState<ReminderPlacement['side'] | null>(null)
   const [panelPosition, setPanelPosition] = useState<PetPosition | null>(null)
   const [hugging, setHugging] = useState(false)
   // Idle and reminder states are calm, fixed-frame sitting. The low crawling
@@ -392,6 +392,14 @@ export function TraceOverlay() {
   useEffect(() => {
     openRef.current = open
   }, [open])
+
+  useEffect(() => {
+    if (!reminder) {
+      if (reminderSide) setReminderSide(null)
+      return
+    }
+    if (!reminderSide) setReminderSide(getReminderPlacement(petPosition ?? getDefaultPetPosition(viewport), viewport).side)
+  }, [reminder?.text, reminderSide, petPosition, viewport])
 
   useEffect(() => {
     // Only the intentional crawl step cycles bitmap frames. Sitting stays on
@@ -473,7 +481,7 @@ export function TraceOverlay() {
     }
     lastPetCenterXRef.current = centerX
   }, [currentPetPosition.x, viewport.width])
-  const reminderPlacement = getReminderPlacement(currentPetPosition, viewport)
+  const reminderPlacement = getReminderPlacement(currentPetPosition, viewport, reminderSide ?? undefined)
   const quickComposerPlacement = getQuickComposerPlacement(currentPetPosition, viewport)
   const defaultCompactPanelPosition = getDefaultPanelPosition(currentPetPosition, viewport)
   const defaultPanelPosition = panelMode === 'compact'
@@ -841,6 +849,7 @@ export function TraceOverlay() {
     if (!reminder) return
     openPanel(reminder.observationId)
     setReminder(null)
+    setReminderSide(null)
   }
 
   const togglePanelMode = () => {
@@ -862,7 +871,7 @@ export function TraceOverlay() {
             <span className="trace-reminder-kicker">Trace 提醒</span>
             <strong>{reminder.text}</strong>
           </button>
-          <button className="trace-reminder-close" type="button" onClick={() => setReminder(null)} aria-label="关闭本次提醒">×</button>
+          <button className="trace-reminder-close" type="button" onClick={() => { setReminder(null); setReminderSide(null) }} aria-label="关闭本次提醒">×</button>
         </div>
       )}
       {open && (
