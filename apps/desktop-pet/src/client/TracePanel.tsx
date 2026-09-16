@@ -10,6 +10,7 @@ type TracePanelProps = {
   onCandidateAction: (status: CandidateStatus) => void
   onContinue: () => void
   onClose: () => void
+  onToggleSize: () => void
   discussionNotice: string
   onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void
   onHeaderPointerMove?: (event: ReactPointerEvent<HTMLElement>) => void
@@ -43,6 +44,7 @@ export function TracePanel({
   onCandidateAction,
   onContinue,
   onClose,
+  onToggleSize,
   discussionNotice,
   onHeaderPointerDown,
   onHeaderPointerMove,
@@ -153,9 +155,14 @@ export function TracePanel({
           <h2>先接住，再想清楚</h2>
           <p>不用现在分类，先把现场留在这里。</p>
         </div>
-        <button className="trace-icon-button" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={onClose} aria-label="收起 Trace">
-          ×
-        </button>
+        <div className="trace-panel-window-actions" onPointerDown={(event) => event.stopPropagation()}>
+          <button className="trace-panel-size-button" type="button" onClick={onToggleSize} aria-label={compact ? '展开为大悬浮窗' : '缩为小悬浮窗'}>
+            <span aria-hidden="true">{compact ? '展开' : '缩小'}</span>
+          </button>
+          <button className="trace-icon-button" type="button" onClick={onClose} aria-label="返回气泡视图">
+            ×
+          </button>
+        </div>
       </header>
 
       <section className="trace-section trace-capture-section">

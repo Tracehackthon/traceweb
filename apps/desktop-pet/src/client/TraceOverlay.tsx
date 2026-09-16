@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import React, { useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import crawlAImage from './assets/pet/crawl_A.png'
 import crawlBImage from './assets/pet/crawl_B.png'
 import sitAImage from './assets/pet/sit_A.png'
@@ -36,6 +36,7 @@ type TraceNativeBridge = {
   onCandidate?: (listener: (payload: DesktopCandidatePayload) => void) => (() => void) | undefined
 }
 type ReminderPlacement = { side: 'top' | 'bottom' | 'inside'; style: CSSProperties }
+type QuickComposerPlacement = { side: 'left' | 'right' | 'top'; style: CSSProperties }
 type PetPose = 'crawl' | 'sit'
 type PetFacing = 'left' | 'right'
 type PoseTransition = 'to-crawl' | 'to-sit'
@@ -52,7 +53,7 @@ type OrbitPosition = {
 }
 type OrbitItem =
   | { id: string; kind: 'observation'; observation: Observation }
-  | { id: string; kind: 'guide' | 'capture'; kicker: string; title: string; detail: string; tone: string; action: 'capture' | 'focus-first' }
+  | { id: string; kind: 'guide' | 'capture'; kicker: string; title: string; detail: string; tone: string; action: 'capture' | 'focus-first' | 'quick' }
 
 const reminderTemplates = [
   { observationId: 'evidence-traceability', suffix: '还在待确认，要看看吗？' },
@@ -280,10 +281,56 @@ function getReminderPlacement(petPosition: PetPosition, viewport: Viewport): Rem
   }
 }
 
+function getQuickComposerPlacement(petPosition: PetPosition, viewport: Viewport): QuickComposerPlacement {
+  const gap = 14
+  const width = Math.min(318, Math.max(270, viewport.width - 32))
+  const height = 54
+  const leftSpace = petPosition.x - 16
+  const rightSpace = viewport.width - petPosition.x - petSize.width - 16
+  const belowTop = petPosition.y + petSize.height + 8
+  const top = Math.min(Math.max(16, petPosition.y + petSize.height - height - 12), viewport.height - height - 16)
+
+  if (belowTop + height <= viewport.height - 16) {
+    return {
+      side: 'top',
+      style: {
+        left: `${Math.min(Math.max(16, petPosition.x + petSize.width - width), viewport.width - width - 16)}px`,
+        top: `${belowTop}px`,
+        width: `${width}px`,
+      },
+    }
+  }
+
+  if (leftSpace >= width + gap || leftSpace >= rightSpace) {
+    return {
+      side: 'left',
+      style: { left: `${Math.max(16, petPosition.x - width - gap)}px`, top: `${top}px`, width: `${width}px` },
+    }
+  }
+  if (rightSpace >= width + gap) {
+    return {
+      side: 'right',
+      style: { left: `${Math.min(viewport.width - width - 16, petPosition.x + petSize.width + gap)}px`, top: `${top}px`, width: `${width}px` },
+    }
+  }
+  return {
+    side: 'top',
+    style: {
+      left: `${Math.min(Math.max(16, petPosition.x + petSize.width / 2 - width / 2), viewport.width - width - 16)}px`,
+      top: `${Math.max(16, petPosition.y - height - gap)}px`,
+      width: `${width}px`,
+    },
+  }
+}
+
 export function TraceOverlay() {
   const [open, setOpen] = useState(false)
   const [collapsing, setCollapsing] = useState(false)
   const [showPanel, setShowPanel] = useState(false)
+  const [surfaceMode, setSurfaceMode] = useState<'quick' | 'bubbles'>('quick')
+  const [panelMode, setPanelMode] = useState<'compact' | 'expanded'>('compact')
+  const [quickDraft, setQuickDraft] = useState('')
+  const [quickNotice, setQuickNotice] = useState('')
   const [focusedObservationId, setFocusedObservationId] = useState<string | undefined>()
   const [viewport, setViewport] = useState<Viewport>(() => getViewport())
   const [petPosition, setPetPosition] = useState<PetPosition | null>(null)
@@ -319,11 +366,11 @@ export function TraceOverlay() {
       const nextViewport = getViewport()
       setViewport(nextViewport)
       setPetPosition((current) => (current ? clampPetPosition(current, nextViewport) : current))
-      setPanelPosition((current) => (current ? clampPanelPosition(current, nextViewport) : current))
+      setPanelPosition((current) => (current ? clampPanelPosition(current, nextViewport, panelMode === 'compact') : current))
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  }, [panelMode])
 
   useEffect(() => {
     const bridge = getTraceNativeBridge()
@@ -427,25 +474,32 @@ export function TraceOverlay() {
     lastPetCenterXRef.current = centerX
   }, [currentPetPosition.x, viewport.width])
   const reminderPlacement = getReminderPlacement(currentPetPosition, viewport)
-  const defaultPanelPosition = getDefaultPanelPosition(currentPetPosition, viewport)
+  const quickComposerPlacement = getQuickComposerPlacement(currentPetPosition, viewport)
+  const defaultCompactPanelPosition = getDefaultPanelPosition(currentPetPosition, viewport)
+  const defaultPanelPosition = panelMode === 'compact'
+    ? defaultCompactPanelPosition
+    : clampPanelPosition({ x: defaultCompactPanelPosition.x, y: defaultCompactPanelPosition.y }, viewport, false)
   const currentPanelPosition = panelPosition ?? defaultPanelPosition
-  const panelIsDetached = showPanel && Boolean(panelPosition) && distanceBetween(currentPanelPosition, defaultPanelPosition) > 170
-  const isFirstUse = !observations.some((observation) => observation.isNew)
-  const guideItems: OrbitItem[] = isFirstUse ? [
-    { id: 'guide-open', kind: 'guide', kicker: '第 1 步', title: '单击刘看山', detail: '展开你的思考现场', tone: 'green', action: 'capture' },
-    { id: 'guide-capture', kind: 'guide', kicker: '第 2 步', title: '双击刘看山', detail: '快速记录此刻的想法', tone: 'warm', action: 'capture' },
-    { id: 'guide-return', kind: 'guide', kicker: '第 3 步', title: '点一条观察', detail: '回到对应内容继续思考', tone: 'mint', action: 'focus-first' },
-  ] : []
-  const observationItems: OrbitItem[] = observations.slice(0, isFirstUse ? 3 : 6).map((observation) => ({
+  const panelIsDetached = showPanel && panelMode === 'expanded'
+  const guideItems: OrbitItem[] = [
+    { id: 'guide-quick', kind: 'guide', kicker: '极简对话', title: '回到快速输入', detail: '不展开小窗，直接写一句', tone: 'warm', action: 'quick' },
+  ]
+  const visibleObservationCount = 4
+  const observationItems: OrbitItem[] = observations.slice(0, visibleObservationCount).map((observation) => ({
     id: observation.id,
     kind: 'observation',
     observation,
   }))
-  const captureItems: OrbitItem[] = [
-    { id: 'capture-now', kind: 'capture', kicker: '随时可用', title: '开始记录你的想法', detail: '不用整理，先让它留下来', tone: 'cta-green', action: 'capture' },
-    { id: 'capture-flash', kind: 'capture', kicker: '三秒入口', title: '接住刚冒出的念头', detail: '双击刘看山也可以', tone: 'cta-warm', action: 'capture' },
-  ]
-  const orbitItems = [...guideItems, ...observationItems, ...captureItems].slice(0, 8)
+  const overflowItems: OrbitItem[] = observations.length > visibleObservationCount ? [{
+    id: 'more-observations',
+    kind: 'guide',
+    kicker: '历史观察',
+    title: `还有 ${observations.length - visibleObservationCount} 条`,
+    detail: '打开小窗查看全部内容',
+    tone: 'mint',
+    action: 'focus-first',
+  }] : []
+  const orbitItems = [...guideItems, ...observationItems, ...overflowItems]
   const orbitPositions = getOrbitPositions(currentPetPosition, viewport, orbitItems)
   const petImage = poseTransition === 'to-crawl'
     ? poseTransitionPhase === 0 ? sitAImage
@@ -476,7 +530,19 @@ export function TraceOverlay() {
     }
     traceSessionStore.observations = [nextObservation, ...traceSessionStore.observations]
     setObservations(traceSessionStore.observations)
+    setFocusedObservationId(nextObservation.id)
     setDiscussionNotice('已接住：这条观察进入历史列表。')
+    return nextObservation
+  }
+
+  const submitQuickObservation = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const text = quickDraft.trim()
+    if (!text) return
+    acceptObservation(text, '桌宠快速输入')
+    setQuickDraft('')
+    setQuickNotice('已接住，保留在本次 Trace 会话中。')
+    window.setTimeout(() => setQuickNotice(''), 2400)
   }
 
   const requestCapability = async (request: Record<string, unknown>) => {
@@ -555,12 +621,13 @@ export function TraceOverlay() {
     return true
   }
 
-  const showFan = () => {
+  const showFan = (mode: 'quick' | 'bubbles' = 'quick') => {
     setCollapsing(false)
     setHugging(false)
     setCrawlRunning(false)
     setPetPose('crawl')
     setPetFrame(0)
+    setSurfaceMode(mode)
     setOpen(true)
   }
 
@@ -578,6 +645,8 @@ export function TraceOverlay() {
   const collapseTrace = () => {
     if (!open || collapsing || poseTransitionLockRef.current) return
     setShowPanel(false)
+    setPanelMode('compact')
+    setSurfaceMode('quick')
     setPanelPosition(null)
     setCollapsing(true)
     const finishCollapse = () => {
@@ -597,8 +666,9 @@ export function TraceOverlay() {
     if (poseTransitionLockRef.current) return
     const revealFan = () => {
       setShowPanel(false)
+      setPanelMode('compact')
       setPanelPosition(null)
-      showFan()
+      showFan('bubbles')
     }
     if (petPose === 'crawl') {
       revealFan()
@@ -699,6 +769,7 @@ export function TraceOverlay() {
       setOpen(true)
       setFocusedObservationId(observationId)
       setShowPanel(true)
+      setPanelMode('compact')
       setPanelPosition(null)
     }
     settleToSit(showPanel)
@@ -711,6 +782,10 @@ export function TraceOverlay() {
   const handleOrbitItem = (item: OrbitItem) => {
     if (item.kind === 'observation') {
       openPanel(item.observation.id)
+      return
+    }
+    if (item.action === 'quick') {
+      setSurfaceMode('quick')
       return
     }
     if (item.action === 'focus-first' && observations[0]) {
@@ -750,7 +825,7 @@ export function TraceOverlay() {
         hugTimerRef.current = undefined
       }, 600)
     } else {
-      setPanelPosition(clampPanelPosition(nextPosition, viewport, !becomesDetached))
+      setPanelPosition(clampPanelPosition(nextPosition, viewport, panelMode === 'compact'))
     }
     event.preventDefault()
   }
@@ -766,6 +841,11 @@ export function TraceOverlay() {
     if (!reminder) return
     openPanel(reminder.observationId)
     setReminder(null)
+  }
+
+  const togglePanelMode = () => {
+    setPanelMode((current) => current === 'compact' ? 'expanded' : 'compact')
+    setPanelPosition(null)
   }
 
   return (
@@ -789,7 +869,37 @@ export function TraceOverlay() {
         <button className="trace-gesture-backdrop" type="button" onClick={collapseTrace} aria-label="收回 Trace 卡片" />
       )}
 
-      {open && !showPanel && (
+      {open && !showPanel && surfaceMode === 'quick' && (
+        <form
+          className={`trace-quick-composer trace-quick-composer-${quickComposerPlacement.side}`}
+          style={quickComposerPlacement.style}
+          onSubmit={submitQuickObservation}
+          onClick={(event) => event.stopPropagation()}
+          aria-label="快速记录"
+        >
+          <div className="trace-quick-composer-field">
+            <span className="trace-quick-composer-status" aria-hidden="true" />
+            <input
+              value={quickDraft}
+              onChange={(event) => setQuickDraft(event.target.value)}
+              placeholder="先写一句，回车接住……"
+              aria-label="快速记录此刻的想法"
+              autoFocus
+            />
+          </div>
+          <button className="trace-quick-bubbles" type="button" onClick={() => setSurfaceMode('bubbles')} aria-label="查看气泡记录" title="查看气泡记录">
+            <span className="trace-quick-bubbles-icon" aria-hidden="true"><i /><i /><i /></span>
+          </button>
+          <button className="trace-quick-expand" type="button" onClick={openCapturePanel} aria-label="打开 Trace 小窗" title="打开小窗">
+            <span className="trace-quick-window-icon" aria-hidden="true" />
+          </button>
+          <button className="trace-quick-submit" type="submit" disabled={!quickDraft.trim()} aria-label="接住这句话" title="接住这句话">
+            <span aria-hidden="true">↑</span>
+          </button>
+          {quickNotice && <span className="trace-quick-notice" role="status">{quickNotice}</span>}
+        </form>
+      )}
+      {open && !showPanel && surfaceMode === 'bubbles' && (
         <div className="trace-orbit-stage" aria-label="Trace 历史观察卡片">
           {orbitItems.map((item, index) => {
             const position = orbitPositions[index]
@@ -847,11 +957,12 @@ export function TraceOverlay() {
             onCandidateAction={updateCandidate}
             onContinue={continueDiscussion}
             onClose={closePanelToFan}
+            onToggleSize={togglePanelMode}
             discussionNotice={discussionNotice}
             onHeaderPointerDown={handlePanelPointerDown}
             onHeaderPointerMove={handlePanelPointerMove}
             onHeaderPointerUp={handlePanelPointerUp}
-            compact={!panelIsDetached}
+            compact={panelMode === 'compact'}
             capabilities={capabilities}
             onCapabilityRequest={requestCapability}
           />
