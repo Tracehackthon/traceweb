@@ -5,6 +5,7 @@ import { createRuntimeCapabilityClient } from './runtime-client.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
+const openProductOnStart = process.env.TRACE_DESKTOP_OPEN_ON_START === '1'
 const allowedDiscussionKeys = new Set(['from', 'observationId', 'text', 'status', 'source'])
 const capabilityClient = createRuntimeCapabilityClient()
 
@@ -155,6 +156,7 @@ if (!ownsInstance) {
     Menu.setApplicationMenu(null)
     createOverlayWindow()
     createTray()
+    if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=home`)
 
     screen.on('display-metrics-changed', positionOverlay)
     screen.on('display-added', positionOverlay)
