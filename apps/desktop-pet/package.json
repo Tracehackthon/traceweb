@@ -1,6 +1,6 @@
 {
   "name": "@trace/desktop-pet",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "author": "Trace",
   "description": "Trace UI V1 for DeepSeek Harness Web and the native desktop overlay",

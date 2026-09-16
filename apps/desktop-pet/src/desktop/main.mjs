@@ -2,16 +2,18 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { createRuntimeCapabilityClient } from './runtime-client.mjs'
+import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient } from './runtime-client.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
-const backendOrigin = process.env.TRACE_BACKEND_ORIGIN || 'http://127.0.0.1:4173'
+const backendOrigin = process.env.TRACE_BACKEND_ORIGIN || (app.isPackaged ? DEFAULT_RUNTIME_ORIGIN : discussionOrigin)
 const openProductOnStart = app.isPackaged || process.env.TRACE_DESKTOP_OPEN_ON_START === '1'
 const appIconPath = join(root, 'trace-app-icon-256.png')
 const trayIconPath = join(root, 'trace-app-icon-20.png')
 const allowedDiscussionKeys = new Set(['from', 'observationId', 'text', 'status', 'source'])
-const traceCloudOrigin = 'https://trace.neutrom.store'
+const tracePublicOrigin = 'https://trace.neutrom.store'
+const traceCloudOrigin = process.env.TRACE_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN
+const traceAuthCompletionOrigins = new Set([tracePublicOrigin, traceCloudOrigin])
 
 let overlayWindow
 let tray
@@ -35,8 +37,10 @@ function writeDesktopSettings(value) {
 }
 async function runtimeReady() {
   try {
-    const response = await fetch(new URL('/api/product/workspace', backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
-    return response.ok && (response.headers.get('content-type') || '').includes('application/json')
+    const responses = await Promise.all(['/api/product/workspace', '/api/agent/capabilities'].map((pathname) => (
+      fetch(new URL(pathname, backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
+    )))
+    return responses.every((response) => response.ok && (response.headers.get('content-type') || '').includes('application/json'))
   } catch { return false }
 }
 async function ensureBundledRuntime() {
@@ -223,7 +227,7 @@ function openZhihuAuthorization(loginUrl, parentWindow) {
     const inspect = (rawUrl) => {
       let url
       try { url = new URL(rawUrl) } catch { return }
-      if (url.origin !== traceCloudOrigin || url.pathname !== '/app') return
+      if (!traceAuthCompletionOrigins.has(url.origin) || url.pathname !== '/app') return
       if (url.searchParams.get('zhihu') === 'connected') finish()
       else if (url.searchParams.get('zhihu') === 'error') finish(new Error('知乎没有完成授权，请重新连接'))
     }
@@ -253,6 +257,8 @@ if (!ownsInstance) {
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
       const settings = readDesktopSettings()
       capabilityClient = createRuntimeCapabilityClient({
+        origin: backendOrigin,
+        cloudOrigin: traceCloudOrigin,
         configuredProjectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir,
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
       })

@@ -3,8 +3,14 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const DEFAULT_ORIGIN = 'http://127.0.0.1:4173'
-const DEFAULT_CLOUD_ORIGIN = 'https://trace.neutrom.store'
+// Keep the packaged Runtime away from the common Vite preview port. The
+// desktop product UI may legitimately use 4173 while the native capability
+// bridge owns this dedicated loopback port.
+export const DEFAULT_RUNTIME_ORIGIN = 'http://127.0.0.1:42731'
+// The public custom domain currently performs a permanent redirect. Native
+// API requests use the stable Vercel production origin directly so POSTs,
+// cookies, and Electron's strict redirect policy remain deterministic.
+export const DEFAULT_CLOUD_ORIGIN = 'https://traceweb-neutronm.vercel.app'
 const TERMINAL_AGENT_STATES = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 
@@ -64,7 +70,7 @@ function safeWorkResult(workspace, workId) {
   }
 }
 
-export function validateRuntimeOrigin(value = DEFAULT_ORIGIN) {
+export function validateRuntimeOrigin(value = DEFAULT_RUNTIME_ORIGIN) {
   const url = new URL(value)
   const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]'
   if (url.protocol !== 'http:' || !loopback || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
@@ -74,7 +80,7 @@ export function validateRuntimeOrigin(value = DEFAULT_ORIGIN) {
 }
 
 export function createRuntimeCapabilityClient({
-  origin = process.env.TRACE_BACKEND_ORIGIN || DEFAULT_ORIGIN,
+  origin = process.env.TRACE_BACKEND_ORIGIN || DEFAULT_RUNTIME_ORIGIN,
   cloudOrigin = process.env.TRACE_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN,
   projectDir: configuredProjectDir,
   fetchImpl = globalThis.fetch,
@@ -105,22 +111,27 @@ export function createRuntimeCapabilityClient({
   async function runtimeRequest(pathname, body, timeoutMs = 35_000, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
     const url = new URL(pathname, backendOrigin)
     if (url.origin !== backendOrigin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Runtime path')
-    const response = await fetchImpl(url, {
-      method: body === undefined ? 'GET' : 'POST',
-      redirect: 'error',
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: {
-        origin: backendOrigin,
-        accept: 'application/json',
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    })
+    let response
+    try {
+      response = await fetchImpl(url, {
+        method: body === undefined ? 'GET' : 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: {
+          origin: backendOrigin,
+          accept: 'application/json',
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+    } catch {
+      throw new Error('Trace 本机能力没有启动，请重新打开 Trace 后再试')
+    }
     const text = await response.text()
     if (text.length > 1_048_576) throw new Error('Trace Runtime response exceeded 1 MiB')
     if (response.status === 404 && notFoundFallback !== NO_NOT_FOUND_FALLBACK) return notFoundFallback
     let value
-    try { value = JSON.parse(text) } catch { throw new Error(`Trace Runtime returned an unreadable response (${response.status})`) }
+    try { value = JSON.parse(text) } catch { throw new Error('Trace 本机能力没有正确响应，请重新打开 Trace 后再试') }
     if (!response.ok) throw new Error(publicRuntimeError(value, response.status))
     return value
   }
@@ -128,18 +139,23 @@ export function createRuntimeCapabilityClient({
   async function cloudRequest(pathname, body, timeoutMs = 35_000) {
     const url = new URL(pathname, cloudBase.origin)
     if (url.origin !== cloudBase.origin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Cloud path')
-    const response = await cloudFetchImpl(url, {
-      method: body === undefined ? 'GET' : 'POST',
-      redirect: 'error',
-      credentials: 'include',
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: {
-        origin: cloudBase.origin,
-        accept: 'application/json',
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    })
+    let response
+    try {
+      response = await cloudFetchImpl(url, {
+        method: body === undefined ? 'GET' : 'POST',
+        redirect: 'error',
+        credentials: 'include',
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: {
+          origin: cloudBase.origin,
+          accept: 'application/json',
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+    } catch {
+      throw new Error('知乎与联网能力暂时不可用，请稍后重试')
+    }
     const text = await response.text()
     if (text.length > 1_048_576) throw new Error('Trace Cloud response exceeded 1 MiB')
     let value

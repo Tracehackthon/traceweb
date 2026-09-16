@@ -3,7 +3,12 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { createRuntimeCapabilityClient, validateRuntimeOrigin } from '../../desktop-pet/src/desktop/runtime-client.mjs'
+import {
+  DEFAULT_CLOUD_ORIGIN,
+  DEFAULT_RUNTIME_ORIGIN,
+  createRuntimeCapabilityClient,
+  validateRuntimeOrigin,
+} from '../../desktop-pet/src/desktop/runtime-client.mjs'
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -11,6 +16,8 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
 })
 
 test('desktop runtime client accepts only loopback HTTP origins', () => {
+  assert.equal(DEFAULT_RUNTIME_ORIGIN, 'http://127.0.0.1:42731')
+  assert.equal(DEFAULT_CLOUD_ORIGIN, 'https://traceweb-neutronm.vercel.app')
   assert.equal(validateRuntimeOrigin('http://127.0.0.1:4173'), 'http://127.0.0.1:4173')
   assert.equal(validateRuntimeOrigin('http://localhost:9000'), 'http://localhost:9000')
   assert.throws(() => validateRuntimeOrigin('https://trace.example.test'), /loopback HTTP origin/)
@@ -35,7 +42,7 @@ test('desktop runtime client discovers search and Agent independently', async ()
   assert.equal(value.search.enabled, true)
   assert.equal(value.agent.profiles[0].kind, 'codex')
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname).sort(), ['/api/agent/capabilities', '/api/search/capabilities'])
-  assert.deepEqual(calls.map((call) => call.init.headers.origin).sort(), ['http://127.0.0.1:4417', 'https://trace.neutrom.store'])
+  assert.deepEqual(calls.map((call) => call.init.headers.origin).sort(), ['http://127.0.0.1:4417', 'https://traceweb-neutronm.vercel.app'])
 })
 
 test('desktop runtime client never sends backend paths or protocol fields to the renderer in errors', async () => {
@@ -82,6 +89,37 @@ test('desktop first-run Zhihu status fails safely when the cloud route is unavai
   await assert.rejects(client.request({ operation: 'zhihu.status' }), (error) => {
     assert.equal(error.message, 'Trace 云端能力暂时不可用，请稍后重试')
     assert.equal(error.message.includes('Not found'), false)
+    return true
+  })
+})
+
+test('desktop setup hides transport and non-JSON runtime errors from the product UI', async () => {
+  const networkFailure = createRuntimeCapabilityClient({
+    fetchImpl: async () => { throw new TypeError('fetch failed: ECONNREFUSED 127.0.0.1:42731') },
+  })
+  await assert.rejects(networkFailure.request({ operation: 'setup.status' }), (error) => {
+    assert.equal(error.message, 'Trace 本机能力没有启动，请重新打开 Trace 后再试')
+    assert.equal(error.message.includes('ECONNREFUSED'), false)
+    return true
+  })
+
+  const htmlFailure = createRuntimeCapabilityClient({
+    fetchImpl: async () => new Response('<h1>Not found</h1>', { status: 404, headers: { 'content-type': 'text/html' } }),
+  })
+  await assert.rejects(htmlFailure.request({ operation: 'setup.status' }), (error) => {
+    assert.equal(error.message, 'Trace 本机能力没有正确响应，请重新打开 Trace 后再试')
+    assert.equal(error.message.includes('404'), false)
+    return true
+  })
+})
+
+test('desktop Zhihu status hides redirect and transport implementation errors', async () => {
+  const client = createRuntimeCapabilityClient({
+    cloudFetchImpl: async () => { throw new TypeError("Attempted to redirect, but redirect policy was 'error'") },
+  })
+  await assert.rejects(client.request({ operation: 'zhihu.status' }), (error) => {
+    assert.equal(error.message, '知乎与联网能力暂时不可用，请稍后重试')
+    assert.equal(error.message.includes('redirect'), false)
     return true
   })
 })
