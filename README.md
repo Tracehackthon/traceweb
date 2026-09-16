@@ -17,7 +17,7 @@ Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
 | 目录 | 交付物 | 运行方式 |
 | --- | --- | --- |
-| [`apps/web`](apps/web/) | Trace 产品介绍与浏览器应用，包含首页、事项、对照、理解、工作结果、知乎公开搜索、知乎授权入口和预留视频页 | Vercel 静态页面 + 同源 Serverless 搜索／OAuth；应用数据使用 IndexedDB |
+| [`apps/web`](apps/web/) | Trace 产品介绍与浏览器应用，包含首页、事项、对照、理解、工作结果、知乎公开搜索、知乎授权入口和真实使用视频 | Vercel 静态页面 + 同源 Serverless 搜索／OAuth；应用数据使用 IndexedDB |
 | [`apps/desktop-pet`](apps/desktop-pet/) | Trace 原生桌宠与 DeepSeek Harness Web Overlay | 本机 Electron／Harness 插件构建 |
 
 Web 与桌宠共用已经确认的刘看山、栖息鸟、起飞鸟、字体和交互素材，不从历史原型或构建目录取运行资源。
@@ -51,7 +51,7 @@ npm ci
 npm run dev
 ```
 
-开发服务器默认位于 `http://127.0.0.1:4186`。根地址先进入产品交互介绍；`/app/demo` 使用一套与个人空间隔离的完整演示数据，并展示通过知乎开放平台真实检索后缓存的公开来源摘要；`/app` 是当前浏览器的个人空间；`/video` 固定为视频展示地址。如需验证 Vercel 使用的浏览器存储版本：
+开发服务器默认位于 `http://127.0.0.1:4186`。根地址先进入产品交互介绍；`/app/demo` 使用一套与个人空间隔离的完整演示数据，并展示通过知乎开放平台真实检索后缓存的公开来源摘要；`/app` 是当前浏览器的个人空间；`/video` 播放由当前 Trace 桌面端、桌宠、知乎公开检索与 Local Codex 结果回流录制的 41.7 秒真实使用视频。如需验证 Vercel 使用的浏览器存储版本：
 
 ```sh
 npm test
@@ -59,6 +59,18 @@ npm run build:vercel
 ```
 
 构建结果位于 `apps/web/dist-vercel`。
+
+## 真实使用视频
+
+视频工程位于 [`video/`](video/)，基于 Remotion 将真实本地使用过程中采集的关键状态编排为可复现的产品演示。发布产物固定输出到 `apps/web/public/video/`，因此 Vercel 部署后会直接出现在 `/video`：
+
+```sh
+npm run video:studio   # 预览与逐帧检查
+npm run video:render   # 生成 trace-demo.mp4
+npm run video:poster   # 生成播放器封面
+```
+
+录制画面中的桌面端、桌宠、知乎公开搜索结果和 Local Codex 返回内容均来自同一条已验证链路；无关桌面细节在进入发布素材前会被隐去。原始采集留在本地 `video-source/`，不会进入 Git。
 
 ## 已接入的来源与 Agent 能力
 

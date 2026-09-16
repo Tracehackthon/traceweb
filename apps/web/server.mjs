@@ -83,7 +83,10 @@ const server = http.createServer(async (request, response) => {
   // URLs already resolve to `/`; keeping this fallback also makes `/chain`
   // recoverable without adding a second HTML shell.
   const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname
-  if (asset && !fs.existsSync(asset) && staticRoot === distRoot && !path.extname(pathname)) asset = path.join(staticRoot, 'index.html')
+  // A public asset directory can share its name with a client route (for
+  // example `/video` and `/video/trace-demo.mp4`). Directory requests still
+  // belong to the SPA; only concrete files should bypass the history fallback.
+  if (asset && staticRoot === distRoot && !path.extname(pathname) && (!fs.existsSync(asset) || fs.statSync(asset).isDirectory())) asset = path.join(staticRoot, 'index.html')
   const allowedAsset = asset && (staticRoot === distRoot
     ? (asset === path.join(staticRoot, 'index.html') || asset === path.join(staticRoot, 'legacy.html') || ['assets', 'public', 'home', 'matters', 'product', 'decor', 'evidence', 'scene', 'real', 'fonts', 'video'].some((directory) => asset.startsWith(path.join(staticRoot, directory) + path.sep)))
     : (['index.html','legacy.html'].includes(path.basename(asset)) && path.dirname(asset) === root || asset.startsWith(path.join(root,'src') + path.sep) || asset.startsWith(path.join(root,'public') + path.sep)))

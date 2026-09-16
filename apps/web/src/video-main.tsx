@@ -13,12 +13,12 @@ function VideoPage() {
   return <main className="video-shell">
     <header><a href="/" className="video-brand"><span>t.</span>Trace</a><nav><a href="/">产品介绍</a><a href="/app/demo">完整演示</a><a href="/app">我的空间</a></nav></header>
     <section className="video-stage" aria-labelledby="video-title">
-      <div className="video-copy"><p>Trace 视频展示</p><h1 id="video-title">从一次停住，<br/>到结果<span>回来。</span></h1><p>这个路由已经固定留出。视频文件上线后，会在同一地址直接播放，不改变产品介绍页和完整桌面端的入口。</p></div>
+      <div className="video-copy"><p>Trace 真实使用记录</p><h1 id="video-title">从桌宠接住现场，<br/>到结果<span>回来。</span></h1><p>41 秒实录来自当前运行中的 Trace 桌面端与桌宠：记录一段思考、检索知乎公开内容，再把它交给 Local Codex，最后带回可继续判断的工作结果。</p></div>
       <div className="video-frame" data-state={available === null ? 'loading' : available ? 'ready' : 'empty'}>
-        {available ? <video controls preload="metadata" poster="/evidence/trace-worksite.webp"><source src="/video/trace-demo.mp4" type="video/mp4"/>你的浏览器不支持视频播放。</video> : <div className="video-placeholder" role="status"><div className="video-play" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M18 13.5 35 24 18 34.5Z"/></svg></div><strong>{available === null ? '正在确认视频资源…' : '视频位置已经准备好'}</strong><p>{available === null ? '稍等片刻。' : '将 MP4 放到 apps/web/public/video/trace-demo.mp4 后，这里会自动切换为播放器。'}</p></div>}
+        {available ? <video controls preload="metadata" playsInline poster="/video/trace-demo-poster.jpg"><source src="/video/trace-demo.mp4" type="video/mp4"/>你的浏览器不支持视频播放。</video> : <div className="video-placeholder" role="status"><div className="video-play" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M18 13.5 35 24 18 34.5Z"/></svg></div><strong>{available === null ? '正在确认视频资源…' : '视频暂时没有加载成功'}</strong><p>{available === null ? '稍等片刻。' : '请刷新页面重试，或先进入完整演示。'}</p></div>}
       </div>
     </section>
-    <footer><p>视频不会替代可操作的演示。</p><a href="/app/demo">直接体验六个动作 →</a></footer>
+    <footer><p>视频来自真实本地链路；无关桌面细节已隐去。</p><a href="/app/demo">直接体验六个动作 →</a></footer>
   </main>;
 }
 

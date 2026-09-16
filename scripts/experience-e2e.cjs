@@ -29,7 +29,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('requestfailed', (request) => {
       const expectedEmptyVideoProbe = request.method() === 'HEAD' && new URL(request.url()).pathname === '/video/trace-demo.mp4';
-      if (!expectedEmptyVideoProbe) errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText || 'request failed'}`);
+      const expectedVideoNavigationAbort = request.method() === 'GET' && new URL(request.url()).pathname === '/video/trace-demo.mp4' && request.failure()?.errorText === 'net::ERR_ABORTED';
+      if (!expectedEmptyVideoProbe && !expectedVideoNavigationAbort) errors.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText || 'request failed'}`);
     });
 
     await page.goto(base, { waitUntil: 'networkidle' });
@@ -142,11 +143,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const keptMatter = afterKeep.host.chain.matters.find((item) => item.originalText === '测试一次从知乎问题到 Codex 原生交接的完整输入路径');
     const keptSource = afterKeep.host.chain.sources.find((item) => item.id === 'external:e2e-zhihu-source');
     check('explicit keep persists Zhihu provenance without inventing a relation or understanding', keptSource?.ownerMatterId === keptMatter?.id && keptSource.voteUpCount === 27 && keptMatter.sourceIds.includes(keptSource.id) && (keptMatter.links || []).length === 0 && keptMatter.understanding === '', { keptMatterId: keptMatter?.id, sourceId: keptSource?.id });
-    check('ordinary Web explains the native Agent boundary instead of issuing a fake run', /网页不会读取本机登录或密钥/.test(await page.locator('.web-capability-flow').innerText()) && await page.getByRole('button', { name: '开始一次 Agent 讨论' }).isDisabled());
+    check('ordinary Web explains the native Agent boundary instead of issuing a fake run', /网页不会(?:读取本机登录或密钥|接触你的登录信息)/.test(await page.locator('.web-capability-flow').innerText()) && await page.getByRole('button', { name: '开始一次 Agent 讨论' }).isDisabled());
     await page.getByRole('button', { name: '完成，回到这件事' }).click();
     await page.locator('.chain-handoff-layout').waitFor({ timeout: 10000 });
-    const handoffFields = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.chain-destination [data-field]')].map((input) => [input.dataset.field, input.value])));
-    check('capture returns to its prefilled, unconnected Codex handoff', handoffFields.agent === 'Codex 原生' && handoffFields.project === 'Trace Web' && /接续：测试一次/.test(handoffFields.task), handoffFields);
+    const handoffFields = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.chain-handoff-side [data-field]')].map((input) => [input.dataset.field, input.value])));
+    check('capture returns to its prefilled Codex handoff without exposing system fields', /接续：测试一次/.test(handoffFields.task) && !('agent' in handoffFields) && !('project' in handoffFields), handoffFields);
     await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded' });
     await page.locator('.profile-button').waitFor({ timeout: 10000 });
     await page.locator('.profile-button').click();
@@ -157,7 +158,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     await page.goto(`${base}/video`, { waitUntil: 'networkidle' });
     await page.locator('#video-title').waitFor();
-    check('video route is reserved and explains the expected asset', await page.getByText('视频位置已经准备好', { exact: false }).count() === 1);
+    const publishedVideo = await page.locator('video').evaluate(async (element) => {
+      if (element.readyState === 0) await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('video metadata timeout')), 10000);
+        element.addEventListener('loadedmetadata', () => { clearTimeout(timer); resolve(); }, { once: true });
+        element.addEventListener('error', () => { clearTimeout(timer); reject(element.error || new Error('video metadata failed')); }, { once: true });
+        element.load();
+      });
+      return { source: element.querySelector('source')?.src, poster: element.poster, controls: element.controls, duration: element.duration, width: element.videoWidth, height: element.videoHeight };
+    });
+    check('video route publishes the real Trace desktop recording', publishedVideo.source?.endsWith('/video/trace-demo.mp4') && publishedVideo.poster?.endsWith('/video/trace-demo-poster.jpg') && publishedVideo.controls && publishedVideo.duration > 41 && publishedVideo.duration < 42 && publishedVideo.width === 1920 && publishedVideo.height === 1080, publishedVideo);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded' });

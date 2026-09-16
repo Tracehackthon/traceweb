@@ -18,14 +18,20 @@
     "test": "npm --prefix apps/web test",
     "test:e2e": "node scripts/product-e2e.cjs",
     "test:experience": "node scripts/experience-e2e.cjs",
-    "test:ui-renovation": "node scripts/ui-renovation-e2e.cjs"
+    "test:ui-renovation": "node scripts/ui-renovation-e2e.cjs",
+    "video:studio": "remotion studio video/src/index.tsx --public-dir=video/public --no-open",
+    "video:render": "remotion render video/src/index.tsx TraceDemo apps/web/public/video/trace-demo.mp4 --public-dir=video/public --codec=h264 --crf=23 --pixel-format=yuv420p",
+    "video:poster": "remotion still video/src/index.tsx TraceDemo apps/web/public/video/trace-demo-poster.jpg --public-dir=video/public --frame=90 --image-format=jpeg"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.506",
+    "@remotion/transitions": "^4.0.506",
     "@types/node": "^26.5.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "playwright": "1.62.1",
-    "typescript": "^7.0.2",
+    "remotion": "^4.0.506",
+    "typescript": "^5.9.3",
     "vite": "^8.3.0"
   },
   "dependencies": {

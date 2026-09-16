@@ -157,7 +157,7 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 
 ### 当前实现与事实边界
 
-- 默认入口仍是 [web-main.js](src/web-main.js)，但会按路径拆分表面：`/` 加载产品交互介绍，`/app/demo` 与 `/app` 加载 [react-main.tsx](src/react-main.tsx) 中的 React shell，`/video` 加载预留视频页。base shell 的 [web.css](src/product/web.css) 随 React 入口静态加载，局部路由 CSS 再于对应模块挂载前加载；即使路由资源失败，加载态、错误态与恢复操作也不会退回无样式页面。
+- 默认入口仍是 [web-main.js](src/web-main.js)，但会按路径拆分表面：`/` 加载产品交互介绍，`/app/demo` 与 `/app` 加载 [react-main.tsx](src/react-main.tsx) 中的 React shell，`/video` 加载真实使用视频页。base shell 的 [web.css](src/product/web.css) 随 React 入口静态加载，局部路由 CSS 再于对应模块挂载前加载；即使路由资源失败，加载态、错误态与恢复操作也不会退回无样式页面。
 - `/app/demo` 和 `/app` 复用同一套真实产品组件与命令边界。托管 Web 为两者使用独立的 IndexedDB 命名空间；即使本地开发中的 `/app` 连接个人 SQLite，`/app/demo` 也固定使用独立演示 IndexedDB，不会把合成数据写入个人 SQLite。完整 demo v3 含 4 个 matters 与 2 个 works；其中主事项具有六动作可直达的完整链路。事项状态仍标记为 `synthetic`，但两份知乎来源是 2026-09-15 通过开放平台真实检索后缓存的公开摘要快照；首页用可进入的「知乎参与这件事」来源条明确它们分别作为原现场与对照，个人空间不继承任何演示记录。
 - [web.css](src/product/web.css) 明确把首页、事项、chain、compare、worksite、目录与加载态的 `background-image` 置为 `none`。`ASSETS` 当前只映射字体与小鸟，不含背景角色。
 - 旧 `environment*.png` 与锁定记录可以继续留在仓库作为历史/审计资产，但既不是当前 primary/legacy runtime 的视觉入口，也不是新增页面应复用的系统组件。
@@ -248,7 +248,7 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 - **知乎与思考**：四个页签依次展示在知乎停住、从断点接着、用知乎／全网找真实对照、写成自己的理解；对照卡显式标注补充、限制与未确认。
 - **回到工作**：带入、工作、回来、复核四阶段复用真实 Trace Web 截图，并用状态刻度区分「已带到工作、参与具体做法、结果已回来、理解已确认修改」，不得把中间状态冒充最终效果。
 - **完整能力入口**：六动作列表负责收束产品模型，`/app/demo` 才承担逐个操作完整数据的职责；介绍页不复制一套假的静态桌面。
-- **视频页**：`/video` 是稳定地址。`public/video/trace-demo.mp4` 缺失时显示可交付的占位状态，存在时自动切换为原生播放器。
+- **视频页**：`/video` 是稳定地址。当前发布 `public/video/trace-demo.mp4` 与 `trace-demo-poster.jpg`，内容取自真实运行中的桌面端、桌宠、知乎公开搜索和 Local Codex 结果回流；无关桌面细节先隐去。资源不可用时保留明确的恢复状态，不伪装成已经播放。
 
 ### 完整演示导航
 
