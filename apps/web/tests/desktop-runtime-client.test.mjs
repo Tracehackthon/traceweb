@@ -54,6 +54,7 @@ test('desktop runtime client discovers search and Agent independently', async ()
   assert.equal(value.agent.profiles[0].kind, 'codex')
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname).sort(), ['/api/agent/capabilities', '/api/search/capabilities'])
   assert.deepEqual(calls.map((call) => call.init.headers.origin).sort(), ['http://127.0.0.1:4417', 'https://trace.neutrom.store'])
+  assert.equal(calls.find((call) => new URL(call.url).origin === DEFAULT_CLOUD_ORIGIN).init.cache, 'no-store')
 })
 
 test('desktop runtime client never sends backend paths or protocol fields to the renderer in errors', async () => {

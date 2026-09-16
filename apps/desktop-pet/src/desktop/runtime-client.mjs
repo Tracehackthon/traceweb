@@ -176,6 +176,11 @@ export function createRuntimeCapabilityClient({
       response = await cloudFetchImpl(url, {
         method: body === undefined ? 'GET' : 'POST',
         redirect: 'error',
+        // The public domain previously served a permanent redirect. Chromium
+        // can retain that 308 across desktop upgrades, so every live capability
+        // request must bypass the persistent HTTP cache while still refusing
+        // an actual redirect response.
+        cache: 'no-store',
         credentials: 'include',
         signal: AbortSignal.timeout(timeoutMs),
         headers: {
