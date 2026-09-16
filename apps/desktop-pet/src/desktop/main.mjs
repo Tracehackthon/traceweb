@@ -1,6 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, screen, session, shell, Tray } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient } from './runtime-client.mjs'
 
@@ -15,6 +15,12 @@ const allowedDiscussionKeys = new Set(['from', 'observationId', 'text', 'status'
 const tracePublicOrigin = 'https://trace.neutrom.store'
 const traceCloudOrigin = process.env.TRACE_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN
 const traceAuthCompletionOrigins = new Set([tracePublicOrigin, traceCloudOrigin])
+const discussionScheme = 'trace-app'
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: discussionScheme,
+  privileges: { standard: true, secure: true, supportFetchAPI: true },
+}])
 
 let overlayWindow
 let tray
@@ -23,6 +29,21 @@ let capabilityClient
 let bundledRuntime
 const discussionWindows = new Set()
 let zhihuAuthWindow
+
+function installDiscussionProtocol() {
+  const discussionRoot = resolve(root, 'discussion')
+  const prefix = `${discussionRoot}${sep}`
+  protocol.handle(discussionScheme, (request) => {
+    let url
+    try { url = new URL(request.url) } catch { return new Response('Not found', { status: 404 }) }
+    if (url.hostname !== 'desktop') return new Response('Not found', { status: 404 })
+    let relative
+    try { relative = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html' } catch { return new Response('Not found', { status: 404 }) }
+    const target = resolve(discussionRoot, relative)
+    if (target !== discussionRoot && !target.startsWith(prefix)) return new Response('Not found', { status: 404 })
+    return net.fetch(pathToFileURL(target).href)
+  })
+}
 
 function settingsFile() { return join(app.getPath('userData'), 'desktop-settings.json') }
 function readDesktopSettings() {
@@ -140,7 +161,9 @@ function openDiscussion(rawUrl) {
     if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  void discussionWindow.loadFile(join(root, 'discussion', 'index.html'), { query })
+  const target = new URL(`${discussionScheme}://desktop/index.html`)
+  for (const [key, value] of Object.entries(query)) target.searchParams.set(key, value)
+  void discussionWindow.loadURL(target.href)
 }
 
 function createOverlayWindow() {
@@ -261,6 +284,7 @@ if (!ownsInstance) {
   app.on('second-instance', showOverlay)
   app.whenReady().then(() => {
     void (async () => {
+      installDiscussionProtocol()
       try { await ensureBundledRuntime() }
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
       const settings = readDesktopSettings()
