@@ -10,6 +10,7 @@ import {
   resolveCodexExecutable,
   validateRuntimeOrigin,
 } from '../../desktop-pet/src/desktop/runtime-client.mjs'
+import { REDIRECT_URI } from '../../../lib/zhihu-oauth.mjs'
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -17,7 +18,7 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
 })
 test('desktop runtime client accepts only loopback HTTP origins', () => {
   assert.equal(DEFAULT_RUNTIME_ORIGIN, 'http://127.0.0.1:42731')
-  assert.equal(DEFAULT_CLOUD_ORIGIN, 'https://traceweb-neutronm.vercel.app')
+  assert.equal(DEFAULT_CLOUD_ORIGIN, new URL(REDIRECT_URI).origin, 'OAuth start and callback must share one cookie origin')
   assert.equal(validateRuntimeOrigin('http://127.0.0.1:4173'), 'http://127.0.0.1:4173')
   assert.equal(validateRuntimeOrigin('http://localhost:9000'), 'http://localhost:9000')
   assert.throws(() => validateRuntimeOrigin('https://trace.example.test'), /loopback HTTP origin/)
@@ -52,7 +53,7 @@ test('desktop runtime client discovers search and Agent independently', async ()
   assert.equal(value.search.enabled, true)
   assert.equal(value.agent.profiles[0].kind, 'codex')
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname).sort(), ['/api/agent/capabilities', '/api/search/capabilities'])
-  assert.deepEqual(calls.map((call) => call.init.headers.origin).sort(), ['http://127.0.0.1:4417', 'https://traceweb-neutronm.vercel.app'])
+  assert.deepEqual(calls.map((call) => call.init.headers.origin).sort(), ['http://127.0.0.1:4417', 'https://trace.neutrom.store'])
 })
 
 test('desktop runtime client never sends backend paths or protocol fields to the renderer in errors', async () => {

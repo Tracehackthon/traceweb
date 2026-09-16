@@ -7,10 +7,11 @@ import path from 'node:path'
 // host asks the OS for a free loopback port and passes that resolved origin
 // explicitly, so it does not depend on this fixed port.
 export const DEFAULT_RUNTIME_ORIGIN = 'http://127.0.0.1:42731'
-// The public custom domain currently performs a permanent redirect. Native
-// API requests use the stable Vercel production origin directly so POSTs,
-// cookies, and Electron's strict redirect policy remain deterministic.
-export const DEFAULT_CLOUD_ORIGIN = 'https://traceweb-neutronm.vercel.app'
+// OAuth start, callback, status and user-data reads must use one cookie
+// origin. The registered Zhihu callback is on the public Trace domain, so
+// native cloud requests deliberately stay on that same origin instead of
+// using the deployment alias.
+export const DEFAULT_CLOUD_ORIGIN = 'https://trace.neutrom.store'
 const TERMINAL_AGENT_STATES = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 
