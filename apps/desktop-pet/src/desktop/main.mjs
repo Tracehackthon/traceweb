@@ -44,6 +44,10 @@ function parseDiscussionQuery(rawUrl) {
   for (const [key, value] of url.searchParams) {
     if (allowedDiscussionKeys.has(key)) query[key] = value
   }
+  // The native window hosts the current Trace product shell. Explicitly pin
+  // its route so legacy observation query keys do not send file:// builds to
+  // the removed /legacy.html absolute path.
+  query.view = 'home'
   query.from = 'trace-native'
   return query
 }
