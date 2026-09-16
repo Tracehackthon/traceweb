@@ -36,7 +36,10 @@ type TraceNativeBridge = {
   onCandidate?: (listener: (payload: DesktopCandidatePayload) => void) => (() => void) | undefined
 }
 type ReminderPlacement = { side: 'top' | 'bottom' | 'inside'; style: CSSProperties }
-type QuickComposerPlacement = { side: 'left' | 'right' | 'top'; style: CSSProperties }
+type QuickComposerPlacement = {
+  side: 'left' | 'right' | 'top'
+  style: CSSProperties & { '--trace-quick-composer-width': string }
+}
 type PetPose = 'crawl' | 'sit'
 type PetFacing = 'left' | 'right'
 type PoseTransition = 'to-crawl' | 'to-sit'
@@ -281,9 +284,11 @@ function getReminderPlacement(petPosition: PetPosition, viewport: Viewport, pref
 }
 
 function getQuickComposerPlacement(petPosition: PetPosition, viewport: Viewport): QuickComposerPlacement {
-  const gap = 14
-  const width = Math.min(318, Math.max(270, viewport.width - 32))
-  const height = 54
+  const gap = 12
+  const composerWidth = Math.min(224, Math.max(188, viewport.width - 76))
+  const shortcutRailWidth = 34
+  const width = composerWidth + shortcutRailWidth
+  const height = 56
   const leftSpace = petPosition.x - 16
   const rightSpace = viewport.width - petPosition.x - petSize.width - 16
   const belowTop = petPosition.y + petSize.height + 8
@@ -296,6 +301,7 @@ function getQuickComposerPlacement(petPosition: PetPosition, viewport: Viewport)
         left: `${Math.min(Math.max(16, petPosition.x + petSize.width - width), viewport.width - width - 16)}px`,
         top: `${belowTop}px`,
         width: `${width}px`,
+        '--trace-quick-composer-width': `${composerWidth}px`,
       },
     }
   }
@@ -303,13 +309,23 @@ function getQuickComposerPlacement(petPosition: PetPosition, viewport: Viewport)
   if (leftSpace >= width + gap || leftSpace >= rightSpace) {
     return {
       side: 'left',
-      style: { left: `${Math.max(16, petPosition.x - width - gap)}px`, top: `${top}px`, width: `${width}px` },
+      style: {
+        left: `${Math.max(16, petPosition.x - width - gap)}px`,
+        top: `${top}px`,
+        width: `${width}px`,
+        '--trace-quick-composer-width': `${composerWidth}px`,
+      },
     }
   }
   if (rightSpace >= width + gap) {
     return {
       side: 'right',
-      style: { left: `${Math.min(viewport.width - width - 16, petPosition.x + petSize.width + gap)}px`, top: `${top}px`, width: `${width}px` },
+      style: {
+        left: `${Math.min(viewport.width - width - 16, petPosition.x + petSize.width + gap)}px`,
+        top: `${top}px`,
+        width: `${width}px`,
+        '--trace-quick-composer-width': `${composerWidth}px`,
+      },
     }
   }
   return {
@@ -318,6 +334,7 @@ function getQuickComposerPlacement(petPosition: PetPosition, viewport: Viewport)
       left: `${Math.min(Math.max(16, petPosition.x + petSize.width / 2 - width / 2), viewport.width - width - 16)}px`,
       top: `${Math.max(16, petPosition.y - height - gap)}px`,
       width: `${width}px`,
+      '--trace-quick-composer-width': `${composerWidth}px`,
     },
   }
 }
@@ -879,34 +896,36 @@ export function TraceOverlay() {
       )}
 
       {open && !showPanel && surfaceMode === 'quick' && (
-        <form
-          className={`trace-quick-composer trace-quick-composer-${quickComposerPlacement.side}`}
+        <div
+          className={`trace-quick-cluster trace-quick-cluster-${quickComposerPlacement.side}`}
           style={quickComposerPlacement.style}
-          onSubmit={submitQuickObservation}
           onClick={(event) => event.stopPropagation()}
-          aria-label="快速记录"
         >
-          <div className="trace-quick-composer-field">
-            <span className="trace-quick-composer-status" aria-hidden="true" />
-            <input
-              value={quickDraft}
-              onChange={(event) => setQuickDraft(event.target.value)}
-              placeholder="先写一句，回车接住……"
-              aria-label="快速记录此刻的想法"
-              autoFocus
-            />
+          <form className="trace-quick-composer" onSubmit={submitQuickObservation} aria-label="快速记录">
+            <div className="trace-quick-composer-field">
+              <span className="trace-quick-composer-status" aria-hidden="true" />
+              <input
+                value={quickDraft}
+                onChange={(event) => setQuickDraft(event.target.value)}
+                placeholder="写一句，回车接住"
+                aria-label="快速记录此刻的想法"
+                autoFocus
+              />
+            </div>
+            <button className="trace-quick-submit" type="submit" disabled={!quickDraft.trim()} aria-label="接住这句话" title="接住这句话">
+              <span aria-hidden="true">↑</span>
+            </button>
+            {quickNotice && <span className="trace-quick-notice" role="status">{quickNotice}</span>}
+          </form>
+          <div className="trace-quick-shortcuts" aria-label="Trace 快捷入口">
+            <button className="trace-quick-bubbles" type="button" onClick={() => setSurfaceMode('bubbles')} aria-label="展开记忆气泡" title="记忆气泡">
+              <span className="trace-quick-bubbles-icon" aria-hidden="true"><i /><i /><i /></span>
+            </button>
+            <button className="trace-quick-expand" type="button" onClick={openCapturePanel} aria-label="打开 Trace 悬浮窗" title="Trace 悬浮窗">
+              <span className="trace-quick-window-icon" aria-hidden="true" />
+            </button>
           </div>
-          <button className="trace-quick-bubbles" type="button" onClick={() => setSurfaceMode('bubbles')} aria-label="查看气泡记录" title="查看气泡记录">
-            <span className="trace-quick-bubbles-icon" aria-hidden="true"><i /><i /><i /></span>
-          </button>
-          <button className="trace-quick-expand" type="button" onClick={openCapturePanel} aria-label="打开 Trace 小窗" title="打开小窗">
-            <span className="trace-quick-window-icon" aria-hidden="true" />
-          </button>
-          <button className="trace-quick-submit" type="submit" disabled={!quickDraft.trim()} aria-label="接住这句话" title="接住这句话">
-            <span aria-hidden="true">↑</span>
-          </button>
-          {quickNotice && <span className="trace-quick-notice" role="status">{quickNotice}</span>}
-        </form>
+        </div>
       )}
       {open && !showPanel && surfaceMode === 'bubbles' && (
         <div className="trace-orbit-stage" aria-label="Trace 历史观察卡片">
