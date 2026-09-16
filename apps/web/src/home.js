@@ -203,7 +203,7 @@ function detailsMarkup() {
   const work = state.mode === 'work'
   const title = work ? selectedEntry().title : currentTitle()
   let rows
-  if (work) rows = row('file','带入工作的判断',state.insight || '工作界面不应该复制一个新的 Agent，而应该显示原生 Agent 当前工作的区域，以及被带入工作的沉淀内容。') + row('message','工作中发生了什么','新的首页方案已经形成，但还没有表现一条思考如何被重新拿起。') + row('sprout','下一步判断','气泡应该原位展开，还是进入独立的详情空间？')
+  if (work) rows = row('file','带入工作的判断',state.insight || '继续在原来的 Agent 中工作，同时看见这次带入的理解和来处。') + row('message','工作中发生了什么','新的首页方案已经形成，但还没有表现一条思考如何被重新拿起。') + row('sprout','下一步判断','气泡应该原位展开，还是进入独立的详情空间？')
   else if (state.captured || state.active !== 'thought' || entries[state.active]) rows = row('clock','上次停在',originalContext()) + row('message','为什么现在回来','这件事还没有结束。把此刻出现的感受，接回它原来的现场。') + row('sprout','此刻的变化','你可以继续补充，也可以写下一个新的理解；原型不会替你自动采用判断。')
   else rows = row('clock','上次停在','我还无法判断，自己想保留的是个人表达，还是文章中的原始现场。') + row('message','为什么现在回来','你刚刚收藏了一篇相关回答，其中再次出现了收藏之后很少重新使用的问题。') + row('sprout','此刻的变化','之前关注的是怎样保存，现在可能真正的问题是：什么情形会让它重新出现。')
   return `<div class="detail-topline"><span class="detail-status ${work?'warm-status':''}"><i></i>${work?'正在接续工作':'正在接续'}</span><button type="button" class="detail-close" data-action="home" aria-label="收起详情">${icon('close')}</button></div>
@@ -377,12 +377,12 @@ listen(mount,'submit',event=>{
 listen(mount,'change',event=>{
   if(event.target.id==='capture-source'){
     captureSource=event.target.value
-    notify(captureSource==='none'?'这次只保留原话，不联网。':snapshot?.completeDemoMode?`${captureSource==='zhihu'?'知乎搜索':'全网搜索'}使用合成演示数据，没有发起联网请求。`:`已选择${captureSource==='zhihu'?'知乎搜索':'全网搜索'}；原话仍会先保存，未接通时不会伪造结果。`)
+    notify(captureSource==='none'?'这次只保留原话，不联网。':snapshot?.completeDemoMode?`演示会使用已保存的${captureSource==='zhihu'?'知乎':'全网'}来源，不会再次联网。`:`已选择${captureSource==='zhihu'?'知乎搜索':'全网搜索'}；原话会先保存，搜索结果由你确认后再保留。`)
   }
   if(event.target.id==='capture-agent'){
     captureAgent=event.target.value
     const label={none:'这次先不交给 Agent。','codex-native':'Codex 原生','codex-harness':'Codex Harness',custom:'自定义 Agent'}[captureAgent]
-    notify(captureAgent==='none'?label:`已选择 ${label}；提交后先生成可检查的交接，不冒充外部执行。`)
+    notify(captureAgent==='none'?label:`已选择 ${label}；提交后先准备交接，只有桌宠连接时才会运行。`)
   }
 })
 listen(mount,'input',event=>{

@@ -222,9 +222,9 @@ function StatusBar({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   const nativeConnected = hasNativeCapabilityBridge();
   const statusText = (() => {
     if (!nativeConnected) return snapshot.status.text;
-    if (snapshot.status.state === 'loading') return '桌宠已连接 · 正在读取本机应用数据…';
-    if (snapshot.status.state === 'saving') return '桌宠已连接 · 正在保存到本机应用…';
-    if (snapshot.status.state === 'saved') return '桌宠已连接 · 内容已保存在本机应用';
+    if (snapshot.status.state === 'loading') return '桌宠已连接 · 正在读取内容…';
+    if (snapshot.status.state === 'saving') return '桌宠已连接 · 正在保存…';
+    if (snapshot.status.state === 'saved') return '桌宠已连接 · 内容已保存';
     return `桌宠已连接 · ${snapshot.status.text}`;
   })();
   const exportRecovery = () => {
@@ -284,7 +284,7 @@ function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapsh
     && (!('screen' in item.route) || item.route.screen === snapshot.route.screen);
   return <aside className="demo-guide" data-open={open ? 'true' : 'false'} aria-label="完整演示动作清单">
     <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示</span><b>6 / 6</b></button>
-    {open && <div className="demo-guide-body"><div className="demo-guide-source"><i>知</i><span><strong>知乎参与了这条思考链</strong><small>公开来源分别进入原现场与对照</small></span></div><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => { setOpen(false); runtime.navigate(item.route as RouteMemory); }}><span>{index + 1}</span><b>{item.label}</b>{'source' in item && item.source ? <small>{item.source}</small> : null}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
+    {open && <div className="demo-guide-body"><div className="demo-guide-source"><i>知</i><span><strong>知乎参与了这条思考链</strong><small>2 份知乎公开内容，分别作为原现场和对照</small></span></div><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => { setOpen(false); runtime.navigate(item.route as RouteMemory); }}><span>{index + 1}</span><b>{item.label}</b>{'source' in item && item.source ? <small>{item.source}</small> : null}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
   </aside>;
 }
 
@@ -373,7 +373,7 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   const [reduceMotion, setReduceMotion] = useState(Boolean(snapshot.host?.preferences?.reduceMotion));
   useEffect(() => { setName(snapshot.host?.preferences?.displayName || ''); setReduceMotion(Boolean(snapshot.host?.preferences?.reduceMotion)); }, [dialog.type, snapshot.host]);
   if (dialog.type === 'message') return <><p>{dialog.message}</p><footer><RecoveryButton onClick={() => runtime.closeDialog()}>{dialog.confirm ? '取消' : '回到原处'}</RecoveryButton>{dialog.confirm && <RecoveryButton primary onClick={() => { const action = dialog.confirm?.action; runtime.closeDialog(); action?.(); }}>{dialog.confirm.label}</RecoveryButton>}</footer></>;
-  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示空间只使用合成数据，与账号和个人内容完全分开，可以随时恢复。' : browserStorage ? '内容只留在这个应用里，不上传、不跨设备同步。清除应用数据会丢失内容，请定期导出。' : '内容保存在这台设备的 Trace 空间里，没有开通云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : '此设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '保存在当前应用中' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && hasNativeCapabilityBridge() && <CodexConnectionPanel/>}{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
+  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示内容与个人空间完全分开，可以随时恢复。' : browserStorage ? '内容只保存在当前浏览器，不上传，也不会跨设备同步。清除浏览器数据前请先导出。' : '内容保存在这台设备的 Trace 中，目前没有云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : browserStorage ? '当前浏览器中的内容' : '这台设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '只保存在当前浏览器' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && hasNativeCapabilityBridge() && <CodexConnectionPanel/>}{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
   if (dialog.type === 'capability' && dialog.capability) return <CapabilityDialog capability={dialog.capability} />;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);
@@ -389,7 +389,7 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const requestedSource: SearchSource | 'none' = capability.source === 'web' ? 'global' : capability.source;
   const [source, setSource] = useState<SearchSource>(requestedSource === 'none' ? 'zhihu' : requestedSource);
   const [items, setItems] = useState<SearchItem[]>([]);
-  const [searchState, setSearchState] = useState(requestedSource === 'none' ? '未选择联网搜索。' : '准备搜索…');
+  const [searchState, setSearchState] = useState(requestedSource === 'none' ? '这次没有选择联网搜索。' : '准备查找公开内容…');
   const [searchBusy, setSearchBusy] = useState(false);
   const [kept, setKept] = useState<string[]>([]);
   const [agentInfo, setAgentInfo] = useState<any>(null);
@@ -400,10 +400,10 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const native = hasNativeCapabilityBridge();
 
   const doSearch = async (nextSource = source) => {
-    setSearchBusy(true); setItems([]); setSearchState(`正在从${nextSource === 'zhihu' ? '知乎' : '全网'}查找 3 条公开来源…`);
+    setSearchBusy(true); setItems([]); setSearchState(`正在从${nextSource === 'zhihu' ? '知乎' : '全网'}查找公开内容…`);
     try {
       const result = await searchPublic(nextSource, capability.query, 3);
-      setItems(result.items || []); setSearchState(result.items?.length ? `收到 ${result.items.length} 条接口摘要；尚未保存。` : '这次没有返回来源，可以换一个更具体的问题。');
+      setItems(result.items || []); setSearchState(result.items?.length ? `找到 ${result.items.length} 条公开内容；保留前不会加入这件事。` : '没有找到合适的内容，可以换一个更具体的问题。');
     } catch (cause) { setSearchState(cause instanceof Error ? cause.message : '搜索没有完成。'); }
     finally { setSearchBusy(false); }
   };
@@ -422,7 +422,7 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
           : profiles.find((profile: any) => /harness/i.test(`${profile.profileId} ${profile.label}`))?.profileId;
       const selectedProfile = selected || agent?.defaultProfileId || profiles[0]?.profileId || '';
       setProfileId(selectedProfile);
-      setAgentState(agent?.enabled ? `这台设备上有 ${profiles.length} 个 Agent 可用；已优先匹配你刚才的选择。` : native ? '桌宠已连接，但这台设备上还没有可用的 Agent。' : '这次交接已经保存；启动桌宠后才能调用 Codex 或自定义 Agent。');
+      setAgentState(agent?.enabled ? `找到 ${profiles.length} 个可用 Agent，已按刚才的选择为你匹配。` : native ? '桌宠已连接，但还没有找到可用的 Agent。' : '这次交接已经保存。启动桌宠后，才能交给 Codex 或自定义 Agent。');
     }).catch((cause) => setAgentState(cause instanceof Error ? cause.message : '暂时无法连接这台设备上的 Agent。'));
   }, [capability.agent]);
 
@@ -431,10 +431,10 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
     catch (cause) { setSearchState(cause instanceof Error ? cause.message : '来源没有保存。'); }
   };
   const runAgent = async () => {
-    setAgentBusy(true); setAgentResult(null); setAgentState('正在创建一次有边界的 Agent 运行…');
+    setAgentBusy(true); setAgentResult(null); setAgentState('正在交给 Agent 处理…');
     try {
       const result = await runNativeAgent({ text: capability.query, source: requestedSource, ...(profileId ? { profileId } : {}) });
-      setAgentResult(result); setAgentState(result.status === 'succeeded' ? 'Agent 已返回候选；没有自动写入我的理解。' : result.error?.message || `本次运行：${result.status}`);
+      setAgentResult(result); setAgentState(result.status === 'succeeded' ? 'Agent 已返回回答，确认前不会写入“我的理解”。' : result.error?.message || 'Agent 没有完成这次处理，可以稍后重试。');
     } catch (cause) { setAgentState(cause instanceof Error ? cause.message : 'Agent 运行没有完成。'); }
     finally { setAgentBusy(false); }
   };
@@ -443,10 +443,10 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const metric = (item: SearchItem) => [item.vote_up_count == null ? '' : `${item.vote_up_count} 赞同`, item.comment_count == null ? '' : `${item.comment_count} 评论`, item.content_type || ''].filter(Boolean).join(' · ');
   const agentIntent = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[capability.agent] || '未选择';
   return <section className="web-capability-flow">
-    <p>原话已经先保存。下面的外部内容仍是候选，只有你明确保留后才会进入这件事。</p>
+    <p>原话已经保存。搜索结果和 Agent 回答会先留在这里，只有你确认后才会进入这件事。</p>
     <div className="web-capability-grid">
       {requestedSource !== 'none' && <section><header><i>知</i><div><h3>公开来源</h3><small>知乎经验与全网资料</small></div></header><div className="web-capability-controls"><select aria-label="搜索范围" value={source} disabled={searchBusy} onChange={(event) => setSource(event.target.value as SearchSource)}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select><RecoveryButton disabled={searchBusy} onClick={() => void doSearch()}>{searchBusy ? '正在查找…' : '重新查找'}</RecoveryButton></div><p role="status">{searchState}</p>{items.map((item) => <article className="web-capability-source" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{metric(item) && <span>{metric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>接口未返回原文链接</small>}<RecoveryButton primary disabled={!item.url || kept.includes(item.id)} onClick={() => void keep(item)}>{!item.url ? '暂不能保留' : kept.includes(item.id) ? '已保留到这件事' : '保留到这件事'}</RecoveryButton></footer></article>)}</section>}
-      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>原生 Agent</h3><small>Codex 与自定义执行器</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>怎样回来</dt><dd>先给你复核</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '开始一次 Agent 讨论'}</RecoveryButton>{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改候选' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}</article>}</section>}
+      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>在本机继续</h3><small>Codex 或自定义 Agent</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>结果回来后</dt><dd>先由你确认</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '交给 Agent 继续'}</RecoveryButton>{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改建议' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}</article>}</section>}
     </div>
     <footer><RecoveryButton onClick={() => runtime.closeDialog()}>完成，回到这件事</RecoveryButton></footer>
   </section>;
@@ -455,12 +455,12 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
 function CodexConnectionPanel() {
   const [setup, setSetup] = useState<any>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('正在检查本机 Runtime 与项目…');
+  const [message, setMessage] = useState('正在检查桌宠、项目和 Codex…');
   const load = async () => {
     try {
       const value = await desktopSetupStatus();
       setSetup(value);
-      setMessage(value?.codex?.available ? 'Runtime 已准备好。首次使用前检查一次 Codex 登录即可。' : '本机 Runtime 已连接，但还没有发现 Codex 执行器。');
+      setMessage(value?.codex?.available ? '桌宠已连接。首次使用前，请检查一次 Codex 登录状态。' : '桌宠已连接，但还没有找到 Codex。');
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : '暂时无法检查本机接入。'); }
   };
   useEffect(() => { void load(); }, []);
@@ -492,7 +492,7 @@ function CodexConnectionPanel() {
   return <section className="web-codex-setup" data-ready={ready ? 'true' : 'false'}>
     <header><h3>Codex 接入</h3><span>{ready ? '可以开始工作' : setup ? '需要一次检查' : '正在检查'}</span></header>
     <p role="status">{message}</p>
-    <dl><div><dt>本机 Runtime</dt><dd>{setup?.runtime?.connected ? setup.runtime.bundled ? '随桌面版运行' : '已连接' : '正在检查'}</dd></div><div><dt>当前项目</dt><dd>{setup?.project?.connected ? setup.project.name : '尚未选择'}</dd></div><div><dt>Codex</dt><dd>{setup?.codex?.ready ? '已登录并通过检查' : setup?.codex?.available ? '已发现 · 待检查' : '等待发现'}</dd></div><div><dt>结果怎样回来</dt><dd>先进入 Trace 复核</dd></div></dl>
+    <dl><div><dt>桌宠连接</dt><dd>{setup?.runtime?.connected ? setup.runtime.bundled ? '已随桌面版连接' : '已连接' : '正在检查'}</dd></div><div><dt>当前项目</dt><dd>{setup?.project?.connected ? setup.project.name : '尚未选择'}</dd></div><div><dt>Codex</dt><dd>{setup?.codex?.ready ? '已登录，可以使用' : setup?.codex?.available ? '已找到，等待检查' : '尚未找到'}</dd></div><div><dt>结果回来后</dt><dd>先进入 Trace，由你确认</dd></div></dl>
     <div className="web-codex-actions"><RecoveryButton disabled={busy} onClick={() => void chooseProject()}>{setup?.project?.connected ? '更换项目' : '选择项目'}</RecoveryButton><RecoveryButton primary disabled={busy || !setup?.codex?.available} onClick={() => void check()}>{busy ? '正在处理…' : '检查 Codex'}</RecoveryButton>{setup?.codex?.ready && <RecoveryButton disabled={busy} onClick={() => void connectPlugin()}>在 Codex 中使用 Trace</RecoveryButton>}</div>
     <small className="web-codex-note">“检查 Codex”用于从 Trace 把工作交给本机 Codex；“在 Codex 中使用 Trace”是可选入口，安装后请新开 Codex 任务。项目绝对路径只留在本机，不会显示在页面或发送给模型。</small>
   </section>;
@@ -544,9 +544,9 @@ function ZhihuAuthorization() {
     finally { setBusy(false); }
   };
   const authorized = status?.oauth?.status === 'authorized';
-  const stateLabel = authorized ? '已连接' : status === null && !error ? '正在检查' : status?.oauth?.configured ? '未连接' : '服务未配置';
+  const stateLabel = authorized ? '已连接' : status === null && !error ? '正在检查' : status?.oauth?.configured ? '未连接' : '暂不可用';
   const userContentUnavailable = status?.user_content_configured === false;
-  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>我的知乎内容</h3><span>{stateLabel}</span></div><p>{authorized ? '当前浏览器可以按你的明确操作读取知乎资料；不会自动导入。' : status?.oauth?.configured ? '连接后可由你明确读取创作、关注和收藏。公开搜索不需要这项授权。' : status === null && !error ? '正在核对当前环境的知乎授权能力…' : '当前部署尚未启用个人知乎资料授权。公开搜索与这项设置彼此独立。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开连接</RecoveryButton></> : <><RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在处理…' : status?.oauth?.status === 'pending_user_authorization' ? '重新打开知乎授权' : '连接我的知乎'}</RecoveryButton>{hasNativeCapabilityBridge() && status?.oauth?.status === 'pending_user_authorization' && <RecoveryButton disabled={busy} onClick={() => void check()}>我已授权，检查结果</RecoveryButton>}</>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>当前接口返回空列表。</p>}<small>只展示本次明确读取的 3 条，没有自动保存到 Trace。</small></div>}<small>{status?.notice || '这项连接只用于个人知乎资料；Trace 内容仍保存在当前浏览器。'}</small></section>;
+  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>我的知乎内容</h3><span>{stateLabel}</span></div><p>{authorized ? '你可以选择读取近期创作、关注和收藏；Trace 不会自动导入。' : status?.oauth?.configured ? '连接后，你可以按需读取创作、关注和收藏。公开搜索不需要登录知乎。' : status === null && !error ? '正在检查是否可以连接知乎…' : '当前版本暂时不能连接个人知乎内容；知乎公开搜索仍可单独使用。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开连接</RecoveryButton></> : <><RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在处理…' : status?.oauth?.status === 'pending_user_authorization' ? '重新打开知乎授权' : '连接我的知乎'}</RecoveryButton>{hasNativeCapabilityBridge() && status?.oauth?.status === 'pending_user_authorization' && <RecoveryButton disabled={busy} onClick={() => void check()}>我已授权，检查结果</RecoveryButton>}</>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>这次没有读取到内容。</p>}<small>这里只展示你本次读取的 3 条，尚未保存到 Trace。</small></div>}<small>{authorized ? '这项连接只用于读取你明确选择的知乎资料。' : '公开搜索与个人知乎内容分开使用。'}</small></section>;
 }
 
 function DialogHost({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {

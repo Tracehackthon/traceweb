@@ -31,8 +31,8 @@ const templates = {
    <div class="compare-question-row"><label class="compare-sr" for="compare-question">这次想弄清楚</label><input id="compare-question" data-field="question" autocomplete="off"><button type="button" data-action="focus-question" class="compare-button compare-quiet">${icon('edit')}修改这一处</button></div>
    <div class="compare-directions" role="group" aria-label="寻找方向"><button type="button" class="compare-button" data-direction="counterexample">${icon('search')}找个反例</button><button type="button" class="compare-button" data-direction="experience">${icon('users')}看看别人怎么做</button><button type="button" class="compare-button" data-direction="condition">${icon('switch')}换一种条件</button></div>
    <label class="compare-sr" for="compare-instructions">补充寻找条件</label><textarea id="compare-instructions" data-field="instructions" rows="3" placeholder="说说你想找的情况……"></textarea>
-   <div class="compare-search-bottom"><div class="compare-scopes-wrap">${button('scopes','查找范围','compare-scopes-button','down')}<div class="compare-scopes-popover" hidden><p>范围中所列平台仅作为演示条件，不会实际请求平台。</p><div data-options="scopes"></div></div></div>${button('import','已有材料，直接带入','','clip')}<button type="submit" class="compare-button compare-primary" data-search-submit>开始找</button></div>
-   <div class="compare-search-help"><p>${icon('info')}假设情形会单独标明，不会作为真实案例。<small>本次只查看本地演示材料，不会联网搜索。</small></p>${button('return','先放着')}</div>
+   <div class="compare-search-bottom"><div class="compare-scopes-wrap">${button('scopes','查找范围','compare-scopes-button','down')}<div class="compare-scopes-popover" hidden><p>完整演示只使用已经保存的来源，不会再次请求外部平台。</p><div data-options="scopes"></div></div></div>${button('import','已有材料，直接带入','','clip')}<button type="submit" class="compare-button compare-primary" data-search-submit>开始找</button></div>
+   <div class="compare-search-help"><p>${icon('info')}假设情形会单独标明，不会当作实际案例。<small>完整演示不会发起新的联网搜索。</small></p>${button('return','先放着')}</div>
   </form>`,
  candidates:`<section class="compare-heading"><h1 tabindex="-1" data-text="candidatesHeading">找到三处值得看看</h1><p>先看看条件，再决定有没有关系。</p></section>
   <div class="compare-query-strip">${icon('search')}<strong data-text="shortQuestion"></strong>${button('adjust','调整寻找方向','compare-text-button','next')}</div>
@@ -46,7 +46,7 @@ const templates = {
   <img class="compare-bird compare-reading-bird" data-bird="perch" alt="" aria-hidden="true">
   <section class="compare-thought compare-reading compare-paper"><h2><span class="compare-round-icon">${icon('message')}</span>我正在推敲的这一处</h2><blockquote data-text="focus"></blockquote><div class="compare-question-context"><span class="compare-question-mark">?</span><div><strong>当时的疑问</strong><p data-text="question"></p></div></div></section>
   <section class="compare-source compare-reading compare-paper"><h2><span class="compare-round-icon">${icon('file')}</span>这份材料实际说了什么</h2><p class="compare-meta" data-text="sourceMeta"></p><blockquote data-text="excerpt"></blockquote><div class="compare-source-actions">${button('context','查看原文上下文','compare-text-button','file')}${button('material-info','材料信息','compare-text-button','info')}</div></section>
-  <section class="compare-suggestions compare-paper"><div class="compare-suggestion-label"><span class="compare-round-icon compare-warm-icon">${icon('idea')}</span><div><h2>Trace 的关系建议 · 尚未确认</h2><p>这只是初步的对照分析，是否采纳由你决定。</p></div></div><div class="compare-suggestion-rows"><p><i></i><strong>相同：</strong><span data-text="same"></span></p><p><i></i><strong>不同：</strong><span data-text="different"></span></p><p><i></i><strong>尚不能说明：</strong><span data-text="unknown"></span></p></div></section>
+  <section class="compare-suggestions compare-paper"><div class="compare-suggestion-label"><span class="compare-round-icon compare-warm-icon">${icon('idea')}</span><div><h2>关系提示 · 等你确认</h2><p>先核对相同、不同和仍不能说明的部分，再决定是否关联。</p></div></div><div class="compare-suggestion-rows"><p><i></i><strong>相同：</strong><span data-text="same"></span></p><p><i></i><strong>不同：</strong><span data-text="different"></span></p><p><i></i><strong>尚不能说明：</strong><span data-text="unknown"></span></p></div></section>
   <form class="compare-note-form compare-paper" data-form="note"><label for="compare-note">${icon('edit')}你怎么看这一处不同？</label><div><textarea id="compare-note" data-field="comparisonDraft" rows="1" placeholder="留下你对条件差异的判断……"></textarea><button type="submit" class="compare-button compare-primary compare-send" aria-label="保存这次判断">${icon('arrow')}</button></div></form>
   <div class="compare-reading-actions">${button('link','接到这件事','compare-primary')}${button('revision','补进我的理解')}${button('reject','这次无关')}<small>${icon('info')}接入材料，不会自动修改你的理解。</small></div>`,
  returned:`<section class="compare-return-sheet compare-paper"><div class="compare-return-title"><p class="compare-kicker" data-text="receiptStatus">我的理解 · 已更新</p><h1 tabindex="-1">这处理解，刚有变化</h1></div><div class="compare-receipt-actions">${icon('file')}<span>只更新了这一处</span>${button('changes','查看改动')}${button('undo','撤销')}</div>
@@ -75,7 +75,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
   let adjustDraft = '';
   const composing = new WeakSet();
   root.classList.add('compare-root');
-  root.innerHTML = `<div class="compare-scene"><header class="compare-header"><div class="compare-brand"><span class="brand-tile">${mark}</span><strong>Trace</strong></div><nav aria-label="当前位置"><span data-shell="first"></span><i>/</i><strong data-shell="last">找个对照</strong></nav><button type="button" class="compare-button compare-top-return" data-action="return">${icon('back')}<span>返回原来的事情</span></button><span class="compare-demo">演示内容</span></header><main class="compare-main"></main><button type="button" class="compare-profile" data-action="profile" aria-label="个人设置">${icon('user')}</button><div class="compare-notice" role="status" aria-live="polite" hidden><span></span><button class="compare-button" type="button" aria-label="关闭提示" data-action="clear-notice">${icon('close')}</button></div></div><dialog class="compare-dialog" aria-labelledby="compare-dialog-title"><div class="compare-dialog-heading"><h2 id="compare-dialog-title"></h2><button type="button" class="compare-button compare-icon-button" data-action="close-modal" aria-label="关闭">${icon('close')}</button></div><div class="compare-dialog-content"></div></dialog>`;
+  root.innerHTML = `<div class="compare-scene"><header class="compare-header"><div class="compare-brand"><span class="brand-tile">${mark}</span><strong>Trace</strong></div><nav aria-label="当前位置"><span data-shell="first"></span><i>/</i><strong data-shell="last">找个对照</strong></nav><button type="button" class="compare-button compare-top-return" data-action="return">${icon('back')}<span>返回原来的事情</span></button><span class="compare-demo">完整演示</span></header><main class="compare-main"></main><button type="button" class="compare-profile" data-action="profile" aria-label="个人设置">${icon('user')}</button><div class="compare-notice" role="status" aria-live="polite" hidden><span></span><button class="compare-button" type="button" aria-label="关闭提示" data-action="clear-notice">${icon('close')}</button></div></div><dialog class="compare-dialog" aria-labelledby="compare-dialog-title"><div class="compare-dialog-heading"><h2 id="compare-dialog-title"></h2><button type="button" class="compare-button compare-icon-button" data-action="close-modal" aria-label="关闭">${icon('close')}</button></div><div class="compare-dialog-content"></div></dialog>`;
   const scene = root.querySelector('.compare-scene');
   const main = root.querySelector('.compare-main');
   const dialog = root.querySelector('dialog');
@@ -229,7 +229,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
       $('[data-action="import"] span').textContent=unavailable?'粘贴一段材料作对照':'已有材料，直接带入';
       $('[data-action="import"]').classList.toggle('compare-primary',unavailable);
       $('.compare-search-help small').textContent=unavailable?'尚未连接自动查找。你可以直接带入一段材料，原表达与理解不会因此改变。':current.isDemo?'本次只查看演示材料，不会联网搜索。':'查找当前可用材料，不代表材料关系已确认。';
-      $('.compare-scopes-popover > p').textContent=unavailable?'自动查找尚未连接；选择范围不会访问外部平台。':'只在宿主已连接的来源范围内查找。';
+      $('.compare-scopes-popover > p').textContent=unavailable?'自动查找暂不可用；选择范围不会发起联网请求。':'只在当前可用的来源中查找。';
     }
     if(screen==='candidates'){
       text('candidatesHeading',(current.candidates?.length===3)?'找到三处值得看看':current.candidates?.length?`找到 ${current.candidates.length} 处值得看看`:'再换个角度找找');
@@ -247,8 +247,8 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
       $('[data-action="revision"]').disabled=!!current.pending;
       $('[data-action="revision"] span').textContent=current.matter?.understanding?'补进我的理解':'写进我的理解';
       $('[data-action="revision"]').title=current.matter?.understanding&&current.matter?.basis?.field!=='understanding'?'请先回到我的理解选择要修改的片段；原表达不改动。':'';
-      $('.compare-suggestion-label h2').textContent=current.isDemo?'Trace 的关系建议 · 尚未确认':'关系核对 · 尚未确认';
-      $('.compare-suggestion-label p').textContent='结合原表达与材料核对，是否接入由你决定。';
+      $('.compare-suggestion-label h2').textContent='关系提示 · 等你确认';
+      $('.compare-suggestion-label p').textContent='先核对原表达与材料的关系，再决定是否关联。';
       $('.compare-note-form [type="submit"]').disabled=!current.comparisonDraft?.trim() || !!current.pending;
     }
     if(screen==='returned'){

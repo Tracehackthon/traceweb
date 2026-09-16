@@ -42,7 +42,7 @@ test('complete demo contains inspectable data for all six Trace actions', () => 
     contentMode: 'openapi-summary',
     count: 2,
   });
-  assert.equal(records.filter((record) => record.kind === 'source').every((record) => /知乎开放平台快照/.test(record.meta)), true);
+  assert.equal(records.filter((record) => record.kind === 'source').every((record) => /知乎公开内容/.test(record.meta)), true);
   assert.equal(host.experience.version, COMPLETE_DEMO.version);
   for (const kind of ['expression', 'discussion', 'understanding', 'source', 'work', 'result', 'revision']) assert.equal(kinds.has(kind), true, `${kind} should be discoverable`);
   assert.equal(host.chain.isDemo, false);

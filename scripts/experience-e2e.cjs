@@ -143,7 +143,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const keptMatter = afterKeep.host.chain.matters.find((item) => item.originalText === '测试一次从知乎问题到 Codex 原生交接的完整输入路径');
     const keptSource = afterKeep.host.chain.sources.find((item) => item.id === 'external:e2e-zhihu-source');
     check('explicit keep persists Zhihu provenance without inventing a relation or understanding', keptSource?.ownerMatterId === keptMatter?.id && keptSource.voteUpCount === 27 && keptMatter.sourceIds.includes(keptSource.id) && (keptMatter.links || []).length === 0 && keptMatter.understanding === '', { keptMatterId: keptMatter?.id, sourceId: keptSource?.id });
-    check('ordinary Web explains the native Agent boundary instead of issuing a fake run', /网页不会(?:读取本机登录或密钥|接触你的登录信息)/.test(await page.locator('.web-capability-flow').innerText()) && await page.getByRole('button', { name: '开始一次 Agent 讨论' }).isDisabled());
+    check('ordinary Web explains the native Agent boundary instead of issuing a fake run', /网页不会(?:读取本机登录或密钥|接触你的登录信息)/.test(await page.locator('.web-capability-flow').innerText()) && await page.getByRole('button', { name: '交给 Agent 继续' }).isDisabled());
     await page.getByRole('button', { name: '完成，回到这件事' }).click();
     await page.locator('.chain-handoff-layout').waitFor({ timeout: 10000 });
     const handoffFields = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.chain-handoff-side [data-field]')].map((input) => [input.dataset.field, input.value])));
@@ -154,7 +154,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await page.locator('.web-dialog[open] .web-zhihu-auth').waitFor({ timeout: 10000 });
     await page.locator('.web-auth-error').waitFor({ timeout: 10000 });
     const zhihuDialogText = await page.locator('.web-dialog').innerText();
-    check('personal settings separates Zhihu account data from public search', await page.getByRole('button', { name: '连接我的知乎' }).isDisabled() && /我的知乎内容/.test(zhihuDialogText) && /公开搜索与这项设置彼此独立/.test(zhihuDialogText) && !/游客|Unexpected token|SyntaxError/.test(zhihuDialogText));
+    check('personal settings separates Zhihu account data from public search', await page.getByRole('button', { name: '连接我的知乎' }).isDisabled() && /我的知乎内容/.test(zhihuDialogText) && /公开搜索与个人知乎内容分开使用/.test(zhihuDialogText) && !/游客|Unexpected token|SyntaxError/.test(zhihuDialogText));
 
     await page.goto(`${base}/video`, { waitUntil: 'networkidle' });
     await page.locator('#video-title').waitFor();

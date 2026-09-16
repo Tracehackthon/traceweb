@@ -68,7 +68,7 @@ export async function agentCapabilities(): Promise<any> {
 
 export async function runNativeAgent(input: { text: string; source: SearchSource | 'none'; profileId?: string }): Promise<any> {
   const bridge = nativeBridge();
-  if (!bridge?.requestCapability) throw new Error('Codex 与自定义 Agent 需要由 Trace 桌宠连接本机 Runtime；网页不会暴露本机登录或密钥。');
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌宠，再使用 Codex 或自定义 Agent。网页不会接触本机登录信息或密钥。');
   return bridge.requestCapability({ operation: 'agent.run', ...input });
 }
 

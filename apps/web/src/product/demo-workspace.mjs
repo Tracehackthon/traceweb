@@ -85,7 +85,7 @@ export function createCompleteDemoWorkspace() {
     workId: COMPLETE_DEMO.home.workId,
     destination: { agent: 'Codex Harness', project: 'Trace Web', task: '验证工作现场的承接方式' },
     role: 'reference',
-    note: '合成演示工作；只建立本地交接记录，未连接或执行外部 Agent。',
+    note: '这是演示中的工作记录；尚未交给外部 Agent。',
   });
 
   host = captureInput(host, {
@@ -96,7 +96,7 @@ export function createCompleteDemoWorkspace() {
       title: zhihuOrigin.title,
       excerpt: zhihuOrigin.excerpt,
       sourceType: zhihuOrigin.sourceType,
-      context: `知乎开放平台公开搜索摘要 · 作者：${zhihuOrigin.author}。只作为来源快照，不等于作者全文或我的理解。`,
+      context: `知乎公开内容摘要 · 作者：${zhihuOrigin.author}。这里只保留用于演示的片段，不代表作者全文，也不会自动写入我的理解。`,
     },
   });
   host = attachProviderSourceProvenance(host, {
@@ -123,7 +123,7 @@ export function createCompleteDemoWorkspace() {
     title: zhihuCounterpoint.title,
     excerpt: zhihuCounterpoint.excerpt,
     sourceType: `${zhihuCounterpoint.sourceType} · ${zhihuCounterpoint.author}`,
-    context: '知乎开放平台公开搜索摘要。它提出“知识管理靠使用而不是积累”的另一种判断，用来挑战“只要保留得更完整就足够”的倾向；关系仍由用户确认。',
+    context: '知乎公开内容摘要。它提出“知识管理靠使用而不是积累”的另一种判断，用来挑战“只要保留得更完整就足够”的倾向；是否有关，仍由你确认。',
   } });
   const comparisonSourceId = host.chain.sources.find(source =>
     source.ownerMatterId === COMPLETE_DEMO.matterId && !sourceIdsBeforeComparison.has(source.id))?.id;
@@ -153,8 +153,8 @@ export function createCompleteDemoWorkspace() {
   host = work(host, 'RESULT_DRAFT', { patch: {
     matterId: COMPLETE_DEMO.matterId,
     fact: '六个动作现在都有可打开的记录，并能从动作清单直达原处。',
-    interpretation: '把演示数据放进真实产品模型，比静态截图更能说明 Trace 的接续关系。',
-    unconfirmed: '知乎内容来自 2026-09-15 的公开搜索摘要快照，尚未代表实时结果、完整原文或全部社区观点。',
+    interpretation: '把六个动作放进同一条可继续的记录里，比静态截图更容易看清每一步怎样接上。',
+    unconfirmed: '这两份知乎内容是 2026-09-15 保存的公开搜索摘要，不代表实时结果、完整原文或全部社区观点。',
     proposedUnderstanding: 'Trace 要保留来源、问题、理解、对照、工作与结果之间的接续关系；完整演示必须让六个动作的数据都能被打开和核对。',
     relation: 'support',
   } });

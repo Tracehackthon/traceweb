@@ -53,7 +53,7 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
         </div>
         <div class="worksite-state" data-screen="impact" hidden>
           ${surface('impact-intake','worksite-impact-intake',`${orbit('file')}<div><p>带入的理解</p><h3 data-text="impact-source-title"></h3><small data-text="impact-source-use"></small></div>`)}
-          ${surface('impact','worksite-impact-detail',`${back()}<div class="worksite-impact-grid"><div class="worksite-impact-left"><div class="worksite-amber-label">${orbit('bulb')}<span>实际影响</span></div><h2 data-text="decision-short"></h2><div class="worksite-choice"><h3><i></i>本次取舍</h3><p data-text="decision-description"></p></div><div class="worksite-artifact-preview"><header><span data-text="artifact-demo-title"></span>${button('artifact','打开对应原型',{cls:'worksite-text-button',glyph:'external'})}</header><div class="worksite-mini-prototype"><div>${orbit('quote')}<span>一个有触动的片段，不必立刻变成结论。</span><span class="worksite-mini-saved">${icon('check')}示例已留下</span></div><p>${icon('plus')}补一句我的感受（可选）</p></div></div><div class="worksite-stage-list" aria-label="影响程度与独立证据"></div></div><div class="worksite-impact-right"><section><h3>${orbit('check')}目前能确认</h3><div class="worksite-confirmed"></div><div class="worksite-evidence"></div></section><section><h3>${orbit('circle')}还不能确认</h3><div class="worksite-unconfirmed"></div></section></div></div><footer class="worksite-impact-footer">${button('correction','这条影响关系不准确',{cls:'worksite-text-button',glyph:'info'})}<div>${button('results','补一份实际结果',{cls:'worksite-primary',glyph:'arrow'})}<p>实现完成，不等于真实使用有效。</p></div></footer>`)}
+          ${surface('impact','worksite-impact-detail',`${back()}<div class="worksite-impact-grid"><div class="worksite-impact-left"><div class="worksite-amber-label">${orbit('bulb')}<span>实际影响</span></div><h2 data-text="decision-short"></h2><div class="worksite-choice"><h3><i></i>本次取舍</h3><p data-text="decision-description"></p></div><div class="worksite-artifact-preview"><header><span data-text="artifact-demo-title"></span>${button('artifact','打开对应原型',{cls:'worksite-text-button',glyph:'external'})}</header><div class="worksite-mini-prototype"><div>${orbit('quote')}<span>一个有触动的片段，不必立刻变成结论。</span><span class="worksite-mini-saved">${icon('check')}示例已留下</span></div><p>${icon('plus')}补一句我的感受（可选）</p></div></div><div class="worksite-stage-list" aria-label="影响程度与独立证据"></div></div><div class="worksite-impact-right"><section><h3>${orbit('check')}目前能确认</h3><div class="worksite-confirmed"></div><div class="worksite-evidence"></div></section><section><h3>${orbit('circle')}还不能确认</h3><div class="worksite-unconfirmed"></div></section></div></div><footer class="worksite-impact-footer">${button('correction','这条影响关系不准确',{cls:'worksite-text-button',glyph:'info'})}<div>${button('results','补一份实际结果',{cls:'worksite-primary',glyph:'arrow'})}<p>完成实现后，仍要用实际结果判断是否有效。</p></div></footer>`)}
         </div>
         <div class="worksite-state" data-screen="finding" hidden>
           <div class="worksite-finding-back">${back()}</div>
@@ -154,7 +154,7 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
     } else if(name==='correction') {
       title='修正这条影响关系';html=`<p>纠错仅保留本次说明，不抹去既有证据。</p>${label(fieldId('correction'),'说明哪里不准确')}<textarea id="${fieldId('correction')}" data-local-field="correction" rows="5">${esc(current.impact?.correction||'')}</textarea><footer>${button('close-panel','取消')}${button('save-correction','保留纠错',{cls:'worksite-primary'})}</footer>`;
     } else if(name==='profile'){
-      title='个人区域';html='<p>当前没有账户接入。</p><p>数据保存范围以宿主显示为准；这里不提供云同步。</p>';
+      title='个人区域';html='<p>当前没有 Trace 账号。</p><p>你的内容保存在当前设备，这里不提供云同步。</p>';
     } else if(name==='finding-source'){
       title='查看现场';html=`<p>${esc(current.finding?.source?.title||current.work?.title||'当前工作')}</p><blockquote>${esc(current.finding?.source?.excerpt||current.decision?.description||'尚无现场来源。')}</blockquote><p>来源没有可打开的链接，原文仍可在这里核对。</p>`;
     } else if(name==='finding-matter'){
@@ -234,8 +234,8 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
     q('.worksite-agent-button span').textContent=current.work?.connection?.status==='returned_for_review'?'结果已回来':current.work?.connected?'接回 Codex 结果':'交给 Codex';
     text('intake-count',`· ${current.intake?.length||0}`);
     const decision=current.decision||{};
-    text('decision-title',decision.title||'暂无具体取舍');text('decision-short',decision.title||'暂无具体取舍');text('decision-description',!current.isDemo&&!decision.id?'本次尚无工作取舍或产物依据。':decision.description||'外部 Agent 尚未连接，不会自动生成工作影响。');
-    text('decision-truth',current.isDemo?'原型检查仅为示例，真实使用效果尚未确认。':current.work?.connected?'各项影响需要独立证据，不能由提供内容推定。':'外部 Agent 尚未连接，不代表已提供或已实现。');
+    text('decision-title',decision.title||'暂无具体取舍');text('decision-short',decision.title||'暂无具体取舍');text('decision-description',!current.isDemo&&!decision.id?'本次还没有留下具体取舍或工作结果。':decision.description||'Agent 还没有返回工作记录。');
+    text('decision-truth',current.isDemo?'这里展示的是演示记录，实际使用效果仍需单独确认。':current.work?.connected?'各项影响需要独立依据，不能只根据带入内容推定。':'这项工作还未交给 Agent；带入内容不代表已经执行。');
     text('observation',current.impact?.unconfirmed?.[0]||'还没有带回实际观察。');
     qa('[data-action="artifact"] span').forEach(el=>{if(el.closest('.worksite-artifact-link'))el.textContent=decision.artifact?.title||'查看工作产物';if(el.closest('.worksite-fact-source'))el.textContent='查看工作来源';});
     q('.worksite-prototype-note').hidden=!current.isDemo;

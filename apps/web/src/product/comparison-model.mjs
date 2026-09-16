@@ -29,21 +29,21 @@ const DEMO_CANDIDATES = [
   { id: 'demo-project', title: '没写附言，也能重新找回', kind: 'demo', sourceType: '项目实践',
     excerpt: '我没有为每次收藏写附言。再次处理同一个项目时，问题和原来的阅读现场一起被想了起来。',
     summary: '在持续的项目中，再次使用让原来的阅读现场浮现。',
-    context: '本地演示材料，不对应真实文章、作者或外部搜索结果。示例处境是持续推进的同一项目，重新出现的问题成为恢复阅读现场的线索。它没有提供脱离任务时仍能恢复思考的证据。',
+    context: '演示材料，不对应外部文章或作者。这个情形来自持续推进的同一项目：重新出现的问题成为恢复阅读现场的线索，但它没有说明离开任务后是否仍能恢复思考。',
     url: null, scopes: ['prior', 'public'],
     relationship: { type: 'limitation', target: DEMO_FOCUS, summary: '可能限制：必须写下个人表达', reason: '可能限制“必须写下个人表达”的绝对说法；需要核对任务条件是否相同。', uncertain: '没有任务牵引时是否仍有效，尚不能说明。' },
     comparison: { same: '都在解决收藏后怎样重新使用。', different: '对方有持续的项目任务，这里还包括日常碎片阅读。', unknown: '没有任务牵引时是否仍有效。' } },
   { id: 'demo-reading', title: '写过理由，后来还是接不上', kind: 'demo', sourceType: '日常阅读',
     excerpt: '我在收藏时写了一句“这个观点很重要”，但后来仍想不起当时具体在问什么。',
     summary: '留下的是一句评价，没有留下当时的问题。',
-    context: '本地演示材料。示例中的附言只是重要性评价，并未记下疑问或个人处境；它不代表所有附言都不能帮助恢复思考。',
+    context: '演示材料。这里的附言只是重要性评价，没有记下疑问或个人处境；它不能说明所有附言都无法帮助恢复思考。',
     url: null, scopes: ['prior', 'public'],
     relationship: { type: 'supplement', target: DEMO_FOCUS, summary: '可能补充：表达里需要留下什么', reason: '可能补充：表达里需要留下什么，而不只是是否写过。', uncertain: '什么内容足以恢复思考，还需要具体情形。' },
     comparison: { same: '都尝试通过附言恢复收藏时的思考。', different: '附言只评价重要性，没有保留当时的问题。', unknown: '留下问题以后是否就一定能接回。' } },
   { id: 'demo-task', title: '任务出现后，旧收藏才有了用处', kind: 'demo', sourceType: '使用经历',
     excerpt: '等到再次遇见一个具体问题，我才开始查找旧材料；那时才知道它能参与哪一处判断。',
     summary: '重新遇到具体问题，才开始寻找旧材料。',
-    context: '本地演示材料。这里描述新任务带来的重新查找，不足以证明恢复了原来的触动，也不能推断新任务出现之前材料没有价值。',
+    context: '演示材料。这里描述的是新任务带来的重新查找，不能证明原来的触动已经恢复，也不能据此判断此前的材料没有价值。',
     url: null, scopes: ['prior', 'public'],
     relationship: { type: 'possibility', target: DEMO_FOCUS, summary: '可能有关：再次出现的情境', reason: '可能有关：再次出现的情境也可能成为接续入口。', uncertain: '重新找到材料与恢复原来的思考是否相同，仍未分清。' },
     comparison: { same: '都希望旧材料在以后继续起作用。', different: '这里由新任务启动寻找，不一定恢复旧问题。', unknown: '重新使用是否等于接回原来的思考。' } },
@@ -206,7 +206,7 @@ export function reduceComparison(previous, action = {}) {
       state.candidateIds = searchCatalog(state);
       state.search.status = state.candidateIds.length ? 'ready' : 'empty';
       state.screen = 'candidates'; state.selectedId = null; state.revision.open = false;
-      return inform(state, state.candidateIds.length ? '这些是本地演示候选，未进行外部搜索；关系仍待确认。' : '本地演示材料中没有匹配；这不代表外部没有材料。可以调整条件或粘贴已有摘录。');
+      return inform(state, state.candidateIds.length ? '这些内容已提前保存在完整演示中，没有发起新的联网搜索；关系仍由你确认。' : '演示中没有找到匹配内容。可以调整条件，或粘贴已有摘录。');
     }
     case 'ADJUST_SEARCH': state.screen = 'search'; state.revision.open = false; return inform(state, '调整只影响本次查找条件，不修改原事项。');
     case 'IMPORT_MATERIAL': {
@@ -296,7 +296,7 @@ export function reduceComparison(previous, action = {}) {
         return inform(state, string(action.error?.message) || string(action.error) || '原事项没有接受这次提交；草稿保留，请核对当前版本。');
       }
       if (!validMatter(action.matter) || action.matter.id !== request.matterId || !validReceipt(action.receipt, request, action.matter)) {
-        return inform(state, '提交回执与原事项当前状态不一致；未宣称更新成功，请重新核验宿主。');
+        return inform(state, '这件事已经发生变化，因此没有应用这次更新。请返回后重新打开。');
       }
       state.matter = clone(action.matter); state.receipt = clone(action.receipt); state.revision.open = false;
       if (request.kind === 'link') {

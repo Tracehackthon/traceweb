@@ -110,7 +110,7 @@ export class WebRuntime {
   // overview → growth → reentry interaction. The canonical matter remains in
   // the bridge; leaving this route discards only the presentation state.
   private mattersPresentation: { mode: 'overview' | 'reentry' | 'deep' | 'search'; selectedId: string | null; deepTab: string; contextMode: string; query: string } | null = null;
-  private status: WebStatus = { state: 'loading', text: '正在接回你留在本机的内容…' };
+  private status: WebStatus = { state: 'loading', text: `正在读取${storageLabel}中的内容…` };
   private error: string | null = null;
   private dialog: DialogState | null = null;
   private snapshot: RuntimeSnapshot = this.makeSnapshot();
@@ -149,7 +149,7 @@ export class WebRuntime {
   }
 
   private async loadWorkspace(): Promise<void> {
-    this.setStatus('loading', '正在接回你留在本机的内容…');
+    this.setStatus('loading', `正在读取${storageLabel}中的内容…`);
     try {
       const response = await workspaceRequest('/api/web/workspace', { cache: 'no-store' });
       if (!response.ok) throw new Error(`读取本机内容失败（${response.status}），没有重置数据。`);
@@ -169,11 +169,11 @@ export class WebRuntime {
       this.ready = true;
       this.error = null;
       this.setPreferences();
-      this.setStatus('saved', `已连接${storageLabel}存储`);
+      this.setStatus('saved', `内容保存在${storageLabel}`);
       this.emit();
     } catch (cause) {
       this.error = cause instanceof Error ? cause.message : String(cause);
-      this.setStatus('error', '本机内容未能读取，没有用空内容覆盖它。');
+      this.setStatus('error', '内容暂时无法读取。原有内容没有被覆盖，请重新加载。');
       throw cause;
     }
   }
@@ -235,7 +235,7 @@ export class WebRuntime {
     const payload = { expectedRevision: this.revision, host: clone(value), commandId };
     this.pendingPayload = payload;
     this.pendingGeneration = this.dirty;
-    this.setStatus('saving', `正在保存在${storageLabel}…`);
+    this.setStatus('saving', `正在保存到${storageLabel}…`);
     let response: Response;
     let data: any;
     try {

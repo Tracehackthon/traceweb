@@ -174,7 +174,7 @@ export function reduceChain(previous, action = {}) {
       s.discussion.messages.push({ id: nextId(state, 'message'), role: 'user', text: s.composer.text, focus, contextMode: s.contextMode, contextEpoch: s.contextEpoch });
       s.composer.text = '';
       state.screen = 'discussion';
-      return inform(state, '你的表达已留在本次会话；原型不会伪造模型回复。');
+      return inform(state, '你的表达已经留下。当前没有 Agent 回答，可以继续自己写。');
     }
     case 'FOCUS': {
       const focus = { field: action.field, start: action.start, end: action.end, text: string(action.text), ...(action.objectId ? { objectId: action.objectId } : {}) };

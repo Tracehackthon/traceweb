@@ -124,11 +124,11 @@ export function dispatchChain(host, { matterId, action, expectedUnderstandingVer
   if (expectedUnderstandingVersion !== undefined && expectedUnderstandingVersion !== current.understandingVersion)
     return failure(host, 'version_conflict', '理解已有后来修改；未覆盖新版本。');
   if (!action || ['CAPTURE', 'CAPTURE_DRAFT', 'CAPTURE_EXCERPT', 'TOGGLE_SOURCE'].includes(action.type))
-    return failure(host, 'unsupported_action', '新输入请使用明确的宿主捕获入口。');
+    return failure(host, 'unsupported_action', '请从首页留下一点。');
   if (action.type === 'OPEN' && action.id !== matterId) return failure(host, 'matter_mismatch', '打开对象与事项 ID 不一致。');
   // Do not let the old chain result/handoff screen create a second work/result owner.
   if (['COMMIT_REVISION', 'UNDO_REVISION', 'KEEP_RESULT_ONLY', 'RESULT_DRAFT', 'WORK_FINDING'].includes(action.type))
-    return failure(host, 'use_worksite', '结果与工作修订统一交给工作现场宿主。');
+    return failure(host, 'use_worksite', '请到工作现场处理结果与理解修订。');
   if (action.type === 'SAVE_UNDERSTANDING' && !nonempty(current.understandingDraft))
     return failure(host, 'empty_understanding', '空草稿不会静默清空已保存理解。');
   const next = copy(host);
@@ -233,7 +233,7 @@ export function openComparison(host, { sessionId, matterId, anchor, returnTarget
 export function dispatchComparison(host, { sessionId, action } = {}) {
   const session = host.comparisons[sessionId];
   if (!session) return failure(host, 'unknown_session', '没有找到本次对照。');
-  if (action?.type === 'COMMIT_RESULT') return failure(host, 'host_receipt_only', '页面动作不能伪造宿主成功回执。');
+  if (action?.type === 'COMMIT_RESULT') return failure(host, 'host_receipt_only', '请从工作现场确认结果；当前内容没有改变。');
   if (action?.type === 'SEARCH') return failure(host, 'capability_missing', '尚未连接搜索；可以粘贴已有材料，不返回演示候选。');
   const next = copy(host);
   const local = next.comparisons[sessionId];
@@ -319,7 +319,7 @@ export function deliverComparisonResult(host, { sessionId, requestId, outcome } 
   const proven = outcome?.ok && committed && committed.requestFingerprint === outcome.receipt?.requestFingerprint &&
     current.understandingVersion === outcome.matter?.version && current.understanding === outcome.matter?.understanding;
   const result = outcome?.ok && !proven
-    ? { ok: false, error: { code: 'late_or_unproven_receipt', message: '回执已过期或不在宿主提交记录中；当前理解未被旧结果覆盖。' } }
+    ? { ok: false, error: { code: 'late_or_unproven_receipt', message: '这次结果已过期或与当前状态不一致；现有理解没有被覆盖。' } }
     : outcome;
   next.comparisons[sessionId].model = reduceComparison(local.model, { type: 'COMMIT_RESULT', requestId, ...result });
   if (proven) next.comparisons[sessionId].draftVersion = current.understandingDraftVersion;
@@ -359,7 +359,7 @@ export function recoverPendingComparisons(host) {
 export function returnFromComparison(host, sessionId) {
   const local = host.comparisons[sessionId];
   if (!local) return failure(host, 'unknown_session', '没有找到原返回位置。');
-  if (local.model.request) return failure(host, 'pending_request', '仍在等待宿主确认，尚未显示为完成。');
+  if (local.model.request) return failure(host, 'pending_request', '仍在等待保存确认，暂时不能标记为完成。');
   const current = matter(host, local.matterId);
   if (!current) return failure(host, 'unknown_matter', '原事项已不可用，保留对照与返回位置。');
   const next = copy(host);

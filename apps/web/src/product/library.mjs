@@ -17,8 +17,8 @@ export function recordsOf(host) {
   for(const s of host.chain.sources) {
     const m=host.chain.matters.find(m=>m.id===s.ownerMatterId);
     const links=(m?.links||[]).filter(l=>l.sourceId===s.id);
-    const provenance=s.origin==='provider-snapshot'&&s.provider==='zhihu'?`知乎开放平台快照${s.author?` · ${s.author}`:''}`:'';
-    rows.push({kind:'source',id:s.id,matterId:m?.id,title:s.title||'手工带入的材料',text:s.excerpt||'',meta:links.length?`${provenance?`${provenance} · `:''}已关联 · ${links.map(l=>({limit:'限制',limitation:'限制',support:'支持',supplement:'补充',challenge:'挑战'}[l.relationship.type]||'有关')).join('、')} · 未自动采用`:provenance?`${provenance} · 尚未关联`:'尚未关联 · 用户粘贴，来源未核验',route:m?{view:'chain',matterId:m.id,screen:'resume'}:null});
+    const provenance=s.origin==='provider-snapshot'&&s.provider==='zhihu'?`知乎公开内容${s.author?` · ${s.author}`:''}`:'';
+    rows.push({kind:'source',id:s.id,matterId:m?.id,title:s.title||'手工带入的材料',text:s.excerpt||'',meta:links.length?`${provenance?`${provenance} · `:''}已关联为${links.map(l=>({limit:'限制',limitation:'限制',support:'支持',supplement:'补充',challenge:'挑战'}[l.relationship.type]||'相关材料')).join('、')} · 还未写入我的理解`:provenance?`${provenance} · 尚未关联`:'尚未关联 · 用户粘贴，来源未核验',route:m?{view:'chain',matterId:m.id,screen:'resume'}:null});
   }
   for(const w of Object.values(host.worksite.works)) {
     const s=host.worksite.sessions[w.id];
@@ -89,7 +89,7 @@ export function mountLibrary({root,host,route,onNavigate,onBack,onProfile}) {
     const rows=queryRecords(host,current);
     root.querySelector('.web-count').textContent=`${rows.length} 条${current.q?'匹配':''}痕迹`;
     root.querySelectorAll('[data-kind]').forEach(b=>b.setAttribute('aria-pressed',String(current.kind===b.dataset.kind)));
-    root.querySelector('.web-records').innerHTML=rows.length?rows.map(r=>`<article class="web-record" id="record-${h(r.id)}" data-record="${h(r.id)}"><div class="web-record-meta"><span>${label[r.kind]}</span><span>${h(r.meta||'你的内容')}</span></div><button class="web-record-open" data-open="${h(r.id)}"><h2>${h(short(r.title,70))}</h2><p>${h(r.text)}</p>${r.interpretation?`<p class="web-secondary">解释：${h(r.interpretation)}</p>`:''}${r.unconfirmed?`<p class="web-secondary">还不确定：${h(r.unconfirmed)}</p>`:''}</button><div class="web-record-bottom">${r.matterId?'属于同一件事 · ':''}${r.route?'打开原处 →':'原材料保留在这里，尚未关联事项'}</div></article>`).join(''):`<section class="web-empty"><h2>${works?'还没有工作记录':current.q?'没有找到这次想找的内容':'这里还没有痕迹'}</h2><p>${works?'从一件事的「我的理解」进入「带去用」，确认本次任务和带入的内容。':'可以换一个关键词，或从首页留下一点。你的内容不会被示例替换。'}</p><button class="web-primary" data-go="home">回首页留下一点</button></section>`;
+    root.querySelector('.web-records').innerHTML=rows.length?rows.map(r=>`<article class="web-record" id="record-${h(r.id)}" data-record="${h(r.id)}"><div class="web-record-meta"><span>${label[r.kind]}</span><span>${h(r.meta||'你的内容')}</span></div><button class="web-record-open" data-open="${h(r.id)}"><h2>${h(short(r.title,70))}</h2><p>${h(r.text)}</p>${r.interpretation?`<p class="web-secondary">解释：${h(r.interpretation)}</p>`:''}${r.unconfirmed?`<p class="web-secondary">还不确定：${h(r.unconfirmed)}</p>`:''}</button><div class="web-record-bottom">${r.matterId?'属于同一件事 · ':''}${r.route?'打开原处 →':'这份材料还没有关联到任何一件事'}</div></article>`).join(''):`<section class="web-empty"><h2>${works?'还没有工作记录':current.q?'没有找到这次想找的内容':'这里还没有痕迹'}</h2><p>${works?'从一件事的「我的理解」进入「带去用」，确认本次任务和带入的内容。':'换个关键词，或回首页留下一点。'}</p><button class="web-primary" data-go="home">回首页留下一点</button></section>`;
   }
   function change(patch){current={...current,...patch};onNavigate(current,{replace:true,render:false});paint();}
   on(root,'click',event=>{

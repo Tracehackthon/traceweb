@@ -450,7 +450,7 @@ export function mountMattersScreen({ root, view: initialView, onAction, onHome =
     const persisted = view.example === false;
     const kindLabel = kind === 'quote' ? item.example === false ? persisted ? '本机输入' : '本次输入' : '示例引文' : item.kind || '示例现场';
     const sessionLabel = persisted ? '已保存在本机' : '仅本次会话';
-    const footnote = persisted ? '这是保存在本机的内容；来源链接不会被自动读取或伪造。' : item.example === false ? '这是你在本次页面会话中留下的内容，刷新后重置。' : '这是用于演示交互的现场摘录，不是已连接的外部原文。';
+    const footnote = persisted ? '这是已保存的内容；只有你主动打开时才会访问来源链接。' : item.example === false ? '这是你在本次页面会话中留下的内容，刷新后重置。' : '这是演示中的现场摘录，不对应外部原文。';
     frame.append(close, el('p', 'matters-material-kind', `${kindLabel} · ${sessionLabel}`), title, el('p', 'matters-material-excerpt', kind === 'quote' ? item.text : item.excerpt), el('p', 'matters-material-owner', `关联「${owner?.title || view.selected?.title || '在意的事'}」`), el('p', 'matters-material-footnote', footnote));
     frame.append(button('回到这件事', 'matters-primary', () => closeMaterial()));
     dialog.replaceChildren(frame); materialOpen = true;
@@ -579,7 +579,7 @@ export function mountMattersScreen({ root, view: initialView, onAction, onHome =
     if (destroyed) return;
     const previousMode = view?.mode;
     view = nextView;
-    prototypeNote.textContent=view.example===false?'你的内容 · 已保存在本机':'示例内容 · 仅本次会话';
+    prototypeNote.textContent=view.example===false?'你的内容':'演示内容';
     const key = fingerprint(view);
     if (key === lastFingerprint) { syncInputs(); return; }
     const active = document.activeElement;
