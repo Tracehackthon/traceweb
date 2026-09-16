@@ -23,7 +23,9 @@ export function recordsOf(host) {
   for(const w of Object.values(host.worksite.works)) {
     const s=host.worksite.sessions[w.id];
     const matterId=s?.intake[0]?.matterId;
-    rows.push({kind:'work',id:w.id,matterId,title:w.title,text:`${w.agent} · ${w.project}`,meta:'本地工作记录 · 尚未发送',route:{view:'worksite',workId:w.id,matterId,screen:'overview'}});
+    const returned=w.connected&&w.connection?.status==='returned_for_review'||Boolean(s?.result?.fact)||Boolean(s?.results?.length);
+    const meta=returned?'Codex 已返回 · 等待你确认':w.connected?'已连接本机 Agent':'本地工作记录 · 尚未发送';
+    rows.push({kind:'work',id:w.id,matterId,title:w.title,text:`${w.agent} · ${w.project}`,meta,route:{view:'worksite',workId:w.id,matterId,screen:'overview'}});
     for(const r of s?.results||[]) rows.push({kind:'result',id:`${w.id}:${r.id}`,matterId:r.matterId,title:w.title,text:r.fact,interpretation:r.interpretation,unconfirmed:r.unconfirmed,meta:r.decision==='revised'?'依据此结果确认过修订':'只留下结果 · 理解未改变',route:{view:'worksite',workId:w.id,matterId:r.matterId,screen:'results',resultId:r.id}});
     for(const f of s?.findings||[])rows.push({kind:'discussion',id:`${w.id}:${f.id}`,matterId:f.matterId,title:w.title,text:f.text,meta:'工作中留下的发现',route:{view:'worksite',workId:w.id,matterId,screen:'finding'}});
   }
