@@ -96,6 +96,18 @@ const server = http.createServer((req, res) => {
     await page.reload(); await page.locator('#capture-input').waitFor();
     check('storage failure retry preserves newer draft', await page.locator('#capture-input').inputValue() === '继续编辑的草稿 B');
     await second.close();
+    const legacyCapture = await page.evaluate(async () => {
+      const db = await new Promise((resolve, reject) => { const r = indexedDB.open('trace-portal-workspace-v1', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      const record = await new Promise((resolve, reject) => { const tx = db.transaction('workspace', 'readonly'); const r = tx.objectStore('workspace').get('current'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      record.host.chain.capture = '旧版未提交草稿';
+      await new Promise((resolve, reject) => { const tx = db.transaction('workspace', 'readwrite'); tx.objectStore('workspace').put(record, 'current'); tx.oncomplete = resolve; tx.onabort = reject; });
+      db.close();
+      const m = await import('/__test/browser-workspace.mjs');
+      const repaired = await m.readBrowserWorkspace();
+      await m.putBrowserWorkspace({ expectedRevision: repaired.revision, commandId: 'legacy-capture-repair', host: repaired.host });
+      return (await m.readBrowserWorkspace()).host.chain.capture;
+    });
+    check('legacy string capture keeps its draft and repairs the canonical shape', legacyCapture.text === '旧版未提交草稿' && Array.isArray(legacyCapture.sourceIds));
     const adapter = await page.evaluate(async () => {
       const m = await import('/__test/browser-workspace.mjs');
       const before = await m.readBrowserWorkspace();

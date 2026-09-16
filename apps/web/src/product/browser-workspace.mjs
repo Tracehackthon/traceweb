@@ -15,6 +15,19 @@ function validateHost(host) {
     || host.chain.isDemo === true || host.worksite.isDemo === true) {
     throw failure(422, 'INVALID_HOST', '工作区结构或版本不正确，未覆盖已保存内容。');
   }
+  // Builds before the canonical capture object existed stored the home draft
+  // directly as a string. Preserve that text and repair the in-memory shape;
+  // the next successful write commits the canonical representation.
+  if (typeof host.chain.capture === 'string') {
+    host.chain.capture = { text: host.chain.capture, sourceIds: [], excerpt: '', excerptSourceId: null };
+  }
+  const capture = host.chain.capture;
+  if (!capture || typeof capture !== 'object' || Array.isArray(capture)
+    || typeof capture.text !== 'string' || !Array.isArray(capture.sourceIds)
+    || typeof capture.excerpt !== 'string'
+    || !(capture.excerptSourceId === null || typeof capture.excerptSourceId === 'string')) {
+    throw failure(422, 'INVALID_HOST', '首页草稿结构不正确，未覆盖已保存内容。');
+  }
 }
 function snapshot(record) {
   if (record === undefined) return { revision: 0, host: null, storage: info };
