@@ -49,3 +49,24 @@ test('OAuth callback accepts Zhihu hackathon callback without state but requires
     await assert.rejects(() => oauth.finishAuthorization({ headers: { cookie: cookiePair } }, mismatched), (error) => error.code === 'OAUTH_STATE_MISMATCH');
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('OAuth callback forwards only marked local Trace handoffs to the fixed loopback receiver', async () => {
+  const { default: handler } = await import(`../../../api/oauth-callback.mjs?loopback=${Date.now()}`);
+  const headers = new Map();
+  const response = { statusCode: 0, setHeader(name, value) { headers.set(name.toLowerCase(), value); }, end() {} };
+  const state = `trace-local-v1.${'a'.repeat(43)}`;
+  await handler({ method: 'GET', url: `/callback?state=${state}&authorization_code=one-time-code` }, response);
+  assert.equal(response.statusCode, 303);
+  const location = new URL(headers.get('location'));
+  assert.equal(location.origin, 'http://127.0.0.1:4174');
+  assert.equal(location.pathname, '/api/zhihu/oauth/loopback-callback');
+  assert.equal(location.searchParams.get('state'), state);
+  assert.equal(location.searchParams.get('authorization_code'), 'one-time-code');
+  assert.equal(headers.get('cache-control'), 'no-store');
+  assert.equal(headers.get('referrer-policy'), 'no-referrer');
+
+  const unmarkedHeaders = new Map();
+  const unmarked = { statusCode: 0, setHeader(name, value) { unmarkedHeaders.set(name.toLowerCase(), value); }, end() {} };
+  await handler({ method: 'GET', url: '/callback?state=ordinary&authorization_code=code' }, unmarked);
+  assert.notEqual(unmarkedHeaders.get('location')?.startsWith('http://127.0.0.1:4174'), true);
+});

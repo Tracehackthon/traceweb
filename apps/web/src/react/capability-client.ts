@@ -23,6 +23,43 @@ export async function searchPublic(source: SearchSource, query: string, count = 
   return api(source === 'global' ? '/api/search/global' : '/api/search/zhihu', { query, count });
 }
 
+export type ZhihuAuthorizationStatus = {
+  enabled?: boolean;
+  oauth?: { configured?: boolean; status?: string; expires_at?: string | null };
+  user_content_configured?: boolean;
+  notice?: string;
+};
+
+export async function zhihuAuthorizationStatus(): Promise<ZhihuAuthorizationStatus> {
+  const bridge = nativeBridge();
+  if (bridge?.requestCapability) return bridge.requestCapability({ operation: 'zhihu.status' });
+  return api('/api/zhihu/status');
+}
+
+export async function startZhihuAuthorization(): Promise<any> {
+  const bridge = nativeBridge();
+  if (bridge?.requestCapability) return bridge.requestCapability({ operation: 'zhihu.oauth.start' });
+  return api('/api/zhihu/oauth/start', {});
+}
+
+export async function checkZhihuAuthorization(): Promise<ZhihuAuthorizationStatus> {
+  const bridge = nativeBridge();
+  if (bridge?.requestCapability) return bridge.requestCapability({ operation: 'zhihu.oauth.check' });
+  return zhihuAuthorizationStatus();
+}
+
+export async function disconnectZhihuAuthorization(): Promise<any> {
+  const bridge = nativeBridge();
+  if (bridge?.requestCapability) return bridge.requestCapability({ operation: 'zhihu.oauth.disconnect' });
+  return api('/api/zhihu/oauth/disconnect', {});
+}
+
+export async function readZhihuUserContent(kind: 'contents' | 'favorites' | 'followees', limit = 3): Promise<any> {
+  const bridge = nativeBridge();
+  if (bridge?.requestCapability) return bridge.requestCapability({ operation: 'zhihu.user.read', kind, limit, offset: '0' });
+  return api('/api/zhihu/user/read', { kind, limit, offset: '0' });
+}
+
 export async function agentCapabilities(): Promise<any> {
   const bridge = nativeBridge();
   if (bridge?.requestCapability) return bridge.requestCapability({ operation: 'capabilities' });

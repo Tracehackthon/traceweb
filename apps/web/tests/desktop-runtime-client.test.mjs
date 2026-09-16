@@ -101,6 +101,36 @@ test('desktop runtime client routes public searches by explicit source', async (
   ])
 })
 
+test('desktop runtime client keeps Zhihu OAuth and user reads behind bounded native operations', async () => {
+  const calls = []
+  const client = createRuntimeCapabilityClient({
+    fetchImpl: async (url, init) => {
+      const body = init.body ? JSON.parse(init.body) : undefined
+      calls.push({ pathname: url.pathname, method: init.method, body })
+      if (url.pathname === '/api/zhihu/status') return response({ oauth: { configured: true, status: 'not_authorized' } })
+      if (url.pathname === '/api/zhihu/oauth/start') return response({ status: 'user_action_required', login_url: 'https://trace.neutrom.store/api/trace-oauth/connect?id=test' })
+      if (url.pathname === '/api/zhihu/oauth/check') return response({ oauth: { configured: true, status: 'authorized' } })
+      if (url.pathname === '/api/zhihu/oauth/disconnect') return response({ status: 'disconnected' })
+      if (url.pathname === '/api/zhihu/user/read') return response({ resource: body.kind, items: [] })
+      return response({ error: { message: 'not found' } }, 404)
+    },
+  })
+
+  await client.request({ operation: 'zhihu.status' })
+  await client.request({ operation: 'zhihu.oauth.start' })
+  await client.request({ operation: 'zhihu.oauth.check' })
+  await client.request({ operation: 'zhihu.user.read', kind: 'contents', limit: 3, offset: '0' })
+  await client.request({ operation: 'zhihu.oauth.disconnect' })
+  await assert.rejects(client.request({ operation: 'zhihu.user.read', kind: 'arbitrary', limit: 3, offset: '0' }), /Invalid bounded/)
+  assert.deepEqual(calls, [
+    { pathname: '/api/zhihu/status', method: 'GET', body: undefined },
+    { pathname: '/api/zhihu/oauth/start', method: 'POST', body: {} },
+    { pathname: '/api/zhihu/oauth/check', method: 'POST', body: {} },
+    { pathname: '/api/zhihu/user/read', method: 'POST', body: { kind: 'contents', limit: 3, offset: '0' } },
+    { pathname: '/api/zhihu/oauth/disconnect', method: 'POST', body: {} },
+  ])
+})
+
 test('desktop bridge auto-binds the current project and returns a Codex work result without exposing paths', async (t) => {
   const calls = []
   const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-test-'))

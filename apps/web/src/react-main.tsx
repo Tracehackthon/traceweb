@@ -8,7 +8,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
-import { agentCapabilities, hasNativeCapabilityBridge, runNativeAgent, searchPublic, type SearchItem, type SearchSource } from './react/capability-client';
+import { agentCapabilities, checkZhihuAuthorization, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readZhihuUserContent, runNativeAgent, searchPublic, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus } from './react/capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
@@ -444,43 +444,40 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   </section>;
 }
 
-type ZhihuStatus = { oauth?: { configured?: boolean; status?: string; expires_at?: string | null }; user_content_configured?: boolean; notice?: string };
-
-async function readApiJson(response: Response, fallback: string): Promise<any> {
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.toLowerCase().includes('application/json')) throw new Error('当前环境未启用知乎接口，请在正式站或配置好后端后重试。');
-  const value = await response.json();
-  if (!response.ok) throw new Error(value?.error?.message || fallback);
-  return value;
-}
-
 function ZhihuAuthorization() {
-  const [status, setStatus] = useState<ZhihuStatus | null>(null);
+  const [status, setStatus] = useState<ZhihuAuthorizationStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resource, setResource] = useState('');
   const [items, setItems] = useState<Array<{ id?: string | null; title?: string; summary?: string; url?: string | null }>>([]);
   const load = async () => {
     try {
-      const response = await fetch('/api/zhihu/status', { cache: 'no-store', credentials: 'same-origin' });
-      setStatus(await readApiJson(response, '知乎授权状态暂时不可用。')); setError('');
+      setStatus(await zhihuAuthorizationStatus()); setError('');
     } catch (cause) { setError(cause instanceof Error ? cause.message : '知乎授权状态暂时不可用。'); }
   };
   useEffect(() => { void load(); }, []);
   const start = async () => {
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/zhihu/oauth/start', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
-      const value = await readApiJson(response, '未能发起知乎授权。');
+      const value = await startZhihuAuthorization();
       if (!value.login_url) throw new Error('未能发起知乎授权。');
-      window.location.assign(value.login_url);
+      if (hasNativeCapabilityBridge()) {
+        window.open(value.login_url, '_blank', 'noopener,noreferrer');
+        setStatus(await zhihuAuthorizationStatus());
+        setBusy(false);
+      } else window.location.assign(value.login_url);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '未能发起知乎授权。'); setBusy(false); }
+  };
+  const check = async () => {
+    setBusy(true); setError('');
+    try { setStatus(await checkZhihuAuthorization()); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '未能确认知乎授权结果。'); }
+    finally { setBusy(false); }
   };
   const disconnect = async () => {
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/zhihu/oauth/disconnect', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
-      await readApiJson(response, '未能断开知乎授权。');
+      await disconnectZhihuAuthorization();
       await load();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '未能断开知乎授权。'); }
     finally { setBusy(false); }
@@ -488,15 +485,14 @@ function ZhihuAuthorization() {
   const read = async (kind: 'contents' | 'favorites' | 'followees') => {
     setBusy(true); setError('');
     try {
-      const response = await fetch('/api/zhihu/user/read', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, limit: 3, offset: '0' }) });
-      const value = await readApiJson(response, '没有读到知乎资料。');
+      const value = await readZhihuUserContent(kind, 3);
       setResource(kind); setItems(value.items || []);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '没有读到知乎资料。'); }
     finally { setBusy(false); }
   };
   const authorized = status?.oauth?.status === 'authorized';
   const stateLabel = authorized ? '已连接' : status === null && !error ? '正在检查' : status?.oauth?.configured ? '未连接' : '服务未配置';
-  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>我的知乎内容</h3><span>{stateLabel}</span></div><p>{authorized ? '当前浏览器可以按你的明确操作读取知乎资料；不会自动导入。' : status?.oauth?.configured ? '连接后可由你明确读取创作、关注和收藏。公开搜索不需要这项授权。' : status === null && !error ? '正在核对当前环境的知乎授权能力…' : '当前部署尚未启用个人知乎资料授权。公开搜索与这项设置彼此独立。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开连接</RecoveryButton></> : <RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在打开知乎…' : '连接我的知乎'}</RecoveryButton>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>当前接口返回空列表。</p>}<small>只展示本次明确读取的 3 条，没有自动保存到 Trace。</small></div>}<small>{status?.notice || '这项连接只用于个人知乎资料；Trace 内容仍保存在当前浏览器。'}</small></section>;
+  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>我的知乎内容</h3><span>{stateLabel}</span></div><p>{authorized ? '当前浏览器可以按你的明确操作读取知乎资料；不会自动导入。' : status?.oauth?.configured ? '连接后可由你明确读取创作、关注和收藏。公开搜索不需要这项授权。' : status === null && !error ? '正在核对当前环境的知乎授权能力…' : '当前部署尚未启用个人知乎资料授权。公开搜索与这项设置彼此独立。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || !status?.user_content_configured} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开连接</RecoveryButton></> : <><RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在处理…' : status?.oauth?.status === 'pending_user_authorization' ? '重新打开知乎授权' : '连接我的知乎'}</RecoveryButton>{hasNativeCapabilityBridge() && status?.oauth?.status === 'pending_user_authorization' && <RecoveryButton disabled={busy} onClick={() => void check()}>我已授权，检查结果</RecoveryButton>}</>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>当前接口返回空列表。</p>}<small>只展示本次明确读取的 3 条，没有自动保存到 Trace。</small></div>}<small>{status?.notice || '这项连接只用于个人知乎资料；Trace 内容仍保存在当前浏览器。'}</small></section>;
 }
 
 function DialogHost({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {

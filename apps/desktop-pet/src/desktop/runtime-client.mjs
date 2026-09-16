@@ -129,6 +129,17 @@ export function createRuntimeCapabilityClient({
       if (!['zhihu', 'global'].includes(request.source) || typeof request.query !== 'string' || !request.query.trim() || request.query.length > 500 || !Number.isInteger(request.count) || request.count < 1 || request.count > 5) throw new Error('Invalid bounded search request')
       return runtimeRequest(request.source === 'global' ? '/api/search/global' : '/api/search/zhihu', { query: request.query.trim(), count: request.count })
     }
+    if (request.operation === 'zhihu.status') return runtimeRequest('/api/zhihu/status')
+    if (request.operation === 'zhihu.oauth.start') return runtimeRequest('/api/zhihu/oauth/start', {})
+    if (request.operation === 'zhihu.oauth.check') return runtimeRequest('/api/zhihu/oauth/check', {})
+    if (request.operation === 'zhihu.oauth.disconnect') return runtimeRequest('/api/zhihu/oauth/disconnect', {})
+    if (request.operation === 'zhihu.user.read') {
+      if (!['contents', 'favorites', 'followees'].includes(request.kind)) throw new Error('Invalid bounded Zhihu user request')
+      const limit = request.limit === undefined ? 3 : request.limit
+      const offset = request.offset === undefined ? '0' : request.offset
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20 || typeof offset !== 'string' || !/^\d{1,18}$/.test(offset)) throw new Error('Invalid bounded Zhihu user request')
+      return runtimeRequest('/api/zhihu/user/read', { kind: request.kind, limit, offset })
+    }
     if (request.operation === 'agent.run') {
       if (typeof request.text !== 'string' || !request.text.trim() || request.text.length > 16_000 || !['none', 'zhihu', 'global'].includes(request.source)) throw new Error('Invalid bounded Agent request')
       const capabilities = await runtimeRequest('/api/agent/capabilities')
