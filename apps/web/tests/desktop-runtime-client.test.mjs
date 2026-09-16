@@ -35,7 +35,7 @@ test('desktop runtime client discovers search and Agent independently', async ()
   assert.equal(value.search.enabled, true)
   assert.equal(value.agent.profiles[0].kind, 'codex')
   assert.deepEqual(calls.map((call) => new URL(call.url).pathname).sort(), ['/api/agent/capabilities', '/api/search/capabilities'])
-  assert.equal(calls.every((call) => call.init.headers.origin === 'http://127.0.0.1:4417'), true)
+  assert.deepEqual(calls.map((call) => call.init.headers.origin).sort(), ['http://127.0.0.1:4417', 'https://trace.neutrom.store'])
 })
 
 test('desktop runtime client never sends backend paths or protocol fields to the renderer in errors', async () => {
@@ -45,7 +45,7 @@ test('desktop runtime client never sends backend paths or protocol fields to the
   })
   await assert.rejects(
     client.request({ operation: 'search', source: 'zhihu', query: '边界', count: 1 }),
-    (error) => error.message === '本机 Trace 没有完成这次请求（500）',
+    (error) => error.message === 'Trace 没有完成这次请求（500）',
   )
 })
 
@@ -75,15 +75,15 @@ test('desktop first-run setup reports only safe project and verified Codex detai
   assert.deepEqual(calls[2].body, { profileId: 'local-codex' })
 })
 
-test('desktop first-run Zhihu status degrades without exposing a raw missing-route error', async () => {
+test('desktop first-run Zhihu status fails safely when the cloud route is unavailable', async () => {
   const client = createRuntimeCapabilityClient({
     fetchImpl: async () => new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } }),
   })
-  const status = await client.request({ operation: 'zhihu.status' })
-  assert.equal(status.oauth.configured, false)
-  assert.equal(status.oauth.status, 'unconfigured')
-  assert.match(status.notice, /尚未连接知乎账户服务/)
-  assert.equal(JSON.stringify(status).includes('404'), false)
+  await assert.rejects(client.request({ operation: 'zhihu.status' }), (error) => {
+    assert.equal(error.message, 'Trace 云端能力暂时不可用，请稍后重试')
+    assert.equal(error.message.includes('Not found'), false)
+    return true
+  })
 })
 
 test('desktop runtime client executes the bounded product to Agent chain', async () => {

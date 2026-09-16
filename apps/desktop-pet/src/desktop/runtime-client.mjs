@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const DEFAULT_ORIGIN = 'http://127.0.0.1:4173'
+const DEFAULT_CLOUD_ORIGIN = 'https://trace.neutrom.store'
 const TERMINAL_AGENT_STATES = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 
@@ -31,7 +32,7 @@ function boundedText(value, name, max = 16_000) {
 }
 
 function publicRuntimeError(value, status) {
-  const fallback = `本机 Trace 没有完成这次请求（${status}）`
+  const fallback = `Trace 没有完成这次请求（${status}）`
   const message = typeof value?.error?.message === 'string' ? value.error.message.trim() : ''
   if (!message) return fallback
   if (message.length > 500 || /(?:[A-Za-z]:[\\/]|\/(?:Users|home|var|tmp|private|opt|srv)\/|\b(?:projectDir|contextHash|deliveryId|endpoint|cwd|profileId)\b)/i.test(message)) return fallback
@@ -74,13 +75,17 @@ export function validateRuntimeOrigin(value = DEFAULT_ORIGIN) {
 
 export function createRuntimeCapabilityClient({
   origin = process.env.TRACE_BACKEND_ORIGIN || DEFAULT_ORIGIN,
+  cloudOrigin = process.env.TRACE_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN,
   projectDir: configuredProjectDir,
   fetchImpl = globalThis.fetch,
+  cloudFetchImpl = fetchImpl,
   randomId = randomUUID,
   now = Date.now,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
   const backendOrigin = validateRuntimeOrigin(origin)
+  const cloudBase = new URL(cloudOrigin)
+  if (cloudBase.protocol !== 'https:' || cloudBase.username || cloudBase.password || cloudBase.pathname !== '/' || cloudBase.search || cloudBase.hash) throw new Error('TRACE_CLOUD_ORIGIN must be an HTTPS origin')
   let projectContext
   let selectedProjectDir = configuredProjectDir
   const currentProject = () => {
@@ -120,11 +125,34 @@ export function createRuntimeCapabilityClient({
     return value
   }
 
+  async function cloudRequest(pathname, body, timeoutMs = 35_000) {
+    const url = new URL(pathname, cloudBase.origin)
+    if (url.origin !== cloudBase.origin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Cloud path')
+    const response = await cloudFetchImpl(url, {
+      method: body === undefined ? 'GET' : 'POST',
+      redirect: 'error',
+      credentials: 'include',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        origin: cloudBase.origin,
+        accept: 'application/json',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+    const text = await response.text()
+    if (text.length > 1_048_576) throw new Error('Trace Cloud response exceeded 1 MiB')
+    let value
+    try { value = JSON.parse(text) } catch { throw new Error('Trace 云端能力暂时不可用，请稍后重试') }
+    if (!response.ok) throw new Error(publicRuntimeError(value, response.status))
+    return value
+  }
+
   async function capabilityRequest(request) {
     if (!request || typeof request !== 'object' || Array.isArray(request) || typeof request.operation !== 'string') throw new Error('Invalid capability request')
     if (request.operation === 'capabilities') {
       const [searchResult, agentResult] = await Promise.allSettled([
-        runtimeRequest('/api/search/capabilities'),
+        cloudRequest('/api/search/capabilities'),
         runtimeRequest('/api/agent/capabilities'),
       ])
       const connected = searchResult.status === 'fulfilled' || agentResult.status === 'fulfilled'
@@ -175,23 +203,18 @@ export function createRuntimeCapabilityClient({
     }
     if (request.operation === 'search') {
       if (!['zhihu', 'global'].includes(request.source) || typeof request.query !== 'string' || !request.query.trim() || request.query.length > 500 || !Number.isInteger(request.count) || request.count < 1 || request.count > 5) throw new Error('Invalid bounded search request')
-      return runtimeRequest(request.source === 'global' ? '/api/search/global' : '/api/search/zhihu', { query: request.query.trim(), count: request.count })
+      return cloudRequest(request.source === 'global' ? '/api/search/global' : '/api/search/zhihu', { query: request.query.trim(), count: request.count })
     }
-    if (request.operation === 'zhihu.status') return runtimeRequest('/api/zhihu/status', undefined, 35_000, {
-      enabled: false,
-      oauth: { configured: false, status: 'unconfigured' },
-      user_content_configured: false,
-      notice: '当前桌面版尚未连接知乎账户服务；公开搜索与个人授权分开配置。',
-    })
-    if (request.operation === 'zhihu.oauth.start') return runtimeRequest('/api/zhihu/oauth/start', {})
-    if (request.operation === 'zhihu.oauth.check') return runtimeRequest('/api/zhihu/oauth/check', {})
-    if (request.operation === 'zhihu.oauth.disconnect') return runtimeRequest('/api/zhihu/oauth/disconnect', {})
+    if (request.operation === 'zhihu.status') return cloudRequest('/api/zhihu/status')
+    if (request.operation === 'zhihu.oauth.start') return cloudRequest('/api/zhihu/oauth/start', {})
+    if (request.operation === 'zhihu.oauth.check') return cloudRequest('/api/zhihu/oauth/check', {})
+    if (request.operation === 'zhihu.oauth.disconnect') return cloudRequest('/api/zhihu/oauth/disconnect', {})
     if (request.operation === 'zhihu.user.read') {
       if (!['contents', 'favorites', 'followees'].includes(request.kind)) throw new Error('Invalid bounded Zhihu user request')
       const limit = request.limit === undefined ? 3 : request.limit
       const offset = request.offset === undefined ? '0' : request.offset
       if (!Number.isInteger(limit) || limit < 1 || limit > 20 || typeof offset !== 'string' || !/^\d{1,18}$/.test(offset)) throw new Error('Invalid bounded Zhihu user request')
-      return runtimeRequest('/api/zhihu/user/read', { kind: request.kind, limit, offset })
+      return cloudRequest('/api/zhihu/user/read', { kind: request.kind, limit, offset })
     }
     if (request.operation === 'agent.run') {
       if (typeof request.text !== 'string' || !request.text.trim() || request.text.length > 16_000 || !['none', 'zhihu', 'global'].includes(request.source)) throw new Error('Invalid bounded Agent request')

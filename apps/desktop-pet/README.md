@@ -4,6 +4,8 @@
 
 ## Windows 首版安装包
 
+始终从 [Trace Desktop 最新 Release](https://github.com/Tracehackthon/traceweb/releases/latest) 下载；不要保存或传播带固定旧版本号的安装包链接。
+
 首版 Windows x64 安装包把 Trace Web、桌宠和本机 Runtime 一起打包。普通用户不需要先克隆 `trace_backend`、安装 Node.js 或手动启动服务：安装后打开 Trace，会同时出现桌宠与主界面。
 
 首次接入 Codex：
@@ -14,7 +16,7 @@
 4. 点「检查 Codex」。显示“已登录并通过检查”后，即可在工作页把内容交给 Codex，并让结果回到 Trace 复核。
 5. 需要从 Codex 内主动读取 Trace 时，再点「在 Codex 中使用 Trace」安装可选插件；这不是 Trace → Codex 工作链路的前置条件。
 
-本机 Runtime 会把状态保存在应用数据目录。知乎个人账号授权依赖部署方的知乎服务配置，不会把 App Secret 打进安装包；未配置时界面只显示清楚的不可用状态，不暴露内部接口错误。
+本机 Runtime 会把状态保存在应用数据目录。知乎公开搜索和个人账号授权连接 `https://trace.neutrom.store` 的同源服务，不会把 App Secret 打进安装包。点「授权连接知乎」后，Trace 会打开一个独立的知乎授权窗口；成功回到 Trace 后窗口自动关闭，Token 只保存在桌面应用的加密 HttpOnly Cookie 中。服务不可用时界面只显示清楚的用户提示，不暴露内部接口字段。
 
 构建安装包：
 
@@ -23,7 +25,7 @@ npm ci
 npm run dist:win
 ```
 
-产物位于 `release/Trace-Desktop-0.1.0-Setup.exe`。首版尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+产物位于 `release/Trace-Desktop-<version>-Setup.exe`。首版尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
 
 ## 本地构建
 
@@ -71,7 +73,7 @@ http://127.0.0.1:4173
 
 连接后面板会分别显示：
 
-- 知乎搜索／全网搜索：调用本机 `/api/search/*`，返回公开摘要与原文链接；用户点击后才保留为当前会话观察。
+- 知乎搜索／全网搜索：调用 Trace 同源服务的 `/api/search/*`，返回公开摘要与原文链接；用户点击后才保留为当前会话观察，密钥不进入本机安装包。
 - Agent 执行器：读取 `/api/agent/capabilities` 的安全 profile 描述，不接收浏览器提交的 endpoint、model、cwd 或 secret。
 - Agent 运行：先通过 `/api/product/commands` 保存原话，再创建 `/api/agent/runs`；结果保持为未采纳候选，点击「保留为观察」才进入桌宠当前会话。
 - Trace Web 工作交接：页面只提交工作 ID、事项 ID、原话、任务和本次使用方式；Bridge 自动补齐当前项目位置，依次调用 `product/commands → product/codex/receive → agent/runs → product/codex/return`，最后只把事实、解释、待确认项和建议理解送回页面。

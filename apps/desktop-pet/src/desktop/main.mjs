@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -11,6 +11,7 @@ const openProductOnStart = app.isPackaged || process.env.TRACE_DESKTOP_OPEN_ON_S
 const appIconPath = join(root, 'trace-app-icon-256.png')
 const trayIconPath = join(root, 'trace-app-icon-20.png')
 const allowedDiscussionKeys = new Set(['from', 'observationId', 'text', 'status', 'source'])
+const traceCloudOrigin = 'https://trace.neutrom.store'
 
 let overlayWindow
 let tray
@@ -18,6 +19,7 @@ let quitting = false
 let capabilityClient
 let bundledRuntime
 const discussionWindows = new Set()
+let zhihuAuthWindow
 
 function settingsFile() { return join(app.getPath('userData'), 'desktop-settings.json') }
 function readDesktopSettings() {
@@ -190,6 +192,56 @@ function createTray() {
   tray.on('click', toggleOverlay)
 }
 
+function openZhihuAuthorization(loginUrl, parentWindow) {
+  let target
+  try { target = new URL(loginUrl) } catch { throw new Error('知乎授权地址不正确') }
+  if (target.protocol !== 'https:' || target.hostname !== 'openapi.zhihu.com') throw new Error('知乎授权地址不受信任')
+  if (zhihuAuthWindow && !zhihuAuthWindow.isDestroyed()) zhihuAuthWindow.close()
+  zhihuAuthWindow = new BrowserWindow({
+    width: 760,
+    height: 760,
+    minWidth: 620,
+    minHeight: 640,
+    parent: parentWindow,
+    modal: true,
+    show: false,
+    autoHideMenuBar: true,
+    backgroundColor: '#f4f2eb',
+    title: '连接知乎 · Trace',
+    icon: appIconPath,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  })
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (error) => {
+      if (settled) return
+      settled = true
+      if (zhihuAuthWindow && !zhihuAuthWindow.isDestroyed()) zhihuAuthWindow.close()
+      zhihuAuthWindow = undefined
+      error ? reject(error) : resolve()
+    }
+    const inspect = (rawUrl) => {
+      let url
+      try { url = new URL(rawUrl) } catch { return }
+      if (url.origin !== traceCloudOrigin || url.pathname !== '/app') return
+      if (url.searchParams.get('zhihu') === 'connected') finish()
+      else if (url.searchParams.get('zhihu') === 'error') finish(new Error('知乎没有完成授权，请重新连接'))
+    }
+    zhihuAuthWindow.once('ready-to-show', () => zhihuAuthWindow?.show())
+    zhihuAuthWindow.webContents.on('will-redirect', (_event, url) => inspect(url))
+    zhihuAuthWindow.webContents.on('did-navigate', (_event, url) => inspect(url))
+    zhihuAuthWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (url.startsWith('https://')) void shell.openExternal(url)
+      return { action: 'deny' }
+    })
+    zhihuAuthWindow.once('closed', () => {
+      zhihuAuthWindow = undefined
+      if (!settled) { settled = true; reject(new Error('已取消知乎授权')) }
+    })
+    void zhihuAuthWindow.loadURL(target.href).catch(() => finish(new Error('无法打开知乎授权页面')))
+  })
+}
+
 const ownsInstance = app.requestSingleInstanceLock()
 if (!ownsInstance) {
   app.quit()
@@ -200,7 +252,10 @@ if (!ownsInstance) {
       try { await ensureBundledRuntime() }
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
       const settings = readDesktopSettings()
-      capabilityClient = createRuntimeCapabilityClient({ configuredProjectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir })
+      capabilityClient = createRuntimeCapabilityClient({
+        configuredProjectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir,
+        cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
+      })
       app.setAppUserModelId('store.neutrom.trace.desktop')
       Menu.setApplicationMenu(null)
       createOverlayWindow()
@@ -243,7 +298,9 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
     writeDesktopSettings({ ...readDesktopSettings(), projectDir: result.filePaths[0] })
     return selected
   }
-  return capabilityClient.request(request)
+  const result = await capabilityClient.request(request)
+  if (request?.operation === 'zhihu.oauth.start') await openZhihuAuthorization(result.login_url, senderWindow)
+  return result
 })
 
 app.on('window-all-closed', () => {})

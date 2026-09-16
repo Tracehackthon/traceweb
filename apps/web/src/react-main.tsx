@@ -516,7 +516,6 @@ function ZhihuAuthorization() {
       const value = await startZhihuAuthorization();
       if (!value.login_url) throw new Error('未能发起知乎授权。');
       if (hasNativeCapabilityBridge()) {
-        window.open(value.login_url, '_blank', 'noopener,noreferrer');
         setStatus(await zhihuAuthorizationStatus());
         setBusy(false);
       } else window.location.assign(value.login_url);

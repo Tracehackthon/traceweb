@@ -6,7 +6,9 @@
   "outputDirectory": "apps/web/dist-vercel",
   "git": { "deploymentEnabled": true },
   "rewrites": [
-    { "source": "/callback", "destination": "/api/oauth-callback" },
+    { "source": "/callback", "destination": "https://trace-api.103-201-130-12.sslip.io/callback" },
+    { "source": "/api/search/:path*", "destination": "https://trace-api.103-201-130-12.sslip.io/api/search/:path*" },
+    { "source": "/api/zhihu/:path*", "destination": "https://trace-api.103-201-130-12.sslip.io/api/zhihu/:path*" },
     { "source": "/((?!api/|assets/|home/|matters/|product/|legacy\\.html|.*\\.[^/]+$).*)", "destination": "/index.html" }
   ],
   "headers": [
