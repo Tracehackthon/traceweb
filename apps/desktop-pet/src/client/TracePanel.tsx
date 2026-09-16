@@ -1,13 +1,10 @@
 import React, { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { candidateJudgement, type CandidateStatus, type Observation, type ObservationStatus } from './mock-data'
-import { TraceMap } from './TraceMap'
+import { type Observation, type ObservationStatus } from './mock-data'
 
 type TracePanelProps = {
   observations: Observation[]
   focusedObservationId?: string
-  onAccept: (text: string, source?: string) => void
-  candidateStatus: CandidateStatus
-  onCandidateAction: (status: CandidateStatus) => void
+  onAccept: (text: string, source?: string) => void | Promise<void>
   onContinue: () => void
   onClose: () => void
   onToggleSize: () => void
@@ -29,19 +26,10 @@ const statusClass: Record<ObservationStatus, string> = {
   已拒绝: 'rejected',
 }
 
-const candidateStatusClass: Record<CandidateStatus, string> = {
-  候选中: 'candidate',
-  已采用: 'adopted',
-  已暂存: 'stored',
-  已拒绝: 'rejected',
-}
-
 export function TracePanel({
   observations,
   focusedObservationId,
   onAccept,
-  candidateStatus,
-  onCandidateAction,
   onContinue,
   onClose,
   onToggleSize,
@@ -111,12 +99,16 @@ export function TracePanel({
     event.target.value = ''
   }
 
-  const submitObservation = () => {
+  const submitObservation = async () => {
     const text = draft.trim()
     if (!text) return
-    onAccept(text)
-    setDraft('')
-    clearImagePreview()
+    try {
+      await onAccept(text)
+      setDraft('')
+      clearImagePreview()
+    } catch (error) {
+      setCapabilityNotice(error instanceof Error ? error.message : '这条内容暂时没有保存成功。')
+    }
   }
 
   const capabilityText = () => draft.trim() || focusedObservation?.text || ''
@@ -198,7 +190,7 @@ export function TracePanel({
           </div>
         )}
         <div className="trace-action-row">
-          <button className="trace-button trace-button-primary" type="button" onClick={submitObservation}>
+          <button className="trace-button trace-button-primary" type="button" onClick={() => void submitObservation()}>
             接住它
           </button>
           <button className="trace-button trace-button-secondary" type="button" onClick={onContinue}>
@@ -214,8 +206,8 @@ export function TracePanel({
           {capabilities?.connected && !capabilities?.search?.enabled && <small>{capabilities?.search?.error?.message || '本机 Runtime 尚未启用知乎公开搜索。'}</small>}
           {capabilities?.connected && !agent?.enabled && <small>{agent?.error?.message || '本机 Runtime 尚未启用 Agent 执行器。'}</small>}
           {capabilityNotice && <p className="trace-runtime-notice" role="status">{capabilityNotice}</p>}
-          {sourceResults.map((item) => <article className="trace-runtime-result" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{sourceMetric(item) && <span>{sourceMetric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>缺少原文链接</small>}<button type="button" onClick={() => onAccept(item.excerpt, item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容')}>保留为观察</button></footer></article>)}
-          {agentRun?.result && <article className="trace-runtime-result trace-runtime-agent"><small>{agentRun.profile?.label || 'Agent'} · 未采纳候选</small><strong>Agent 的回答</strong><p>{agentRun.result.answer}</p><button type="button" onClick={() => onAccept(agentRun.result.answer, agentRun.profile?.label || 'Trace Agent')}>保留为观察</button></article>}
+          {sourceResults.map((item) => <article className="trace-runtime-result" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{sourceMetric(item) && <span>{sourceMetric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>缺少原文链接</small>}<button type="button" onClick={() => void onAccept(item.excerpt, item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容')}>保留到 Trace</button></footer></article>)}
+          {agentRun?.result && <article className="trace-runtime-result trace-runtime-agent"><small>{agentRun.profile?.label || 'Agent'} · 未采纳候选</small><strong>Agent 的回答</strong><p>{agentRun.result.answer}</p><button type="button" onClick={() => void onAccept(agentRun.result.answer, agentRun.profile?.label || 'Trace Agent')}>保留到 Trace</button></article>}
         </section>
       </section>
 
@@ -223,7 +215,7 @@ export function TracePanel({
         <article className="trace-compact-observation" aria-label="当前观察详情">
           <span className={`trace-status trace-status-${statusClass[focusedObservation.status]}`}>{focusedObservation.status}</span>
           <strong>{focusedObservation.text}</strong>
-          <small>置信度 {focusedObservation.confidence}% · {focusedObservation.createdAt}</small>
+          <small>{focusedObservation.source || 'Trace 本机工作区'}{focusedObservation.createdAt ? ` · ${focusedObservation.createdAt}` : ''}</small>
         </article>
       )}
 
@@ -247,48 +239,16 @@ export function TracePanel({
                 <p>{observation.text}</p>
                 <div className="trace-meta-row">
                   <span className={`trace-status trace-status-${statusClass[observation.status]}`}>{observation.status}</span>
-                  <span>置信度 {observation.confidence}%</span>
                   {observation.source && <span>来源 {observation.source}</span>}
                 </div>
               </div>
-              <time>{observation.createdAt}</time>
+              {observation.createdAt && <time>{observation.createdAt}</time>}
             </article>
           ))}
         </div>
       </section>
 
-      <TraceMap />
-
-      <section className="trace-section trace-candidate-section" aria-labelledby="trace-candidate-title">
-        <div className="trace-section-heading">
-          <div>
-            <span className="trace-eyebrow">待你确认</span>
-            <h3 id="trace-candidate-title">候选判断</h3>
-          </div>
-          <div className="trace-candidate-heading-meta">
-            <span className={`trace-status trace-status-${candidateStatusClass[candidateStatus]}`}>{candidateStatus}</span>
-            <span className="trace-confidence">{candidateJudgement.confidence}%</span>
-          </div>
-        </div>
-        <div className="trace-candidate-card">
-          <strong>{candidateJudgement.title}</strong>
-          <p>{candidateJudgement.body}</p>
-          <p className="trace-candidate-link">同步历史卡片：检索结果必须附带可追溯证据</p>
-          <div className="trace-action-row trace-candidate-actions">
-            <button className={`trace-button trace-button-primary ${candidateStatus === '已采用' ? 'trace-button-selected' : ''}`} type="button" onClick={() => onCandidateAction('已采用')}>
-              采用
-            </button>
-            <button className={`trace-button trace-button-secondary ${candidateStatus === '已暂存' ? 'trace-button-selected' : ''}`} type="button" onClick={() => onCandidateAction('已暂存')}>
-              暂存
-            </button>
-            <button className={`trace-button trace-button-quiet ${candidateStatus === '已拒绝' ? 'trace-button-selected' : ''}`} type="button" onClick={() => onCandidateAction('已拒绝')}>
-              拒绝
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <p className="trace-footer-note">本地观察仍按当前会话保存；知乎搜索与 Agent 运行来自已连接的 Trace Runtime。</p>
+      <p className="trace-footer-note">这里显示的是桌面端同一份本机工作区；保存、讨论和 Agent 结果会回到 Trace。</p>
     </aside>
   )
 }

@@ -70,3 +70,32 @@ test('OAuth callback forwards only marked local Trace handoffs to the fixed loop
   await handler({ method: 'GET', url: '/callback?state=ordinary&authorization_code=code' }, unmarked);
   assert.notEqual(unmarkedHeaders.get('location')?.startsWith('http://127.0.0.1:4174'), true);
 });
+
+test('same-origin guard accepts both Trace production origins behind the service proxy', async () => {
+  process.env.ZHIHU_OAUTH_REDIRECT_URI = 'https://trace.neutrom.store/callback';
+  process.env.TRACE_ALLOWED_ORIGINS = 'https://traceweb-neutronm.vercel.app';
+  const oauth = await import(`../../../lib/zhihu-oauth.mjs?test=${Date.now()}-origins`);
+  const invoke = (origin) => {
+    let statusCode = 0;
+    let payload = '';
+    const response = {
+      setHeader() {},
+      end(value = '') { payload = String(value); },
+      set statusCode(value) { statusCode = value; },
+      get statusCode() { return statusCode; },
+    };
+    const allowed = oauth.requireSameOrigin({ headers: {
+      origin,
+      host: 'trace-api.103-201-130-12.sslip.io',
+      'x-forwarded-host': 'trace-api.103-201-130-12.sslip.io',
+    } }, response);
+    return { allowed, statusCode, payload };
+  };
+
+  assert.equal(invoke('https://trace.neutrom.store').allowed, true);
+  assert.equal(invoke('https://traceweb-neutronm.vercel.app').allowed, true);
+  const denied = invoke('https://evil.example');
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.statusCode, 403);
+  assert.equal(JSON.parse(denied.payload).error.code, 'ORIGIN_MISMATCH');
+});

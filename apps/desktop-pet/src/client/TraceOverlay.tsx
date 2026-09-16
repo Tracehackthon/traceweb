@@ -4,7 +4,7 @@ import crawlBImage from './assets/pet/crawl_B.png'
 import sitAImage from './assets/pet/sit_A.png'
 import transitionAImage from './assets/pet/transition_A.png'
 import transitionBImage from './assets/pet/transition_B.png'
-import { candidateJudgement, seedObservations, type CandidateStatus, type Observation, type ObservationStatus } from './mock-data'
+import { type CandidateStatus, type Observation, type ObservationStatus } from './mock-data'
 import { TracePanel } from './TracePanel'
 
 // Module-level session store: closing/reopening the surface preserves the
@@ -13,7 +13,7 @@ const traceSessionStore: {
   observations: Observation[]
   candidateStatus: CandidateStatus
 } = {
-  observations: seedObservations.map((observation) => ({ ...observation })),
+  observations: [],
   candidateStatus: '候选中',
 }
 
@@ -58,12 +58,7 @@ type OrbitItem =
   | { id: string; kind: 'observation'; observation: Observation }
   | { id: string; kind: 'guide' | 'capture'; kicker: string; title: string; detail: string; tone: string; action: 'capture' | 'focus-first' | 'quick' }
 
-const reminderTemplates = [
-  { observationId: 'evidence-traceability', suffix: '还在待确认，要看看吗？' },
-  { observationId: 'uncertainty-first', suffix: '已经被采用，想复核它的适用范围吗？' },
-  { observationId: 'decision-card-handoff', suffix: '需要回顾，要补一条反例吗？' },
-  { observationId: 'evidence-traceability', suffix: '也许值得带一条证据继续讨论。' },
-]
+const reminderTemplates = ['还在待确认，要看看吗？', '想复核一下它的适用范围吗？', '需要回顾，要补一条反例吗？', '也许值得带一条证据继续讨论。']
 
 function getTraceNativeBridge() {
   return (window as Window & { traceNative?: TraceNativeBridge }).traceNative
@@ -394,7 +389,15 @@ export function TraceOverlay() {
     if (!bridge?.requestCapability) { setCapabilities({ connected: false, loading: false, error: { message: '当前宿主没有连接 Trace Runtime。' } }); return }
     let active = true
     void bridge.requestCapability({ operation: 'capabilities' }).then((value) => { if (active) setCapabilities({ ...value, loading: false }) }, (error) => { if (active) setCapabilities({ connected: false, loading: false, error: { message: error instanceof Error ? error.message : String(error) } }) })
-    return () => { active = false }
+    const refresh = () => void bridge.requestCapability?.({ operation: 'workspace.summary' }).then((value) => {
+      if (!active || !Array.isArray(value.observations)) return
+      traceSessionStore.observations = value.observations
+      setObservations(value.observations)
+      setFocusedObservationId((current) => current && value.observations.some((item: Observation) => item.id === current) ? current : value.observations[0]?.id)
+    }, () => {})
+    refresh()
+    const timer = window.setInterval(refresh, 5000)
+    return () => { active = false; window.clearInterval(timer) }
   }, [])
 
   useEffect(() => () => {
@@ -440,13 +443,13 @@ export function TraceOverlay() {
         const template = available[Math.floor(Math.random() * available.length)] ?? reminderTemplates[0]
         const selectedIndex = reminderTemplates.indexOf(template)
         lastReminderIndexRef.current = selectedIndex
-        const observation = traceSessionStore.observations.find((item) => item.id === template.observationId) ?? traceSessionStore.observations[0]
+        const observation = traceSessionStore.observations[Math.floor(Math.random() * traceSessionStore.observations.length)]
         if (observation) {
           // A reminder may arrive while the fan is already open. In that case
           // retain its crawl posture; closed/idle reminder states sit calmly.
           setPetPose(openRef.current ? 'crawl' : 'sit')
           setPetFrame(0)
-          setReminder({ observationId: observation.id, text: `上次那条「${observation.text}」${template.suffix}` })
+          setReminder({ observationId: observation.id, text: `上次那条「${observation.text}」${template}` })
         }
         scheduleReminder()
       }, delay)
@@ -543,31 +546,24 @@ export function TraceOverlay() {
   const detailPanelStyle: CSSProperties = { left: `${currentPanelPosition.x}px`, top: `${currentPanelPosition.y}px`, right: 'auto', bottom: 'auto' }
   const panelSide = currentPanelPosition.x > currentPetPosition.x ? 'right' : 'left'
 
-  const acceptObservation = (text: string, source?: string) => {
-    const nextObservation: Observation = {
-      id: `capture-${Date.now()}`,
-      text,
-      status: '待确认',
-      confidence: 50,
-      ...(source ? { source } : {}),
-      createdAt: '刚刚',
-      isNew: true,
-    }
+  const acceptObservation = async (text: string, source?: string) => {
+    const saved = await requestCapability({ operation: 'workspace.capture', text, ...(source ? { source } : {}) })
+    const nextObservation: Observation = { ...saved.observation, isNew: true }
     traceSessionStore.observations = [nextObservation, ...traceSessionStore.observations]
     setObservations(traceSessionStore.observations)
     setFocusedObservationId(nextObservation.id)
-    setDiscussionNotice('已接住：这条观察进入历史列表。')
-    return nextObservation
+    setDiscussionNotice('已接住：这条内容已保存到 Trace 桌面端。')
   }
 
   const submitQuickObservation = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const text = quickDraft.trim()
     if (!text) return
-    acceptObservation(text, '桌宠快速输入')
-    setQuickDraft('')
-    setQuickNotice('已接住，保留在本次 Trace 会话中。')
-    window.setTimeout(() => setQuickNotice(''), 2400)
+    void acceptObservation(text, '桌宠快速输入').then(() => {
+      setQuickDraft('')
+      setQuickNotice('已接住，桌面端里也能看到。')
+      window.setTimeout(() => setQuickNotice(''), 2400)
+    }, (error) => setQuickNotice(error instanceof Error ? error.message : '暂时没有保存成功'))
   }
 
   const requestCapability = async (request: Record<string, unknown>) => {
@@ -599,18 +595,6 @@ export function TraceOverlay() {
 
     window.open(desktopUrl.toString(), 'trace-desktop-agent', 'popup,width=1440,height=900')
     setDiscussionNotice('正在打开 Trace 桌面 Agent；如果页面未加载，请先启动 desktop 开发服务。')
-  }
-
-  const updateCandidate = (status: CandidateStatus) => {
-    traceSessionStore.candidateStatus = status
-    traceSessionStore.observations = traceSessionStore.observations.map((observation) => {
-      if (observation.id !== candidateJudgement.linkedObservationId) return observation
-      const linkedStatus = status === '候选中' ? '待确认' : status
-      return { ...observation, status: linkedStatus }
-    })
-    setCandidateStatus(status)
-    setObservations(traceSessionStore.observations)
-    setDiscussionNotice(`候选判断已${status}，对应历史观察卡片已同步更新。`)
   }
 
   const clearPoseTransitionTimers = () => {
@@ -932,7 +916,7 @@ export function TraceOverlay() {
           {orbitItems.map((item, index) => {
             const position = orbitPositions[index]
             const brightnessClass = item.kind === 'observation'
-              ? item.observation.isNew || (item.observation.id === candidateJudgement.linkedObservationId && candidateStatus === '候选中')
+              ? item.observation.isNew
                 ? 'trace-orbit-item-level-2'
                 : 'trace-orbit-item-level-3'
               : 'trace-orbit-item-level-1'
@@ -980,9 +964,7 @@ export function TraceOverlay() {
           <TracePanel
             observations={observations}
             focusedObservationId={focusedObservationId}
-            candidateStatus={candidateStatus}
             onAccept={acceptObservation}
-            onCandidateAction={updateCandidate}
             onContinue={continueDiscussion}
             onClose={closePanelToFan}
             onToggleSize={togglePanelMode}

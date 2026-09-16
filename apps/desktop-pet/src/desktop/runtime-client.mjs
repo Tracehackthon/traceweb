@@ -14,6 +14,36 @@ export const DEFAULT_CLOUD_ORIGIN = 'https://traceweb-neutronm.vercel.app'
 const TERMINAL_AGENT_STATES = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 
+export function resolveCodexExecutable({ env = process.env, platform = process.platform } = {}) {
+  const explicit = typeof env.TRACE_CODEX_BIN === 'string' ? env.TRACE_CODEX_BIN.trim() : ''
+  if (explicit) return explicit
+  const names = platform === 'win32' ? ['codex.exe', 'codex.cmd', 'codex.bat'] : ['codex']
+  const candidates = []
+  for (const directory of String(env.PATH || '').split(path.delimiter).filter(Boolean)) {
+    for (const name of names) candidates.push(path.join(directory, name))
+  }
+  if (platform === 'win32') {
+    const localBin = env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin')
+    if (localBin && fs.existsSync(localBin)) {
+      for (const name of names) candidates.push(path.join(localBin, name))
+      try {
+        for (const entry of fs.readdirSync(localBin, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue
+          for (const name of names) candidates.push(path.join(localBin, entry.name, name))
+        }
+      } catch { /* A missing/inaccessible optional install location is not fatal. */ }
+    }
+    if (env.APPDATA) for (const name of names) candidates.push(path.join(env.APPDATA, 'npm', name))
+  }
+  const existing = candidates.filter((candidate) => {
+    try { return fs.statSync(candidate).isFile() } catch { return false }
+  })
+  existing.sort((left, right) => {
+    try { return fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs } catch { return 0 }
+  })
+  return existing[0]
+}
+
 function findProjectDir(start = process.env.TRACE_PROJECT_DIR || process.cwd()) {
   let current = path.resolve(start)
   if (!fs.existsSync(current) || !fs.statSync(current).isDirectory()) throw new Error('当前项目位置不可用，请从项目目录启动 Trace 桌宠')
@@ -86,6 +116,7 @@ export function createRuntimeCapabilityClient({
   fetchImpl = globalThis.fetch,
   cloudFetchImpl = fetchImpl,
   randomId = randomUUID,
+  desktopSnapshotToken = process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
   now = Date.now,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
@@ -164,6 +195,105 @@ export function createRuntimeCapabilityClient({
     return value
   }
 
+  async function nativeWorkspaceRequest(pathname, method = 'GET', body) {
+    if (!['/api/web/workspace', '/api/web/export'].includes(pathname)
+      || !['GET', 'PUT'].includes(method)
+      || method === 'PUT' && pathname !== '/api/web/workspace'
+      || method === 'PUT' && typeof body !== 'string') throw new Error('不支持这个桌面工作区操作')
+    const url = new URL(pathname, backendOrigin)
+    let response
+    try {
+      response = await fetchImpl(url, {
+        method,
+        redirect: 'error',
+        signal: AbortSignal.timeout(35_000),
+        headers: {
+          origin: backendOrigin,
+          accept: 'application/json',
+          ...(method === 'PUT' ? {
+            'content-type': 'application/json',
+            ...(desktopSnapshotToken ? { 'x-trace-desktop-token': desktopSnapshotToken } : {}),
+          } : {}),
+        },
+        ...(method === 'PUT' ? { body } : {}),
+      })
+    } catch {
+      throw new Error('Trace 本机内容暂时无法访问，请重新打开 Trace 后再试')
+    }
+    let text = await response.text()
+    if (text.length > 8 * 1024 * 1024) throw new Error('Trace 本机内容响应过大')
+    // The renderer needs the workspace contents, not implementation details such as
+    // the absolute SQLite path on the host. Keep those details inside the main
+    // process so they cannot accidentally surface in product copy or diagnostics.
+    if (pathname === '/api/web/workspace') {
+      try {
+        const value = JSON.parse(text)
+        if (value && typeof value === 'object' && value.storage && typeof value.storage === 'object') {
+          value.storage = { kind: value.storage.kind || 'sqlite', label: 'Trace 桌面端本机空间' }
+        }
+        text = JSON.stringify(value)
+      } catch {
+        // Preserve non-JSON error responses so the renderer can show the public
+        // message returned by the runtime without exposing a parser exception.
+      }
+    }
+    return {
+      status: response.status,
+      body: text,
+      contentType: response.headers.get('content-type') || 'application/json; charset=utf-8',
+      contentDisposition: response.headers.get('content-disposition') || '',
+    }
+  }
+
+  const observationFromMatter = (matter, host) => {
+    const session = host?.chain?.sessions?.[matter.id]
+    const workNeedsReview = Object.values(host?.worksite?.sessions || {}).some((value) => value?.result?.matterId === matter.id && value?.result?.decision === 'pending')
+    return {
+      id: matter.id,
+      text: matter.originalText || matter.whyCare || matter.title || '未命名事项',
+      status: matter.understandingVersion > 0 ? '已采用' : session?.suggestion ? '候选中' : workNeedsReview ? '需回顾' : '待确认',
+      source: 'Trace 本机工作区',
+      createdAt: '',
+    }
+  }
+
+  async function readObservationSummary() {
+    const workspace = await runtimeRequest('/api/product/workspace')
+    return {
+      revision: workspace.revision,
+      observations: [...(workspace.host?.chain?.matters || [])].reverse().slice(0, 20).map((matter) => observationFromMatter(matter, workspace.host)),
+    }
+  }
+
+  async function captureObservation(text, source) {
+    const workspace = await runtimeRequest('/api/product/workspace')
+    const matterId = `pet-${randomId()}`
+    const saved = await runtimeRequest('/api/product/commands', {
+      protocolVersion: 1,
+      commandId: `pet-capture-${randomId()}`,
+      expectedRevision: workspace.revision,
+      operations: [{ type: 'capture.create', matterId, text: boundedText(text, '原话') }],
+    })
+    const matter = saved.host?.chain?.matters?.find((item) => item.id === matterId)
+    if (!matter) throw new Error('这条内容还没有进入 Trace，请重试')
+    return { revision: saved.revision, observation: { ...observationFromMatter(matter, saved.host), ...(source ? { source: boundedText(source, '来源', 200) } : {}) } }
+  }
+
+  async function remoteSourceContext(source, query) {
+    if (source === 'none') return null
+    const result = await cloudRequest(source === 'global' ? '/api/search/global' : '/api/search/zhihu', { query: query.trim().slice(0, 500), count: 3 })
+    const items = Array.isArray(result.items) ? result.items.slice(0, 3) : []
+    if (!items.length) return { source, items: [], prompt: '本次联网检索没有返回可用来源。' }
+    const prompt = items.map((item, index) => {
+      const title = String(item.title || '未命名来源').slice(0, 300)
+      const author = item.author ? ` · ${String(item.author).slice(0, 120)}` : ''
+      const url = item.url ? `\n原文：${String(item.url).slice(0, 1000)}` : ''
+      const excerpt = String(item.excerpt || '').slice(0, 2200)
+      return `[${index + 1}] ${title}${author}${url}\n摘要：${excerpt}`
+    }).join('\n\n')
+    return { source, items, prompt: `以下是 Trace 刚刚取得的公开来源摘要，只作为本次判断的材料；请区分原文摘要、你的推断和仍不确定之处。\n\n${prompt}` }
+  }
+
   async function capabilityRequest(request) {
     if (!request || typeof request !== 'object' || Array.isArray(request) || typeof request.operation !== 'string') throw new Error('Invalid capability request')
     if (request.operation === 'capabilities') {
@@ -179,6 +309,9 @@ export function createRuntimeCapabilityClient({
         ...(connected ? {} : { error: { message: 'Trace Runtime is not reachable' } }),
       }
     }
+    if (request.operation === 'workspace.request') return nativeWorkspaceRequest(request.pathname, request.method || 'GET', request.body)
+    if (request.operation === 'workspace.summary') return readObservationSummary()
+    if (request.operation === 'workspace.capture') return captureObservation(request.text, request.source)
     if (request.operation === 'setup.status') {
       const capabilities = await runtimeRequest('/api/agent/capabilities')
       const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
@@ -249,6 +382,7 @@ export function createRuntimeCapabilityClient({
       })
       const session = created.host?.chain?.sessions?.[matterId]
       if (!session) throw new Error('Trace Runtime did not return the captured matter')
+      const sources = await remoteSourceContext(request.source, request.text)
       const submitted = await runtimeRequest('/api/agent/runs', {
         protocolVersion: 1,
         requestId: `pet-run-${randomId()}`,
@@ -257,9 +391,8 @@ export function createRuntimeCapabilityClient({
         contextMode: session.contextMode,
         contextEpoch: session.contextEpoch,
         purpose: 'discuss',
-        input: '请帮助我分清这段原话里的条件、证据与仍不确定之处。结果只作为候选。',
+        input: `请帮助我分清这段原话里的条件、证据与仍不确定之处。结果只作为候选。${sources ? `\n\n${sources.prompt}` : ''}`,
         ...(profileId ? { profileId } : {}),
-        ...(request.source === 'none' ? {} : { retrieval: { sources: [request.source] } }),
       })
       const runId = submitted.run?.runId
       if (!runId) throw new Error('Trace Runtime did not return a run identity')
@@ -270,7 +403,7 @@ export function createRuntimeCapabilityClient({
         await wait(500)
         run = await runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}`, undefined, 10_000)
       }
-      return run
+      return { ...run, ...(sources ? { sources: { source: sources.source, items: sources.items } } : {}) }
     }
     if (request.operation === 'work.environment') {
       try {
@@ -346,6 +479,7 @@ export function createRuntimeCapabilityClient({
         : capabilities.profiles?.find((item) => item.kind === 'codex')
       if (!profile) throw new Error('本机没有可用的 Codex 执行器')
 
+      const sources = await remoteSourceContext(source, `${title} ${text}`)
       const submitted = await runtimeRequest('/api/agent/runs', {
         protocolVersion: 1,
         requestId: `desktop-work-run:${workId}`,
@@ -355,8 +489,7 @@ export function createRuntimeCapabilityClient({
         contextEpoch: matterSession.contextEpoch,
         purpose: 'discuss',
         profileId: profile.profileId,
-        input: `完成这次工作：${title}\n\n请只返回实际得到的结果、你的解释与仍需确认的条件；不要自动修改用户的理解。`,
-        ...(source === 'none' ? {} : { retrieval: { sources: [source] } }),
+        input: `完成这次工作：${title}\n\n请只返回实际得到的结果、你的解释与仍需确认的条件；不要自动修改用户的理解。${sources ? `\n\n${sources.prompt}` : ''}`,
       })
       const runId = submitted.run?.runId
       if (!runId) throw new Error('Codex 没有返回本次运行')

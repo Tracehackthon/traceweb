@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, screen, session, shell, Tray } from 'electron'
+import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient } from './runtime-client.mjs'
+import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient, resolveCodexExecutable } from './runtime-client.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -83,6 +84,9 @@ async function ensureBundledRuntime() {
   process.env.TRACE_AGENT_STATE_FILE = join(stateRoot, 'agent.sqlite')
   process.env.TRACE_AGENT_RUNTIME_ROOT = join(stateRoot, 'agent-runs')
   process.env.TRACE_AGENT_ENABLED ??= '1'
+  process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN ??= randomBytes(32).toString('base64url')
+  const codexExecutable = resolveCodexExecutable()
+  if (codexExecutable) process.env.TRACE_CODEX_BIN = codexExecutable
   bundledRuntime = await import(pathToFileURL(server).href)
   const binding = await bundledRuntime.ready
   if (dynamicBinding) {
@@ -291,7 +295,8 @@ if (!ownsInstance) {
       capabilityClient = createRuntimeCapabilityClient({
         origin: backendOrigin || DEFAULT_RUNTIME_ORIGIN,
         cloudOrigin: traceCloudOrigin,
-        configuredProjectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir,
+        projectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir,
+        desktopSnapshotToken: process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
       })
       app.setAppUserModelId('store.neutrom.trace.desktop')
@@ -339,6 +344,16 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
   const result = await capabilityClient.request(request)
   if (request?.operation === 'zhihu.oauth.start') await openZhihuAuthorization(result.login_url, senderWindow)
   return result
+})
+
+ipcMain.handle('trace-native:workspace', async (event, payload) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!senderWindow || !discussionWindows.has(senderWindow)) throw new Error('工作区请求不是来自 Trace 桌面窗口')
+  if (!capabilityClient) throw new Error('Trace 本机内容仍在启动，请稍后再试')
+  const pathname = payload?.pathname
+  const method = payload?.options?.method || 'GET'
+  const body = payload?.options?.body
+  return capabilityClient.request({ operation: 'workspace.request', pathname, method, ...(body === undefined ? {} : { body }) })
 })
 
 app.on('window-all-closed', () => {})

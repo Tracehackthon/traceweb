@@ -7,6 +7,7 @@ import {
   DEFAULT_CLOUD_ORIGIN,
   DEFAULT_RUNTIME_ORIGIN,
   createRuntimeCapabilityClient,
+  resolveCodexExecutable,
   validateRuntimeOrigin,
 } from '../../desktop-pet/src/desktop/runtime-client.mjs'
 
@@ -14,7 +15,6 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json' },
 })
-
 test('desktop runtime client accepts only loopback HTTP origins', () => {
   assert.equal(DEFAULT_RUNTIME_ORIGIN, 'http://127.0.0.1:42731')
   assert.equal(DEFAULT_CLOUD_ORIGIN, 'https://traceweb-neutronm.vercel.app')
@@ -23,6 +23,16 @@ test('desktop runtime client accepts only loopback HTTP origins', () => {
   assert.throws(() => validateRuntimeOrigin('https://trace.example.test'), /loopback HTTP origin/)
   assert.throws(() => validateRuntimeOrigin('http://user:pass@127.0.0.1:4173'), /loopback HTTP origin/)
   assert.throws(() => validateRuntimeOrigin('http://127.0.0.1:4173/api'), /loopback HTTP origin/)
+})
+
+test('desktop discovers the Codex App executable outside a stale Explorer PATH', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-codex-discovery-'))
+  const executable = path.join(root, 'OpenAI', 'Codex', 'bin', 'release-hash', 'codex.exe')
+  await mkdir(path.dirname(executable), { recursive: true })
+  await import('node:fs/promises').then(({ writeFile }) => writeFile(executable, 'fixture'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  assert.equal(resolveCodexExecutable({ env: { LOCALAPPDATA: root, PATH: '' }, platform: 'win32' }), executable)
+  assert.equal(resolveCodexExecutable({ env: { TRACE_CODEX_BIN: 'C:\\explicit\\codex.exe', LOCALAPPDATA: root }, platform: 'win32' }), 'C:\\explicit\\codex.exe')
 })
 
 test('desktop runtime client discovers search and Agent independently', async () => {
@@ -138,6 +148,7 @@ test('desktop runtime client executes the bounded product to Agent chain', async
       if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, defaultProfileId: 'local-codex', profiles: [{ profileId: 'local-codex', kind: 'codex' }] })
       if (url.pathname === '/api/product/workspace') return response({ revision: 7, host: null })
       if (url.pathname === '/api/product/commands') return response({ revision: 8, host: { chain: { sessions: { 'pet-id-1': { contextMode: 'resume', contextEpoch: 0 } } } } })
+      if (url.pathname === '/api/search/zhihu') return response({ source: 'zhihu', items: [{ id: 'z-1', title: '知乎材料', author: '答主', url: 'https://www.zhihu.com/question/1/answer/2', excerpt: '这是本次取得的摘要。' }] })
       if (url.pathname === '/api/agent/runs' && init.method === 'POST') return response({ run: { runId: 'run-1', status: 'queued' } }, 202)
       if (url.pathname === '/api/agent/runs/run-1') return response({ runId: 'run-1', status: 'succeeded', profile: { profileId: 'local-codex', kind: 'codex' }, result: { answer: '候选回答', adoption: 'not_applied' } })
       return response({ error: { message: 'not found' } }, 404)
@@ -151,13 +162,67 @@ test('desktop runtime client executes the bounded product to Agent chain', async
     '/api/agent/capabilities',
     '/api/product/workspace',
     '/api/product/commands',
+    '/api/search/zhihu',
     '/api/agent/runs',
     '/api/agent/runs/run-1',
   ])
   assert.deepEqual(calls[2].body.operations, [{ type: 'capture.create', matterId: 'pet-id-1', text: '保留原话，再核对依据。' }])
-  assert.equal(calls[3].body.expectedRevision, 8)
-  assert.equal(calls[3].body.profileId, 'local-codex')
-  assert.deepEqual(calls[3].body.retrieval, { sources: ['zhihu'] })
+  assert.equal(calls[4].body.expectedRevision, 8)
+  assert.equal(calls[4].body.profileId, 'local-codex')
+  assert.equal('retrieval' in calls[4].body, false)
+  assert.match(calls[4].body.input, /知乎材料/)
+  assert.equal(run.sources.items[0].id, 'z-1')
+})
+
+test('desktop workspace bridge proxies only bounded local storage routes with its private token', async () => {
+  const calls = []
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4430',
+    desktopSnapshotToken: 'private-desktop-token',
+    fetchImpl: async (url, init) => {
+      calls.push({ pathname: url.pathname, method: init.method, headers: init.headers, body: init.body })
+      return response({
+        revision: 1,
+        host: null,
+        storage: { kind: 'sqlite', location: 'C:\\Users\\example\\AppData\\Trace\\web.sqlite' },
+      })
+    },
+  })
+  const read = await client.request({ operation: 'workspace.request', pathname: '/api/web/workspace', method: 'GET' })
+  const write = await client.request({ operation: 'workspace.request', pathname: '/api/web/workspace', method: 'PUT', body: '{"expectedRevision":0}' })
+  assert.equal(read.status, 200)
+  assert.equal(write.status, 200)
+  assert.equal(calls[0].headers['x-trace-desktop-token'], undefined)
+  assert.equal(calls[1].headers['x-trace-desktop-token'], 'private-desktop-token')
+  assert.deepEqual(JSON.parse(read.body).storage, { kind: 'sqlite', label: 'Trace 桌面端本机空间' })
+  assert.equal(read.body.includes('AppData'), false)
+  await assert.rejects(client.request({ operation: 'workspace.request', pathname: '/api/product/workspace', method: 'GET' }), /不支持/)
+})
+
+test('desktop pet reads and writes the same authoritative workspace as the product window', async () => {
+  let revision = 0
+  let host = null
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4431',
+    randomId: (() => { let id = 0; return () => `shared-${++id}` })(),
+    fetchImpl: async (url, init) => {
+      if (url.pathname === '/api/product/workspace') return response({ revision, host })
+      if (url.pathname === '/api/product/commands') {
+        const body = JSON.parse(init.body)
+        revision += 1
+        const matterId = body.operations[0].matterId
+        host = { chain: { matters: [{ id: matterId, originalText: body.operations[0].text, understandingVersion: 0 }], sessions: { [matterId]: {} } }, worksite: { sessions: {} } }
+        return response({ revision, host })
+      }
+      return response({ error: { message: 'not found' } }, 404)
+    },
+  })
+  assert.deepEqual((await client.request({ operation: 'workspace.summary' })).observations, [])
+  const captured = await client.request({ operation: 'workspace.capture', text: '桌宠和桌面共用这一条', source: '桌宠快速输入' })
+  assert.equal(captured.observation.text, '桌宠和桌面共用这一条')
+  const summary = await client.request({ operation: 'workspace.summary' })
+  assert.equal(summary.revision, 1)
+  assert.equal(summary.observations[0].id, captured.observation.id)
 })
 
 test('desktop runtime client routes public searches by explicit source', async () => {

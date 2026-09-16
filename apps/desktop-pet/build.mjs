@@ -107,7 +107,7 @@ await viteBuild({
   configFile: resolve(discussionSourceDir, 'vite.config.ts'),
   publicDir: false,
   base: './',
-  define: { 'import.meta.env.VITE_TRACE_STORAGE': JSON.stringify('browser') },
+  define: { 'import.meta.env.VITE_TRACE_STORAGE': JSON.stringify('native') },
   build: {
     outDir: discussionOutDir,
     emptyOutDir: true,
