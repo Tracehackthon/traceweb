@@ -1,13 +1,13 @@
 import { createServer } from 'node:http';
-import oauthCallback from '../api/oauth-callback.mjs';
-import searchCapabilities from '../api/search/capabilities.mjs';
-import searchGlobal from '../api/search/global.mjs';
-import searchZhihu from '../api/search/zhihu.mjs';
-import oauthCheck from '../api/zhihu/oauth/check.mjs';
-import oauthDisconnect from '../api/zhihu/oauth/disconnect.mjs';
-import oauthStart from '../api/zhihu/oauth/start.mjs';
-import zhihuStatus from '../api/zhihu/status.mjs';
-import userRead from '../api/zhihu/user/read.mjs';
+import oauthCallback from '../service-api/oauth-callback.mjs';
+import searchCapabilities from '../service-api/search/capabilities.mjs';
+import searchGlobal from '../service-api/search/global.mjs';
+import searchZhihu from '../service-api/search/zhihu.mjs';
+import oauthCheck from '../service-api/zhihu/oauth/check.mjs';
+import oauthDisconnect from '../service-api/zhihu/oauth/disconnect.mjs';
+import oauthStart from '../service-api/zhihu/oauth/start.mjs';
+import zhihuStatus from '../service-api/zhihu/status.mjs';
+import userRead from '../service-api/zhihu/user/read.mjs';
 
 const port = Number.parseInt(process.env.PORT || '4180', 10);
 const host = process.env.HOST || '127.0.0.1';

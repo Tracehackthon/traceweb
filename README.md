@@ -109,7 +109,7 @@ npm run desktop
 
 ## 知乎授权服务
 
-`server/trace-service.mjs` 把 App Key、Access Secret、授权码与 OAuth Token 留在服务端；浏览器只得到授权状态和用户明确请求的少量资料。生产服务运行在受限 systemd 用户下，由 HTTPS 反向代理承接；Vercel 只将 `/callback`、`/api/search/*` 和 `/api/zhihu/*` 同源转发到该服务。服务端需要通过只读环境文件配置：
+`server/trace-service.mjs` 与 `service-api/` 把 App Key、Access Secret、授权码与 OAuth Token 留在服务端；浏览器只得到授权状态和用户明确请求的少量资料。生产服务运行在受限 systemd 用户下，由 HTTPS 反向代理承接；Vercel 只将 `/callback`、`/api/search/*` 和 `/api/zhihu/*` 同源转发到该服务。服务端需要通过只读环境文件配置：
 
 ```text
 ZHIHU_OAUTH_APP_ID=669

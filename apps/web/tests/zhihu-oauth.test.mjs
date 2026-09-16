@@ -51,7 +51,7 @@ test('OAuth callback accepts Zhihu hackathon callback without state but requires
 });
 
 test('OAuth callback forwards only marked local Trace handoffs to the fixed loopback receiver', async () => {
-  const { default: handler } = await import(`../../../api/oauth-callback.mjs?loopback=${Date.now()}`);
+  const { default: handler } = await import(`../../../service-api/oauth-callback.mjs?loopback=${Date.now()}`);
   const headers = new Map();
   const response = { statusCode: 0, setHeader(name, value) { headers.set(name.toLowerCase(), value); }, end() {} };
   const state = `trace-local-v1.${'a'.repeat(43)}`;
