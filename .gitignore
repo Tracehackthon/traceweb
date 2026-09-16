@@ -14,7 +14,7 @@ test-results/
 .DS_Store
 Thumbs.db
 .vercel/
-.deploy/
+.deploy*/
 apps/web/dist/
 apps/web/dist-vercel/
 apps/web/.impeccable/review/
