@@ -35,7 +35,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     await page.goto(base, { waitUntil: 'networkidle' });
     await page.locator('#opening-title').waitFor();
-    check('root opens the product thesis', /让值得思考的想法/.test(await page.locator('#opening-title').innerText()));
+    check('root opens the product thesis', /把此刻的[\s\S]*一点/.test(await page.locator('#opening-title').innerText()));
     const renderedIntroduction = await page.evaluate(() => ({
       openingBackground: getComputedStyle(document.querySelector('.intro-hero')).backgroundColor,
       headingFontSize: Number.parseFloat(getComputedStyle(document.querySelector('#opening-title')).fontSize),
@@ -44,12 +44,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     check('introduction route stylesheet is applied', renderedIntroduction.headingFontSize >= 48, renderedIntroduction);
     check('introduction evidence images are loaded', renderedIntroduction.criticalImages.every((image) => image.complete && image.width > 0), renderedIntroduction);
     check('introduction links complete demo, personal space and video', await page.locator('a[href="/app/demo"]').count() >= 2 && await page.locator('a[href="/app"]').count() >= 1 && await page.locator('a[href="/video"]').count() >= 2);
-    await page.locator('.format-step').nth(2).click();
-    check('form-factor interaction grows from the quiet entry to a saved bubble', await page.locator('.format-preview').getAttribute('data-stage') === 'bubble');
-    await page.locator('.thinking-tabs button').nth(2).click();
-    check('Zhihu thinking journey exposes relation-aware comparison', await page.locator('.thinking-panel').getAttribute('data-stage') === 'compare' && await page.locator('.sample-results article').count() === 3);
-    await page.locator('.work-loop-nav button').nth(3).click();
-    check('work journey reaches user-confirmed understanding revision', await page.locator('.work-copy').getByText('确认以后', { exact: false }).count() === 1);
+    await page.locator('.proof-theatre > nav button').nth(2).click();
+    check('continuity story moves into the native Agent scene', await page.locator('.proof-theatre').getAttribute('data-stage') === 'agent');
+    await page.locator('.proof-theatre > nav button').nth(3).click();
+    check('continuity story returns the result for confirmation', await page.locator('.proof-theatre').getAttribute('data-stage') === 'return' && await page.locator('.result-diff').count() === 1);
     await page.evaluate(() => scrollTo(0, 0));
     if (!process.env.TRACE_SKIP_SCREENSHOTS) await page.screenshot({ path: path.join(review, 'desktop.png'), animations: 'disabled' });
 

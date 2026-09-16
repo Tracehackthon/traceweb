@@ -45,8 +45,8 @@ test('public product copy avoids internal proof and implementation language', as
 test('product introduction uses current captures, current icon and native-Agent framing', async () => {
   const intro = await readFile(new URL('../src/intro-main.tsx', import.meta.url), 'utf8');
   const video = await readFile(new URL('../src/video-main.tsx', import.meta.url), 'utf8');
-  assert.match(intro, /\/showcase\/desktop-zhihu-results\.jpg/);
-  assert.match(intro, /\/showcase\/trace-result-detail\.png/);
+  assert.match(intro, /\/showcase\/trace-zhihu-source\.webp/);
+  assert.match(intro, /\/showcase\/trace-result-detail\.webp/);
   assert.match(intro, /\/brand\/trace-app-icon-64\.png/);
   assert.match(intro, /Codex 原生/);
   assert.match(intro, /Codex Harness/);
