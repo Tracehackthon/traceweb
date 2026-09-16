@@ -2,6 +2,29 @@
 
 同一套 Trace 体验有两个本机入口：DeepSeek Harness Web profile 插件，以及独立运行的原生桌面悬浮插件。原生 Electron 入口通过受限 IPC 连接本机 `trace-runtime`，把最新 Trace Web 中准备好的工作真正交给 Codex，并把结果带回 Trace 复核区。
 
+## Windows 首版安装包
+
+首版 Windows x64 安装包把 Trace Web、桌宠和本机 Runtime 一起打包。普通用户不需要先克隆 `trace_backend`、安装 Node.js 或手动启动服务：安装后打开 Trace，会同时出现桌宠与主界面。
+
+首次接入 Codex：
+
+1. 先安装并登录 Codex CLI。
+2. 打开 Trace，点顶部的「Codex 设置」。
+3. 点「更换项目」选择要工作的项目文件夹；绝对路径只保存在本机，不会显示在页面里。
+4. 点「检查 Codex」。显示“已登录并通过检查”后，即可在工作页把内容交给 Codex，并让结果回到 Trace 复核。
+5. 需要从 Codex 内主动读取 Trace 时，再点「在 Codex 中使用 Trace」安装可选插件；这不是 Trace → Codex 工作链路的前置条件。
+
+本机 Runtime 会把状态保存在应用数据目录。知乎个人账号授权依赖部署方的知乎服务配置，不会把 App Secret 打进安装包；未配置时界面只显示清楚的不可用状态，不暴露内部接口错误。
+
+构建安装包：
+
+```powershell
+npm ci
+npm run dist:win
+```
+
+产物位于 `release/Trace-Desktop-0.1.0-Setup.exe`。首版尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+
 ## 本地构建
 
 ```powershell

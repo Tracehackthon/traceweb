@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const DEFAULT_ORIGIN = 'http://127.0.0.1:4173'
 const TERMINAL_AGENT_STATES = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
+const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 
 function findProjectDir(start = process.env.TRACE_PROJECT_DIR || process.cwd()) {
   let current = path.resolve(start)
@@ -80,15 +82,22 @@ export function createRuntimeCapabilityClient({
 } = {}) {
   const backendOrigin = validateRuntimeOrigin(origin)
   let projectContext
+  let selectedProjectDir = configuredProjectDir
   const currentProject = () => {
     if (!projectContext) {
-      const projectDir = findProjectDir(configuredProjectDir)
+      const projectDir = findProjectDir(selectedProjectDir)
       projectContext = { projectDir, projectName: safeProjectName(projectDir) }
     }
     return projectContext
   }
+  const setProjectDir = (projectDir) => {
+    selectedProjectDir = projectDir
+    projectContext = undefined
+    const selected = currentProject()
+    return { connected: true, projectName: selected.projectName, agentLabel: 'Codex', locationLabel: '已选择项目' }
+  }
 
-  async function runtimeRequest(pathname, body, timeoutMs = 35_000) {
+  async function runtimeRequest(pathname, body, timeoutMs = 35_000, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
     const url = new URL(pathname, backendOrigin)
     if (url.origin !== backendOrigin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Runtime path')
     const response = await fetchImpl(url, {
@@ -104,6 +113,7 @@ export function createRuntimeCapabilityClient({
     })
     const text = await response.text()
     if (text.length > 1_048_576) throw new Error('Trace Runtime response exceeded 1 MiB')
+    if (response.status === 404 && notFoundFallback !== NO_NOT_FOUND_FALLBACK) return notFoundFallback
     let value
     try { value = JSON.parse(text) } catch { throw new Error(`Trace Runtime returned an unreadable response (${response.status})`) }
     if (!response.ok) throw new Error(publicRuntimeError(value, response.status))
@@ -125,11 +135,54 @@ export function createRuntimeCapabilityClient({
         ...(connected ? {} : { error: { message: 'Trace Runtime is not reachable' } }),
       }
     }
+    if (request.operation === 'setup.status') {
+      const capabilities = await runtimeRequest('/api/agent/capabilities')
+      const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
+      let project
+      try { project = currentProject() } catch { project = null }
+      return {
+        runtime: { connected: true, bundled: process.env.TRACE_BUNDLED_RUNTIME === '1' },
+        project: project ? { connected: true, name: project.projectName } : { connected: false },
+        codex: { available: Boolean(codex), checked: false, profileId: codex?.profileId || null, label: codex?.label || 'Codex' },
+      }
+    }
+    if (request.operation === 'setup.codex.check') {
+      const capabilities = await runtimeRequest('/api/agent/capabilities')
+      const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
+      if (!codex) throw new Error('这台设备还没有可用的 Codex 执行器')
+      const checked = await runtimeRequest('/api/agent/check', { profileId: codex.profileId }, 45_000)
+      return { ready: checked.authenticated === true, authenticated: checked.authenticated === true, version: checked.version || null, label: codex.label || 'Codex' }
+    }
+    if (request.operation === 'setup.codex.connect') {
+      const runtimeRoot = process.env.TRACE_RUNTIME_ROOT
+      const installer = runtimeRoot && path.join(runtimeRoot, 'native', 'install-codex-plugin.mjs')
+      if (!installer || !path.isAbsolute(installer) || !fs.existsSync(installer)) throw new Error('当前安装没有找到 Codex 连接组件')
+      await new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [installer, '--confirm', 'true', '--replace'], {
+          windowsHide: true,
+          shell: false,
+          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+        let bytes = 0
+        const drain = chunk => { bytes += chunk.length; if (bytes > 1024 * 1024) child.kill() }
+        child.stdout.on('data', drain); child.stderr.on('data', drain)
+        const timer = setTimeout(() => child.kill(), 90_000)
+        child.once('error', () => { clearTimeout(timer); reject(new Error('无法启动 Codex 连接程序')) })
+        child.once('close', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error('Codex 插件连接没有完成；请先确认 Codex 已安装并登录')) })
+      })
+      return { connected: true, message: 'Trace 已连接到 Codex；请新开一个 Codex 任务加载插件。' }
+    }
     if (request.operation === 'search') {
       if (!['zhihu', 'global'].includes(request.source) || typeof request.query !== 'string' || !request.query.trim() || request.query.length > 500 || !Number.isInteger(request.count) || request.count < 1 || request.count > 5) throw new Error('Invalid bounded search request')
       return runtimeRequest(request.source === 'global' ? '/api/search/global' : '/api/search/zhihu', { query: request.query.trim(), count: request.count })
     }
-    if (request.operation === 'zhihu.status') return runtimeRequest('/api/zhihu/status')
+    if (request.operation === 'zhihu.status') return runtimeRequest('/api/zhihu/status', undefined, 35_000, {
+      enabled: false,
+      oauth: { configured: false, status: 'unconfigured' },
+      user_content_configured: false,
+      notice: '当前桌面版尚未连接知乎账户服务；公开搜索与个人授权分开配置。',
+    })
     if (request.operation === 'zhihu.oauth.start') return runtimeRequest('/api/zhihu/oauth/start', {})
     if (request.operation === 'zhihu.oauth.check') return runtimeRequest('/api/zhihu/oauth/check', {})
     if (request.operation === 'zhihu.oauth.disconnect') return runtimeRequest('/api/zhihu/oauth/disconnect', {})
@@ -303,5 +356,5 @@ export function createRuntimeCapabilityClient({
     throw new Error('Unsupported capability operation')
   }
 
-  return { origin: backendOrigin, request: capabilityRequest }
+  return { origin: backendOrigin, request: capabilityRequest, setProjectDir }
 }

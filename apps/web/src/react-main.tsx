@@ -8,7 +8,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
-import { agentCapabilities, checkZhihuAuthorization, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readZhihuUserContent, runNativeAgent, searchPublic, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus } from './react/capability-client';
+import { agentCapabilities, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readZhihuUserContent, runNativeAgent, searchPublic, selectDesktopProject, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus } from './react/capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
@@ -233,7 +233,7 @@ function StatusBar({ snapshot }: { snapshot: WorkspaceSnapshot }) {
     const link = document.createElement('a'); link.href = url; link.download = `Trace-recovery-${Date.now()}.json`; link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  return <aside className="web-status" data-state={snapshot.status.state} data-native={nativeConnected ? 'connected' : undefined} role="status" aria-live="polite" title={nativeConnected ? '桌宠与主窗口正在使用同一份当前会话数据' : undefined}><i /><span>{statusText}</span>{snapshot.status.state === 'error' && <><RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton><RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton><RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton></>}</aside>;
+  return <aside className="web-status" data-state={snapshot.status.state} data-native={nativeConnected ? 'connected' : undefined} role="status" aria-live="polite" title={nativeConnected ? '桌宠与主窗口正在使用同一份当前会话数据' : undefined}><i /><span>{statusText}</span>{nativeConnected && snapshot.status.state !== 'error' && <button type="button" onClick={() => runtime.profile()}>Codex 设置</button>}{snapshot.status.state === 'error' && <><RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton><RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton><RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton></>}</aside>;
 }
 
 function returnLabel(route: RouteMemory): string {
@@ -373,7 +373,7 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   const [reduceMotion, setReduceMotion] = useState(Boolean(snapshot.host?.preferences?.reduceMotion));
   useEffect(() => { setName(snapshot.host?.preferences?.displayName || ''); setReduceMotion(Boolean(snapshot.host?.preferences?.reduceMotion)); }, [dialog.type, snapshot.host]);
   if (dialog.type === 'message') return <><p>{dialog.message}</p><footer><RecoveryButton onClick={() => runtime.closeDialog()}>{dialog.confirm ? '取消' : '回到原处'}</RecoveryButton>{dialog.confirm && <RecoveryButton primary onClick={() => { const action = dialog.confirm?.action; runtime.closeDialog(); action?.(); }}>{dialog.confirm.label}</RecoveryButton>}</footer></>;
-  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示空间只使用合成数据，与账号和个人内容完全分开，可以随时恢复。' : browserStorage ? '内容只留在这个应用里，不上传、不跨设备同步。清除应用数据会丢失内容，请定期导出。' : '内容保存在这台设备的 Trace 空间里，没有开通云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : '此设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '保存在当前应用中' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
+  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示空间只使用合成数据，与账号和个人内容完全分开，可以随时恢复。' : browserStorage ? '内容只留在这个应用里，不上传、不跨设备同步。清除应用数据会丢失内容，请定期导出。' : '内容保存在这台设备的 Trace 空间里，没有开通云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : '此设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '保存在当前应用中' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && hasNativeCapabilityBridge() && <CodexConnectionPanel/>}{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
   if (dialog.type === 'capability' && dialog.capability) return <CapabilityDialog capability={dialog.capability} />;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);
@@ -449,6 +449,52 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
       {capability.agent !== 'none' && <section><header><i>C</i><div><h3>原生 Agent</h3><small>Codex 与自定义执行器</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>怎样回来</dt><dd>先给你复核</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '开始一次 Agent 讨论'}</RecoveryButton>{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改候选' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}</article>}</section>}
     </div>
     <footer><RecoveryButton onClick={() => runtime.closeDialog()}>完成，回到这件事</RecoveryButton></footer>
+  </section>;
+}
+
+function CodexConnectionPanel() {
+  const [setup, setSetup] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('正在检查本机 Runtime 与项目…');
+  const load = async () => {
+    try {
+      const value = await desktopSetupStatus();
+      setSetup(value);
+      setMessage(value?.codex?.available ? 'Runtime 已准备好。首次使用前检查一次 Codex 登录即可。' : '本机 Runtime 已连接，但还没有发现 Codex 执行器。');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : '暂时无法检查本机接入。'); }
+  };
+  useEffect(() => { void load(); }, []);
+  const chooseProject = async () => {
+    setBusy(true);
+    try {
+      const project = await selectDesktopProject();
+      setSetup((current: any) => ({ ...current, project: project?.connected ? { connected: true, name: project.projectName } : current?.project }));
+      setMessage(project?.connected ? `已选择项目「${project.projectName}」。` : '没有更改项目。');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : '项目选择没有完成。'); }
+    finally { setBusy(false); }
+  };
+  const check = async () => {
+    setBusy(true); setMessage('正在通过受限连接检查 Codex 版本与登录状态…');
+    try {
+      const value = await checkCodexConnection();
+      setSetup((current: any) => ({ ...current, codex: { ...current?.codex, ...value, checked: true } }));
+      setMessage(value.ready ? `Codex ${value.version || ''} 已登录，可以接收 Trace 工作。` : 'Codex 已找到，但尚未登录。请先打开 Codex 完成登录。');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Codex 检查没有完成。'); }
+    finally { setBusy(false); }
+  };
+  const connectPlugin = async () => {
+    setBusy(true); setMessage('正在把 Trace 入口连接到 Codex…');
+    try { const value = await connectTraceCodexPlugin(); setMessage(value.message || 'Trace 已连接到 Codex。'); }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Codex 插件连接没有完成。'); }
+    finally { setBusy(false); }
+  };
+  const ready = setup?.codex?.ready === true && setup?.project?.connected === true;
+  return <section className="web-codex-setup" data-ready={ready ? 'true' : 'false'}>
+    <header><h3>Codex 接入</h3><span>{ready ? '可以开始工作' : setup ? '需要一次检查' : '正在检查'}</span></header>
+    <p role="status">{message}</p>
+    <dl><div><dt>本机 Runtime</dt><dd>{setup?.runtime?.connected ? setup.runtime.bundled ? '随桌面版运行' : '已连接' : '正在检查'}</dd></div><div><dt>当前项目</dt><dd>{setup?.project?.connected ? setup.project.name : '尚未选择'}</dd></div><div><dt>Codex</dt><dd>{setup?.codex?.ready ? '已登录并通过检查' : setup?.codex?.available ? '已发现 · 待检查' : '等待发现'}</dd></div><div><dt>结果怎样回来</dt><dd>先进入 Trace 复核</dd></div></dl>
+    <div className="web-codex-actions"><RecoveryButton disabled={busy} onClick={() => void chooseProject()}>{setup?.project?.connected ? '更换项目' : '选择项目'}</RecoveryButton><RecoveryButton primary disabled={busy || !setup?.codex?.available} onClick={() => void check()}>{busy ? '正在处理…' : '检查 Codex'}</RecoveryButton>{setup?.codex?.ready && <RecoveryButton disabled={busy} onClick={() => void connectPlugin()}>在 Codex 中使用 Trace</RecoveryButton>}</div>
+    <small className="web-codex-note">“检查 Codex”用于从 Trace 把工作交给本机 Codex；“在 Codex 中使用 Trace”是可选入口，安装后请新开 Codex 任务。项目绝对路径只留在本机，不会显示在页面或发送给模型。</small>
   </section>;
 }
 

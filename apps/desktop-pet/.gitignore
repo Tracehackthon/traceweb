@@ -1,3 +1,7 @@
 node_modules/
 lib/
+release/
+release-*/
+runtime-dist/
+.electron-dist-*/
 *.log

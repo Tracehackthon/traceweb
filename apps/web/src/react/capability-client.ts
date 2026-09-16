@@ -106,4 +106,28 @@ export async function readNativeWork(workId: string): Promise<any> {
   return bridge.requestCapability({ operation: 'work.read', workId });
 }
 
+export async function desktopSetupStatus(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return null;
+  return bridge.requestCapability({ operation: 'setup.status' });
+}
+
+export async function selectDesktopProject(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return null;
+  return bridge.requestCapability({ operation: 'work.project.select' });
+}
+
+export async function checkCodexConnection(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
+  return bridge.requestCapability({ operation: 'setup.codex.check' });
+}
+
+export async function connectTraceCodexPlugin(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
+  return bridge.requestCapability({ operation: 'setup.codex.connect' });
+}
+
 export function hasNativeCapabilityBridge(): boolean { return Boolean(nativeBridge()?.requestCapability); }

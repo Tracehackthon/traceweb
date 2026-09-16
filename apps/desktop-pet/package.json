@@ -1,7 +1,8 @@
 {
   "name": "@trace/desktop-pet",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "private": true,
+  "author": "Trace",
   "description": "Trace UI V1 for DeepSeek Harness Web and the native desktop overlay",
   "type": "module",
   "main": "lib/index.js",
@@ -35,18 +36,61 @@
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "desktop": "npm run build && electron lib/desktop/main.mjs",
-    "desktop:start": "electron lib/desktop/main.mjs"
+    "desktop:start": "electron lib/desktop/main.mjs",
+    "runtime:stage": "node ../../scripts/stage-desktop-runtime.mjs",
+    "dist:win": "npm run runtime:stage && npm run build && electron-builder --win nsis --x64",
+    "pack:win": "npm run runtime:stage && npm run build && electron-builder --win dir --x64"
   },
-  "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "traceweb": "file:../.."
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "electron": "44.3.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "0.25.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "typescript": "7.0.2"
+  },
+  "build": {
+    "appId": "store.neutrom.trace.desktop",
+    "productName": "Trace",
+    "artifactName": "Trace-Desktop-${version}-Setup.${ext}",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "lib/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "lib/desktop/main.mjs"
+    },
+    "extraResources": [
+      {
+        "from": "runtime-dist",
+        "to": "trace-runtime",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "../web/public/brand/trace-app-icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Trace",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Tracehackthon",
+      "repo": "traceweb"
+    }
   }
 }

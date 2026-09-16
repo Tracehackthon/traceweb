@@ -1,20 +1,61 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, shell, Tray } from 'electron'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRuntimeCapabilityClient } from './runtime-client.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
-const openProductOnStart = process.env.TRACE_DESKTOP_OPEN_ON_START === '1'
+const backendOrigin = process.env.TRACE_BACKEND_ORIGIN || 'http://127.0.0.1:4173'
+const openProductOnStart = app.isPackaged || process.env.TRACE_DESKTOP_OPEN_ON_START === '1'
 const appIconPath = join(root, 'trace-app-icon-256.png')
 const trayIconPath = join(root, 'trace-app-icon-20.png')
 const allowedDiscussionKeys = new Set(['from', 'observationId', 'text', 'status', 'source'])
-const capabilityClient = createRuntimeCapabilityClient()
 
 let overlayWindow
 let tray
 let quitting = false
+let capabilityClient
+let bundledRuntime
 const discussionWindows = new Set()
+
+function settingsFile() { return join(app.getPath('userData'), 'desktop-settings.json') }
+function readDesktopSettings() {
+  try {
+    const value = JSON.parse(readFileSync(settingsFile(), 'utf8'))
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  } catch { return {} }
+}
+function writeDesktopSettings(value) {
+  const file = settingsFile()
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+async function runtimeReady() {
+  try {
+    const response = await fetch(new URL('/api/product/workspace', backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
+    return response.ok && (response.headers.get('content-type') || '').includes('application/json')
+  } catch { return false }
+}
+async function ensureBundledRuntime() {
+  if (await runtimeReady() || !app.isPackaged) return
+  const target = new URL(backendOrigin)
+  if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)) return
+  const runtimeRoot = join(process.resourcesPath, 'trace-runtime')
+  const server = join(runtimeRoot, 'apps', 'desktop', 'server.mjs')
+  if (!existsSync(server)) return
+  const stateRoot = join(app.getPath('userData'), 'state')
+  mkdirSync(stateRoot, { recursive: true })
+  process.env.TRACE_RUNTIME_ROOT = runtimeRoot
+  process.env.TRACE_BUNDLED_RUNTIME = '1'
+  process.env.TRACE_DESKTOP_PORT = target.port || '80'
+  process.env.TRACE_WEB_STATE_FILE = join(stateRoot, 'web.sqlite')
+  process.env.TRACE_AGENT_STATE_FILE = join(stateRoot, 'agent.sqlite')
+  process.env.TRACE_AGENT_RUNTIME_ROOT = join(stateRoot, 'agent-runs')
+  process.env.TRACE_AGENT_ENABLED ??= '1'
+  bundledRuntime = await import(pathToFileURL(server).href)
+  await bundledRuntime.ready
+}
 
 function positionOverlay() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
@@ -155,15 +196,21 @@ if (!ownsInstance) {
 } else {
   app.on('second-instance', showOverlay)
   app.whenReady().then(() => {
-    app.setAppUserModelId('cn.trace.native-plugin')
-    Menu.setApplicationMenu(null)
-    createOverlayWindow()
-    createTray()
-    if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=home`)
+    void (async () => {
+      try { await ensureBundledRuntime() }
+      catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
+      const settings = readDesktopSettings()
+      capabilityClient = createRuntimeCapabilityClient({ configuredProjectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir })
+      app.setAppUserModelId('store.neutrom.trace.desktop')
+      Menu.setApplicationMenu(null)
+      createOverlayWindow()
+      createTray()
+      if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=home`)
 
-    screen.on('display-metrics-changed', positionOverlay)
-    screen.on('display-added', positionOverlay)
-    screen.on('display-removed', positionOverlay)
+      screen.on('display-metrics-changed', positionOverlay)
+      screen.on('display-added', positionOverlay)
+      screen.on('display-removed', positionOverlay)
+    })()
   })
 }
 
@@ -188,10 +235,19 @@ ipcMain.on('trace-native:discussion-candidate', (event, payload) => {
 ipcMain.handle('trace-native:capability', async (event, request) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender)
   if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) throw new Error('Capability caller is not a Trace window')
+  if (!capabilityClient) throw new Error('Trace 本机能力仍在启动，请稍后再试')
+  if (request?.operation === 'work.project.select') {
+    const result = await dialog.showOpenDialog(senderWindow, { title: '选择要与 Codex 一起工作的项目', properties: ['openDirectory'] })
+    if (result.canceled || !result.filePaths[0]) return capabilityClient.request({ operation: 'work.environment' })
+    const selected = capabilityClient.setProjectDir(result.filePaths[0])
+    writeDesktopSettings({ ...readDesktopSettings(), projectDir: result.filePaths[0] })
+    return selected
+  }
   return capabilityClient.request(request)
 })
 
 app.on('window-all-closed', () => {})
 app.on('before-quit', () => {
   quitting = true
+  void bundledRuntime?.close?.()
 })

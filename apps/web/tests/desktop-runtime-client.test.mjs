@@ -49,6 +49,43 @@ test('desktop runtime client never sends backend paths or protocol fields to the
   )
 })
 
+test('desktop first-run setup reports only safe project and verified Codex details', async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-setup-'))
+  const projectDir = path.join(fixtureRoot, 'private-workspace')
+  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+  const calls = []
+  const client = createRuntimeCapabilityClient({
+    projectDir,
+    fetchImpl: async (url, init) => {
+      const body = init.body ? JSON.parse(init.body) : undefined
+      calls.push({ pathname: url.pathname, body })
+      if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', label: 'Codex', kind: 'codex' }] })
+      if (url.pathname === '/api/agent/check') return response({ authenticated: true, version: 'codex-cli 0.153.4' })
+      return response({ error: { message: 'not found' } }, 404)
+    },
+  })
+
+  const setup = await client.request({ operation: 'setup.status' })
+  assert.equal(setup.project.name, 'private-workspace')
+  assert.equal(JSON.stringify(setup).includes(projectDir), false)
+  const checked = await client.request({ operation: 'setup.codex.check' })
+  assert.deepEqual(checked, { ready: true, authenticated: true, version: 'codex-cli 0.153.4', label: 'Codex' })
+  assert.deepEqual(calls.map((call) => call.pathname), ['/api/agent/capabilities', '/api/agent/capabilities', '/api/agent/check'])
+  assert.deepEqual(calls[2].body, { profileId: 'local-codex' })
+})
+
+test('desktop first-run Zhihu status degrades without exposing a raw missing-route error', async () => {
+  const client = createRuntimeCapabilityClient({
+    fetchImpl: async () => new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } }),
+  })
+  const status = await client.request({ operation: 'zhihu.status' })
+  assert.equal(status.oauth.configured, false)
+  assert.equal(status.oauth.status, 'unconfigured')
+  assert.match(status.notice, /尚未连接知乎账户服务/)
+  assert.equal(JSON.stringify(status).includes('404'), false)
+})
+
 test('desktop runtime client executes the bounded product to Agent chain', async () => {
   const calls = []
   let id = 0
