@@ -3,9 +3,13 @@
 // records can never be written into a maintainer's personal SQLite workspace.
 const completeDemoStorage = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 export const browserStorage = import.meta.env.VITE_TRACE_STORAGE === 'browser' || completeDemoStorage;
-export const storageLabel = browserStorage ? '当前浏览器' : '本机';
+export const storageLabel = completeDemoStorage ? '本次演示会话' : browserStorage ? '当前浏览器' : '本机';
 
 export async function workspaceRequest(url: string, options: RequestInit = {}): Promise<Response> {
+  if (completeDemoStorage) {
+    const { demoWorkspaceRequest } = await import('./demo-workspace-storage');
+    return demoWorkspaceRequest(url, options);
+  }
   if (!browserStorage) return fetch(url, options);
   const { browserWorkspaceRequest } = await import('../product/browser-workspace.mjs');
   return browserWorkspaceRequest(url, options);

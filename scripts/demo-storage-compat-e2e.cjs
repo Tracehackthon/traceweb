@@ -64,36 +64,28 @@ function chromiumExecutable() {
       db.close();
     });
 
+    await page.addInitScript(() => {
+      indexedDB.open = () => { throw new DOMException('IndexedDB disabled for regression test', 'InvalidStateError'); };
+    });
+
     await page.goto(`${base}/app/demo`, { waitUntil: 'domcontentloaded' });
     await page.locator('.demo-guide-toggle').waitFor({ timeout: 10000 });
     await page.locator('.web-status[data-state=saved]').waitFor({ timeout: 10000 });
     assert.equal(await page.locator('.thought-bubble[data-matter-id]').count(), 4);
 
-    const storage = await page.evaluate(async () => {
-      const databases = await indexedDB.databases();
-      const old = await new Promise((resolve, reject) => {
-        const request = indexedDB.open('trace-web-complete-demo-v3', 1);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const record = await new Promise((resolve, reject) => {
-        const tx = old.transaction('workspace', 'readonly');
-        const request = tx.objectStore('workspace').get('current');
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      old.close();
-      return { names: databases.map(item => item.name), legacyHost: record.host };
-    });
+    const storage = await page.evaluate(async () => ({
+      names: (await indexedDB.databases()).map(item => item.name),
+      status: document.querySelector('.web-status')?.textContent,
+    }));
 
     assert.ok(storage.names.includes('trace-web-complete-demo-v3'));
-    assert.ok(storage.names.includes('trace-web-complete-demo-v4'));
-    assert.equal(storage.legacyHost, 'legacy-demo-record');
+    assert.ok(!storage.names.includes('trace-web-complete-demo-v4'));
+    assert.match(storage.status, /本次演示/);
     assert.equal(workspaceRequests.length, 0);
     assert.deepEqual(pageErrors, []);
     await page.screenshot({ path: path.join(out, 'demo-open.png'), animations: 'disabled' });
     fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ base, storage, workspaceRequests, pageErrors }, null, 2));
-    console.log('PASS legacy demo storage cannot block the current complete demo');
+    console.log('PASS complete demo opens without IndexedDB and ignores legacy demo storage');
     console.log(`EVIDENCE ${out}`);
   } finally {
     await browser?.close();

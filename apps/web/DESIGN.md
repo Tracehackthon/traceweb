@@ -158,7 +158,7 @@ Mode: **Operate**。部署根入口先呈现浅矿物白、深墨绿与细线网
 ### 当前实现与事实边界
 
 - 默认入口仍是 [web-main.js](src/web-main.js)，但会按路径拆分表面：`/` 加载产品交互介绍，`/app/demo` 与 `/app` 加载 [react-main.tsx](src/react-main.tsx) 中的 React shell，`/video` 加载真实使用视频页。base shell 的 [web.css](src/product/web.css) 随 React 入口静态加载，局部路由 CSS 再于对应模块挂载前加载；即使路由资源失败，加载态、错误态与恢复操作也不会退回无样式页面。
-- `/app/demo` 和 `/app` 复用同一套真实产品组件与命令边界。托管 Web 为两者使用独立的 IndexedDB 命名空间；即使本地开发中的 `/app` 连接个人 SQLite，`/app/demo` 也固定使用独立演示 IndexedDB，不会把合成数据写入个人 SQLite。完整 demo v3 含 4 个 matters 与 2 个 works；其中主事项具有六动作可直达的完整链路。事项状态仍标记为 `synthetic`，但两份知乎来源是 2026-09-15 通过开放平台真实检索后缓存的公开摘要快照；首页用可进入的「知乎参与这件事」来源条明确它们分别作为原现场与对照，个人空间不继承任何演示记录。
+- `/app/demo` 和 `/app` 复用同一套真实产品组件与命令边界，但存储职责明确分开：托管个人空间使用 origin 隔离的 IndexedDB，本机 `/app` 可连接个人 SQLite；`/app/demo` 使用刷新后重建的会话内存，即使 IndexedDB 被禁用、损坏或被其它标签页阻塞也必须完成首屏，不会把合成数据写入个人存储。完整 demo v3 含 4 个 matters 与 2 个 works；其中主事项具有六动作可直达的完整链路。事项状态仍标记为 `synthetic`，但两份知乎来源是 2026-09-15 通过开放平台真实检索后缓存的公开摘要快照；首页用可进入的「知乎参与这件事」来源条明确它们分别作为原现场与对照，个人空间不继承任何演示记录。
 - [web.css](src/product/web.css) 明确把首页、事项、chain、compare、worksite、目录与加载态的 `background-image` 置为 `none`。`ASSETS` 当前只映射字体与小鸟，不含背景角色。
 - 旧 `environment*.png` 与锁定记录可以继续留在仓库作为历史/审计资产，但既不是当前 primary/legacy runtime 的视觉入口，也不是新增页面应复用的系统组件。
 - 首页 composer 不再打开 ConnectionCenter，而是内嵌两个紧凑原生 `capture-select`。搜索下拉包含「不联网 / 知乎搜索 / 全网搜索」；Agent 下拉包含「不交给 Agent / Codex 原生 / Codex Harness / 自定义 Agent」。原生 `<select>` 保留浏览器键盘、触控与表单语义，避免在当前 imperative DOM 与 React 边界增加 portal 和焦点恢复风险。
