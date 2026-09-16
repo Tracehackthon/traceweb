@@ -38,20 +38,22 @@ const formFactors = [
   { key: 'desktop', index: '05', name: '完整桌面端', verb: '长期继续', help: '跨时间找回、比较和修订多件仍在变化的事，而不是增加一个聊天窗口。', proof: '当前 Trace · 工作结果回到原问题', image: '/showcase/trace-result-detail.png' },
 ] as const;
 
-function ContinuityMap() {
-  return <div className="continuity-map" aria-label="一件想法从阅读到工作再回来的连续路径">
-    <div className="map-context"><span>正在阅读</span><b>知乎 · 关于第二大脑的讨论</b></div>
-    <div className="map-line" aria-hidden="true" />
-    <div className="map-node node-source"><i/><span>原现场</span><b>为什么停在这里</b></div>
-    <div className="map-node node-thinking"><i/><span>思考与讨论</span><b>找到具体断点</b></div>
-    <div className="map-node node-understanding"><i/><span>我的理解</span><b>写成自己的判断</b></div>
-    <div className="map-node node-work"><i/><span>原生 Agent · 当前工作</span><b>只带这次需要的</b></div>
-    <div className="map-node node-return"><i/><span>结果回来</span><b>确认后再改变理解</b></div>
-    <img src="/real/trace-desktop-pet.png" alt="Trace 桌宠沿着同一件事的轨迹移动" />
-    <p>同一件事，没有被拆成收藏、聊天和工作总结。</p>
+function PosterStage() {
+  return <div className="poster-stage" aria-label="Trace 从知乎来源进入原生 Agent，再把结果带回原问题的真实产品场景">
+    <img className="poster-atmosphere" src="/showcase/trace-continuity-poster-amber-v1.webp" alt="" aria-hidden="true"/>
+    <div className="poster-heading"><span>TRACE / CONTINUITY</span><b>一件事，从触动到结果。</b></div>
+    <figure className="poster-capture poster-capture-agent">
+      <AgentFocusCapture src="/showcase/desktop-agent-panel.jpg" alt="Trace 桌宠在 Codex 工作现场展开知乎搜索与 Agent 交接" focus="panel"/>
+      <figcaption><span>01</span><b>桌宠留在原生 Agent 旁边</b></figcaption>
+    </figure>
+    <figure className="poster-capture poster-capture-result">
+      <img data-critical="true" src="/showcase/trace-result-detail.png" alt="Trace 中返回的完整工作结果"/>
+      <figcaption><span>02</span><b>结果回到原来的问题</b></figcaption>
+    </figure>
+    <div className="poster-mark"><BrandMark size={48}/><span>把此刻的一点<br/>带到以后</span></div>
+    <ol className="poster-flow"><li><i/>知乎来源</li><li><i/>继续判断</li><li><i/>带去工作</li><li><i/>结果回来</li></ol>
   </div>;
 }
-
 function FormFactorJourney() {
   const [active, setActive] = useState(0);
   const stage = formFactors[active];
@@ -106,7 +108,7 @@ const coreActions = [['留下一点', '此刻先不丢'], ['从这里接着', '�
 function IntroApp() {
   useEffect(() => { document.body.className = 'intro-page'; document.title = 'Trace · 让值得思考的想法继续发生'; }, []);
   return <><a className="intro-skip" href="#main">跳到正文</a><header className="intro-header"><a className="intro-brand" href="#main" aria-label="Trace 产品介绍首页"><BrandMark/><b>Trace</b></a><nav aria-label="页面导航"><a href="#shape">如何展开</a><a href="#principles">为什么这样做</a><a href="#thinking">知乎与思考</a><a href="#work">进入工作</a><a href="/video">视频</a></nav><a className="header-action" href="/app/demo">体验完整演示 <Icon name="arrow" size={16}/></a></header>
-  <main id="main"><section className="intro-hero" aria-labelledby="opening-title"><div className="hero-copy"><h1 id="opening-title">让值得思考的想法，<em>继续发生。</em></h1><p className="hero-lead">Trace 接住阅读、讨论和工作中还没想完的一点。你可以结合知乎公开内容继续判断，把需要实践的部分带进你正在使用的原生 Agent，再让结果回到原来的问题。</p><div className="hero-actions"><a className="primary-action" href="/app/demo">体验完整演示 <Icon name="arrow"/></a><a href="#shape">先看它怎样展开 <Icon name="down" size={16}/></a></div><div className="hero-claims"><span><Icon name="local" size={17}/><b>本地优先</b>内容先留在你的设备</span><span><Icon name="code" size={17}/><b>继续用原生 Agent</b>不另造一套工作工具</span></div></div><ContinuityMap/></section>
+  <main id="main"><section className="intro-hero" aria-labelledby="opening-title"><div className="hero-copy"><p className="intro-eyebrow"><span/>桌宠 · 知乎 · 原生 Agent</p><h1 id="opening-title">让值得思考的想法，<em>继续发生。</em></h1><p className="hero-lead">Trace 接住阅读、讨论和工作中还没想完的一点。你可以结合知乎公开内容继续判断，把需要实践的部分带进你正在使用的原生 Agent，再让结果回到原来的问题。</p><div className="hero-actions"><a className="primary-action" href="/app/demo">体验完整演示 <Icon name="arrow"/></a><a href="#shape">先看它怎样展开 <Icon name="down" size={16}/></a></div><div className="hero-claims"><span><Icon name="local" size={17}/><b>本地优先</b>内容先留在你的设备</span><span><Icon name="code" size={17}/><b>继续用原生 Agent</b>不另造一套工作工具</span></div></div><PosterStage/></section>
   <section className="shape-section" id="shape" aria-labelledby="shape-title"><div className="section-heading"><p>从轻到深，不打断原现场</p><h2 id="shape-title">不是先打开一个庞大的应用。<br/>需要多少，Trace 才<span>长到多少。</span></h2><div>同一件事在五种形态间继续，不复制内容，也不要求每次都走完整流程。</div></div><FormFactorJourney/></section>
   <section className="principles-section" id="principles" aria-labelledby="principles-title"><div className="principles-intro"><p>我们刻意不做什么</p><h2 id="principles-title">工作不必搬家。<br/>Trace 只补上<span>连续性。</span></h2></div><div className="principle-rows"><article><span>01</span><div><h3>内容优先保存在本机</h3><p>在线演示保存在当前浏览器，桌面端保存在本机。你可以随时导出；目前不提供 Trace 账号和跨设备同步。</p></div></article><article><span>02</span><div><h3>不把工作搬进另一套 Agent</h3><p>Trace 不复制聊天、代码生成和终端。它只把问题的来处、你的理解和工作结果接起来。</p></div></article><article><span>03</span><div><h3>继续在原来的 Agent 里工作</h3><p>理解项目、执行命令、检查与交付仍由你选择的原生 Agent 完成；Trace 只带入这次需要的内容，并接回结果。</p></div></article></div><div className="native-agent-host"><figure><AgentFocusCapture src="/showcase/desktop-agent-panel.jpg" alt="Trace 桌宠在本机 Codex 工作现场展开交接面板" focus="panel"/><figcaption><span>当前桌面端</span><b>Trace 留在你原来的 Agent 工作现场</b><p>图中以 Codex 为例：桌宠展开本次内容，工作仍在原来的窗口中完成。</p></figcaption></figure><aside><p>已接入的工作方式</p><ul><li><span>C</span><div><b>Codex 原生</b><small>直接复用已有能力</small></div></li><li><span>H</span><div><b>Codex Harness</b><small>沿用现有项目工作流</small></div></li><li><span>+</span><div><b>自定义 Agent</b><small>选择本机已配置的执行入口</small></div></li></ul><footer>Trace 不替代 Agent，只负责带入这次需要的内容，并接回结果。</footer></aside></div><p className="runtime-truth">在线演示的数据保存在当前浏览器；桌面端通过 Bridge 连接本机能力。截图以 Codex 为例，交接时也可以选择 Harness 或已配置的自定义 Agent。</p></section>
   <section className="thinking-section" id="thinking" aria-labelledby="thinking-title"><div className="section-heading"><p>知乎参与思考，而不是充当素材仓库</p><h2 id="thinking-title">一段触动，如何经过讨论和对照，<br/>变成<span>你自己的理解。</span></h2><div>知乎公开内容带来不同回答、经验和创作者；全网搜索补充边界，Agent 帮你继续追问。来源不会自动变成你的立场。</div></div><ThinkingJourney/></section>
