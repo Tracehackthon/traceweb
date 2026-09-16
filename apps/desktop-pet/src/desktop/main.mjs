@@ -6,7 +6,8 @@ import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityCl
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
-const backendOrigin = process.env.TRACE_BACKEND_ORIGIN || (app.isPackaged ? DEFAULT_RUNTIME_ORIGIN : discussionOrigin)
+const configuredBackendOrigin = process.env.TRACE_BACKEND_ORIGIN
+let backendOrigin = configuredBackendOrigin || (app.isPackaged ? undefined : discussionOrigin)
 const openProductOnStart = app.isPackaged || process.env.TRACE_DESKTOP_OPEN_ON_START === '1'
 const appIconPath = join(root, 'trace-app-icon-256.png')
 const trayIconPath = join(root, 'trace-app-icon-20.png')
@@ -36,6 +37,7 @@ function writeDesktopSettings(value) {
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
 async function runtimeReady() {
+  if (!backendOrigin) return false
   try {
     const responses = await Promise.all(['/api/product/workspace', '/api/agent/capabilities'].map((pathname) => (
       fetch(new URL(pathname, backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
@@ -45,7 +47,8 @@ async function runtimeReady() {
 }
 async function ensureBundledRuntime() {
   if (await runtimeReady() || !app.isPackaged) return
-  const target = new URL(backendOrigin)
+  const dynamicBinding = !configuredBackendOrigin
+  const target = new URL(backendOrigin || DEFAULT_RUNTIME_ORIGIN)
   if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)) return
   const runtimeRoot = join(process.resourcesPath, 'trace-runtime')
   const server = join(runtimeRoot, 'apps', 'desktop', 'server.mjs')
@@ -54,13 +57,18 @@ async function ensureBundledRuntime() {
   mkdirSync(stateRoot, { recursive: true })
   process.env.TRACE_RUNTIME_ROOT = runtimeRoot
   process.env.TRACE_BUNDLED_RUNTIME = '1'
-  process.env.TRACE_DESKTOP_PORT = target.port || '80'
+  process.env.TRACE_DESKTOP_PORT = dynamicBinding ? '0' : target.port || '80'
   process.env.TRACE_WEB_STATE_FILE = join(stateRoot, 'web.sqlite')
   process.env.TRACE_AGENT_STATE_FILE = join(stateRoot, 'agent.sqlite')
   process.env.TRACE_AGENT_RUNTIME_ROOT = join(stateRoot, 'agent-runs')
   process.env.TRACE_AGENT_ENABLED ??= '1'
   bundledRuntime = await import(pathToFileURL(server).href)
-  await bundledRuntime.ready
+  const binding = await bundledRuntime.ready
+  if (dynamicBinding) {
+    const port = Number(binding?.port)
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('Trace bundled runtime did not report a valid loopback port')
+    backendOrigin = `http://127.0.0.1:${port}`
+  }
 }
 
 function positionOverlay() {
@@ -257,7 +265,7 @@ if (!ownsInstance) {
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
       const settings = readDesktopSettings()
       capabilityClient = createRuntimeCapabilityClient({
-        origin: backendOrigin,
+        origin: backendOrigin || DEFAULT_RUNTIME_ORIGIN,
         cloudOrigin: traceCloudOrigin,
         configuredProjectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir,
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),

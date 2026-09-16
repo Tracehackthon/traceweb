@@ -3,9 +3,9 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-// Keep the packaged Runtime away from the common Vite preview port. The
-// desktop product UI may legitimately use 4173 while the native capability
-// bridge owns this dedicated loopback port.
+// Safe fallback for standalone client construction. The packaged desktop
+// host asks the OS for a free loopback port and passes that resolved origin
+// explicitly, so it does not depend on this fixed port.
 export const DEFAULT_RUNTIME_ORIGIN = 'http://127.0.0.1:42731'
 // The public custom domain currently performs a permanent redirect. Native
 // API requests use the stable Vercel production origin directly so POSTs,
