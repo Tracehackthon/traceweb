@@ -35,6 +35,13 @@ export function queryRecords(host,{q='',kind='',matterId=''}={}) {
   const needle=q.trim().toLocaleLowerCase();
   return recordsOf(host).filter(r=>(!kind||r.kind===kind)&&(!matterId||r.matterId===matterId)&&(!needle||[r.title,r.text,r.interpretation,r.unconfirmed,r.before].join('\n').toLocaleLowerCase().includes(needle))).reverse();
 }
+export function routeForRecord(record) {
+  if (!record?.route) return null;
+  // A work card is already the doorway to its workspace. Opening a generic
+  // record dialog on top made the first click feel blocked. Historical search
+  // hits still carry their id so the exact item can be reviewed in context.
+  return record.kind === 'work' ? {...record.route} : {...record.route,recordId:record.id};
+}
 export function homeEntries(host) {
   return Object.fromEntries([...host.chain.matters].reverse().slice(0,4).map((m,i)=>[['thought','work','fresh','handoff'][i],{matterId:m.id,title:short(titleOf(m),40),subtitle:m.stop?`停在：${short(m.stop,35)}`:m.understanding?`我的理解 v${m.understandingVersion} · ${short(m.understanding,30)}`:'原话已保留 · 从这里接着'}]));
 }
@@ -92,7 +99,7 @@ export function mountLibrary({root,host,route,onNavigate,onBack,onProfile}) {
     if(b.hasAttribute('data-clear-scope'))onNavigate({...current,matterId:null});
     if(b.hasAttribute('data-kind'))change({kind:b.dataset.kind});
     if(b.classList.contains('web-profile'))onProfile();
-    if(b.dataset.open){const r=recordsOf(host).find(r=>r.id===b.dataset.open);if(r?.route)onNavigate({...r.route,recordId:r.id},{origin:current});}
+    if(b.dataset.open){const r=recordsOf(host).find(r=>r.id===b.dataset.open),next=routeForRecord(r);if(next)onNavigate(next,{origin:current});}
   });
   const input=root.querySelector('input');let composing=false;
   on(input,'compositionstart',()=>composing=true);

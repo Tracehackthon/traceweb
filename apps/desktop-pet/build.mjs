@@ -72,6 +72,9 @@ await Promise.all([
   copyFile(resolve(root, 'src/desktop/preload.cjs'), resolve(desktopOutDir, 'preload.cjs')),
   copyFile(resolve(root, 'src/desktop/discussion-preload.cjs'), resolve(desktopOutDir, 'discussion-preload.cjs')),
   copyFile(resolve(root, 'src/client/assets/liukanshan.png'), resolve(desktopOutDir, 'liukanshan.png')),
+  copyFile(resolve(discussionSourceDir, 'public/brand/trace-app-icon-20.png'), resolve(desktopOutDir, 'trace-app-icon-20.png')),
+  copyFile(resolve(discussionSourceDir, 'public/brand/trace-app-icon-32.png'), resolve(desktopOutDir, 'trace-app-icon-32.png')),
+  copyFile(resolve(discussionSourceDir, 'public/brand/trace-app-icon-256.png'), resolve(desktopOutDir, 'trace-app-icon-256.png')),
 ])
 
 const discussionOutDir = resolve(desktopOutDir, 'discussion')

@@ -64,7 +64,7 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
         <div class="worksite-state" data-screen="results" hidden>
           <div class="worksite-results-heading">${back()}<span></span><h2>结果回来</h2></div>
           ${surface('result-stop','worksite-result-stop',`${orbit('file')}<div><h2>上次停在</h2><p data-text="matter-stop"></p></div><footer>${button('result-matter','原问题',{cls:'worksite-text-button',glyph:'external'})}</footer>`)}
-          ${surface('result-fact','worksite-result-fact',`<div class="worksite-field-title">${orbit('wave')}${label(fieldId('result-fact'),'这次实际发生')}</div><textarea id="${fieldId('result-fact')}" data-field="result-fact" rows="4" placeholder="先写下实际发生的事，不急着解释。"></textarea><div class="worksite-fact-source">${button('artifact','查看本次工作来源',{cls:'worksite-text-button',glyph:'external'})}</div><p class="worksite-footnote">单次观察，不代表普遍成立</p>`)}
+          ${surface('result-fact','worksite-result-fact',`<div class="worksite-field-title">${orbit('wave')}${label(fieldId('result-fact'),'这次实际发生')}</div><textarea id="${fieldId('result-fact')}" data-field="result-fact" rows="4" placeholder="先写下实际发生的事，不急着解释。"></textarea><div class="worksite-fact-source">${button('result-detail','查看完整结果',{cls:'worksite-text-button',glyph:'file'})}${button('artifact','查看工作来源',{cls:'worksite-text-button',glyph:'external'})}</div><p class="worksite-footnote">单次观察，不代表普遍成立</p>`)}
           ${surface('result-understanding','worksite-result-understanding',`<header><h2>${orbit('bulb')}可能改变的理解</h2><span class="worksite-pending" data-text="revision-status"></span></header><div class="worksite-result-matter-select">${label(fieldId('result-matter'),'选择一件事')}<select id="${fieldId('result-matter')}" data-field="result-matter"></select></div><div class="worksite-original-understanding" data-text="matter-understanding"></div><div class="worksite-proposed">${label(fieldId('result-proposed'),'候选理解')}<textarea id="${fieldId('result-proposed')}" data-field="result-proposed" rows="2" placeholder="这次观察可能怎样改变你的理解？"></textarea></div><div class="worksite-result-unknown">${label(fieldId('result-unknown'),'仍未分清')}<textarea id="${fieldId('result-unknown')}" data-field="result-unknown" rows="1" placeholder="还有哪些情况需要再看？"></textarea>${label(fieldId('result-interpretation'),'你的解释')}<textarea id="${fieldId('result-interpretation')}" data-field="result-interpretation" rows="1" placeholder="这是待确认的解释，不是已经证明的原因。"></textarea></div><div class="worksite-result-relations" role="group" aria-label="这次结果与原理解的关系">${Object.entries(RELATIONS).map(([relation,text])=>button('result-relation',text,{attrs:`data-relation="${relation}" aria-pressed="false"`})).join('')}</div>`,'warm')}
           <div class="worksite-result-actions">${button('review','查看修改并确认',{cls:'worksite-primary',glyph:'arrow'})}${button('keep-result','只留下结果')}${button('retry','再试一次')}<p>仅在你确认后更新「我的理解」。</p></div>
           <div class="worksite-result-receipt" hidden><span data-text="receipt"></span>${button('undo','撤销这次修改',{cls:'worksite-text-button'})}</div>
@@ -108,7 +108,10 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
   function resize(){
     if(destroyed)return;
     const width=host.clientWidth,height=host.clientHeight;
-    const narrow=width<1000;host.classList.toggle('worksite-narrow',narrow);
+    // The fixed scene becomes clipped and its controls shrink below a
+    // comfortable reading size in medium or short desktop windows. Switch to
+    // the real reading-order layout before that happens.
+    const narrow=width<1240||height<700;host.classList.toggle('worksite-narrow',narrow);
     if(narrow){scene.style.transform='none';scene.style.left='0';scene.style.top='0';}
     else {const scale=Math.min(width/1672,Math.max(.70,height/941));scene.style.transform=`scale(${scale})`;scene.style.left=`${Math.max(0,(width-1672*scale)/2)}px`;scene.style.top=`${Math.max(0,(height-941*scale)/2)}px`;}
     glass.forEach(item=>item.refresh());
@@ -156,6 +159,9 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
       title='查看现场';html=`<p>${esc(current.finding?.source?.title||current.work?.title||'当前工作')}</p><blockquote>${esc(current.finding?.source?.excerpt||current.decision?.description||'尚无现场来源。')}</blockquote><p>来源没有可打开的链接，原文仍可在这里核对。</p>`;
     } else if(name==='finding-matter'){
       title='选择一件事';html=`<p>原始发现会保留，不必接受建议关联。</p><div class="worksite-work-list">${(current.matters||[]).map(matter=>button('choose-finding-matter',`${esc(matter.title)}<small>${esc(matter.stop)}</small>`,{attrs:`data-id="${esc(matter.id)}"`})).join('')}</div>`;
+    } else if(name==='result-detail'){
+      const result=current.result||{};
+      title='完整结果';html=`<p class="worksite-panel-note">以下是本次由你带回、仍待你判断的完整结果。</p><blockquote>${esc(result.fact||'还没有带回结果。')}</blockquote>${result.interpretation?`<h3>你的解释</h3><p>${esc(result.interpretation)}</p>`:''}${result.unconfirmed?`<h3>仍未分清</h3><p>${esc(result.unconfirmed)}</p>`:''}`;
     }
     panel.querySelector('h2').textContent=title;body.innerHTML=html;panel.hidden=false;q('.worksite-panel-backdrop').hidden=false;
     if(name==='switch')renderWorkList(true);
@@ -231,7 +237,7 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
     text('decision-title',decision.title||'暂无具体取舍');text('decision-short',decision.title||'暂无具体取舍');text('decision-description',!current.isDemo&&!decision.id?'本次尚无工作取舍或产物依据。':decision.description||'外部 Agent 尚未连接，不会自动生成工作影响。');
     text('decision-truth',current.isDemo?'原型检查仅为示例，真实使用效果尚未确认。':current.work?.connected?'各项影响需要独立证据，不能由提供内容推定。':'外部 Agent 尚未连接，不代表已提供或已实现。');
     text('observation',current.impact?.unconfirmed?.[0]||'还没有带回实际观察。');
-    qa('[data-action="artifact"] span').forEach(el=>{if(el.closest('.worksite-artifact-link'))el.textContent=decision.artifact?.title||'查看工作产物';if(el.closest('.worksite-fact-source'))el.textContent='查看本次工作来源';});
+    qa('[data-action="artifact"] span').forEach(el=>{if(el.closest('.worksite-artifact-link'))el.textContent=decision.artifact?.title||'查看工作产物';if(el.closest('.worksite-fact-source'))el.textContent='查看工作来源';});
     q('.worksite-prototype-note').hidden=!current.isDemo;
     updateLists();renderWorkList();
     const intake=current.selectedIntake||current.intake?.find(item=>item.id===current.selectedIntakeId)||current.intake?.[0]||null;
@@ -300,7 +306,7 @@ export function mountWorksiteScreen({root,view,onAction,onHome,onBack,onWorkspac
     else if(type==='switch'&&onWorkspaces)callExternal(onWorkspaces,current,'工作列表尚未连接。');
     else if(type==='create-work')callExternal(onCreateWork,current,'工作创建入口尚未连接。');
     else if(type==='back'&&onBack)callExternal(onBack,current,'返回位置尚未连接。');
-    else if(['switch','source','correction','profile','finding-source'].includes(type))openPanel(type);
+    else if(['switch','source','correction','profile','finding-source','result-detail'].includes(type))openPanel(type);
     else if(type==='close-panel')closePanel();
     else if(type==='select-work'){closePanel(false);dispatch({type:'SELECT_WORK',id:el.dataset.id});}
     else if(type==='open-intake')dispatch({type:'OPEN_INTAKE',id:el.dataset.id});

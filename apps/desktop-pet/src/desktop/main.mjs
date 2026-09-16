@@ -6,6 +6,8 @@ import { createRuntimeCapabilityClient } from './runtime-client.mjs'
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
 const openProductOnStart = process.env.TRACE_DESKTOP_OPEN_ON_START === '1'
+const appIconPath = join(root, 'trace-app-icon-256.png')
+const trayIconPath = join(root, 'trace-app-icon-20.png')
 const allowedDiscussionKeys = new Set(['from', 'observationId', 'text', 'status', 'source'])
 const capabilityClient = createRuntimeCapabilityClient()
 
@@ -67,6 +69,7 @@ function openDiscussion(rawUrl) {
     autoHideMenuBar: true,
     backgroundColor: '#f3f0e7',
     title: 'Trace · 深度讨论',
+    icon: appIconPath,
     webPreferences: {
       preload: join(root, 'discussion-preload.cjs'),
       contextIsolation: true,
@@ -128,7 +131,7 @@ function createOverlayWindow() {
 }
 
 function createTray() {
-  const icon = nativeImage.createFromPath(join(root, 'liukanshan.png')).resize({ width: 20, height: 20 })
+  const icon = nativeImage.createFromPath(trayIconPath)
   tray = new Tray(icon)
   tray.setToolTip('Trace 桌面插件')
   tray.setContextMenu(Menu.buildFromTemplate([
