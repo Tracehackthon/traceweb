@@ -1,13 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
   DEFAULT_CLOUD_ORIGIN,
   DEFAULT_RUNTIME_ORIGIN,
+  CODEX_APP_SERVER_COMPATIBLE_VERSIONS,
+  PROJECT_BINDING_STATES,
   createRuntimeCapabilityClient,
+  inspectCodexExecutables,
+  inspectDesktopProject,
+  probeCodexExecutable,
+  resolveAgentProfile,
   resolveCodexExecutable,
+  resolveCodexProfile,
   validateRuntimeOrigin,
 } from '../../desktop-pet/src/desktop/runtime-client.mjs'
 import { REDIRECT_URI } from '../../../lib/zhihu-oauth.mjs'
@@ -16,6 +23,18 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json' },
 })
+
+async function makeTraceProject(projectDir, { projectId = 'project-fixture', instanceId = `instance-${projectId}` } = {}) {
+  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  await writeFile(path.join(projectDir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
+  await mkdir(path.join(projectDir, '.trace'), { recursive: true })
+  await writeFile(path.join(projectDir, '.trace', 'project.json'), JSON.stringify({
+    protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: projectId,
+    instance_id: instanceId, template_id: 'fixture', template_version: '0.1.0',
+    source_mode: 'local', source_scope: 'project', state_file: '.trace/state/trace.sqlite',
+    source_root: '.trace/source', created_at: '2026-09-17T00:00:00.000Z',
+  }))
+}
 test('desktop runtime client accepts only loopback HTTP origins', () => {
   assert.equal(DEFAULT_RUNTIME_ORIGIN, 'http://127.0.0.1:42731')
   assert.equal(DEFAULT_CLOUD_ORIGIN, new URL(REDIRECT_URI).origin, 'OAuth start and callback must share one cookie origin')
@@ -34,6 +53,155 @@ test('desktop discovers the Codex App executable outside a stale Explorer PATH',
   t.after(() => rm(root, { recursive: true, force: true }))
   assert.equal(resolveCodexExecutable({ env: { LOCALAPPDATA: root, PATH: '' }, platform: 'win32' }), executable)
   assert.equal(resolveCodexExecutable({ env: { TRACE_CODEX_BIN: 'C:\\explicit\\codex.exe', LOCALAPPDATA: root }, platform: 'win32' }), 'C:\\explicit\\codex.exe')
+})
+
+test('desktop Codex discovery uses deterministic verified compatibility instead of mtime', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-codex-probe-'))
+  const executableName = process.platform === 'win32' ? 'codex.exe' : 'codex'
+  const first = path.join(root, 'first', executableName)
+  const second = path.join(root, 'second', executableName)
+  await mkdir(path.dirname(first), { recursive: true })
+  await mkdir(path.dirname(second), { recursive: true })
+  await writeFile(first, 'fixture')
+  await writeFile(second, 'fixture')
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const probes = []
+  const probe = async (candidate) => {
+    probes.push(candidate)
+    return { candidate, version: '0.153.4', appServerCapable: true, versionCompatible: true, compatible: candidate === first }
+  }
+  const details = await inspectCodexExecutables({ env: { PATH: `${path.dirname(second)}${path.delimiter}${path.dirname(first)}` }, platform: process.platform, probe })
+  assert.deepEqual(details.candidates, [first, second], 'candidate ordering is lexical, not mtime order')
+  assert.equal(details.selected, first)
+  assert.deepEqual(probes, [first, second])
+  const noCompatible = await inspectCodexExecutables({ env: { PATH: `${path.dirname(first)}${path.delimiter}${path.dirname(second)}` }, platform: process.platform, probe: async (candidate) => ({ candidate, compatible: false, reason: 'version-unverified' }) })
+  assert.equal(noCompatible.selected, null)
+  await assert.rejects(
+    resolveCodexExecutable({ env: { TRACE_CODEX_BIN: second, PATH: path.dirname(first) }, verify: true, probe: async () => ({ compatible: false, reason: 'version-unverified' }) }),
+    /不会回退到未经验证的可执行文件/,
+  )
+  assert.deepEqual(CODEX_APP_SERVER_COMPATIBLE_VERSIONS, ['0.153.4', '0.154.0-alpha.6.2'])
+})
+
+test('desktop rejects a Trace descriptor with unsupported fields instead of trusting a marker', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-descriptor-'))
+  const projectDir = path.join(root, 'project')
+  await makeTraceProject(projectDir)
+  await writeFile(path.join(projectDir, '.trace', 'project.json'), JSON.stringify({
+    protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: 'project-fixture',
+    instance_id: 'instance-project-fixture', template_id: 'fixture', template_version: '0.1.0',
+    source_mode: 'local', source_scope: 'project', state_file: '.trace/state/trace.sqlite',
+    source_root: '.trace/source', created_at: '2026-09-17T00:00:00.000Z', decoy: true,
+  }))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const binding = inspectDesktopProject({ projectDir, source: 'user-selection' })
+  assert.equal(binding.status, PROJECT_BINDING_STATES.CANDIDATE)
+  assert.equal(binding.repositoryVerified, false)
+  assert.equal(binding.diagnostic.code, 'trace-descriptor-invalid')
+})
+
+test('desktop Codex probe requires both an allow-listed version and app-server capability', async () => {
+  const spawnProcess = (_candidate, args) => {
+    const output = args[0] === '--version' ? 'Codex CLI 0.153.4\n' : 'Usage: codex app-server --stdio\n'
+    const callbacks = new Map()
+    const stream = { on(type, callback) { if (type === 'data') queueMicrotask(() => callback(output)) } }
+    const child = {
+      stdout: stream,
+      stderr: { on() {} },
+      once(type, callback) { callbacks.set(type, callback); if (type === 'close') queueMicrotask(() => callback(0)) },
+      kill() {},
+    }
+    return child
+  }
+  const result = await probeCodexExecutable('codex-fixture', { spawnProcess, timeoutMs: 100, compatibleVersions: ['0.153.4'] })
+  assert.equal(result.compatible, true)
+  assert.equal(result.version, '0.153.4')
+  assert.equal(result.appServerCapable, true)
+})
+
+test('desktop project binding treats cwd and saved settings as candidates until confirmation', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-binding-'))
+  const repo = path.join(root, 'same-name')
+  const nested = path.join(repo, 'packages', 'child')
+  await makeTraceProject(repo, { projectId: 'cwd-project' })
+  await mkdir(nested, { recursive: true })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  assert.equal(inspectDesktopProject({ projectDir: nested, source: 'startup-cwd' }).status, PROJECT_BINDING_STATES.CANDIDATE)
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4441', savedProjectDir: repo, startupCwd: nested, projectSource: 'saved-setting',
+    fetchImpl: async () => response({ revision: 0, host: null }),
+  })
+  const candidate = await client.request({ operation: 'work.environment' })
+  assert.equal(candidate.connected, false)
+  assert.equal(candidate.projectBinding.status, PROJECT_BINDING_STATES.CANDIDATE)
+  assert.equal(candidate.projectBinding.source, 'saved-setting')
+  await assert.rejects(client.request({ operation: 'work.run', workId: 'work-1', matterId: 'matter-1', title: '不会执行', text: '候选不可执行', role: 'reference', source: 'none' }), /候选|确认/)
+  const confirmed = await client.request({ operation: 'work.project.confirm' })
+  assert.equal(confirmed.status, PROJECT_BINDING_STATES.CONFIRMED)
+  assert.equal((await client.request({ operation: 'work.environment' })).connected, true)
+
+  const stale = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4442', savedProjectDir: path.join(root, 'deleted-project'), startupCwd: nested, projectSource: 'saved-setting',
+    fetchImpl: async () => response({ revision: 0, host: null }),
+  })
+  const staleEnvironment = await stale.request({ operation: 'work.environment' })
+  assert.equal(staleEnvironment.connected, false)
+  assert.equal(staleEnvironment.projectBinding.status, PROJECT_BINDING_STATES.UNBOUND)
+  assert.equal(staleEnvironment.projectBinding.source, 'saved-setting')
+  assert.equal(staleEnvironment.projectBinding.diagnostic.code, 'project-path-invalid')
+})
+
+test('desktop project identity distinguishes repositories with the same basename', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-identity-'))
+  const left = path.join(root, 'left', 'same-name')
+  const right = path.join(root, 'right', 'same-name')
+  await makeTraceProject(left, { projectId: 'left-project' })
+  await makeTraceProject(right, { projectId: 'right-project' })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const leftClient = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:4443', projectDir: left, fetchImpl: async () => response({ revision: 0, host: null }) })
+  const rightClient = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:4444', projectDir: right, fetchImpl: async () => response({ revision: 0, host: null }) })
+  const leftBinding = await leftClient.request({ operation: 'work.environment' })
+  const rightBinding = await rightClient.request({ operation: 'work.environment' })
+  assert.equal(leftBinding.projectName, 'same-name')
+  assert.equal(rightBinding.projectName, 'same-name')
+  assert.notEqual(leftBinding.projectBinding.identityHint, rightBinding.projectBinding.identityHint)
+  assert.notEqual(leftBinding.projectBinding.projectId, rightBinding.projectBinding.projectId)
+  const switchingClient = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:4447', projectDir: left, fetchImpl: async () => response({ revision: 0, host: null }) })
+  const switched = switchingClient.setProjectDir(right)
+  assert.equal(switched.status, PROJECT_BINDING_STATES.CONFIRMED)
+  assert.equal(switched.projectId, 'right-project')
+})
+
+test('desktop does not bind a legacy work by its display basename alone', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-legacy-work-'))
+  const projectDir = path.join(root, 'same-name')
+  await makeTraceProject(projectDir, { projectId: 'legacy-project' })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4446', projectDir,
+    fetchImpl: async (url) => url.pathname === '/api/product/workspace' ? response({ revision: 1, host: {
+      chain: { matters: [{ id: 'matter-1', originalText: '原话' }], sessions: { 'matter-1': { contextMode: 'resume', contextEpoch: 0 } } },
+      worksite: { works: { 'work-legacy': { id: 'work-legacy', agent: 'Codex', project: 'same-name' } }, sessions: { 'work-legacy': {} } },
+    } }) : response({ error: { message: 'unexpected' } }, 404),
+  })
+  await assert.rejects(client.request({ operation: 'work.run', workId: 'work-legacy', matterId: 'matter-1', title: '测试', text: '原话', role: 'reference', source: 'none' }), /没有可验证的项目身份|basename|重新创建/)
+})
+
+test('desktop profile resolution never selects the first Codex profile silently', () => {
+  const capabilities = {
+    enabled: true,
+    profiles: [
+      { profileId: 'codex-a', kind: 'codex', label: 'A' },
+      { profileId: 'codex-b', kind: 'codex', label: 'B' },
+      { profileId: 'model-a', kind: 'model', label: 'Model' },
+    ],
+  }
+  assert.equal(resolveCodexProfile(capabilities).status, 'unresolved')
+  assert.equal(resolveCodexProfile(capabilities).reason, 'multiple-codex-profiles-no-default')
+  assert.equal(resolveCodexProfile({ ...capabilities, defaultProfileId: 'codex-b' }).profile.profileId, 'codex-b')
+  assert.equal(resolveCodexProfile(capabilities, { selectedProfileId: 'codex-a' }).profile.profileId, 'codex-a')
+  assert.equal(resolveAgentProfile(capabilities, { requestedProfileId: 'model-a' }).profile.kind, 'model')
+  assert.equal(resolveAgentProfile(capabilities).reason, 'multiple-agent-profiles-no-default')
 })
 
 test('desktop runtime client discovers search and Agent independently', async () => {
@@ -71,7 +239,7 @@ test('desktop runtime client never sends backend paths or protocol fields to the
 test('desktop first-run setup reports only safe project and verified Codex details', async (t) => {
   const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-setup-'))
   const projectDir = path.join(fixtureRoot, 'private-workspace')
-  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  await makeTraceProject(projectDir, { projectId: 'private-workspace-project' })
   t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
   const calls = []
   const client = createRuntimeCapabilityClient({
@@ -87,9 +255,12 @@ test('desktop first-run setup reports only safe project and verified Codex detai
 
   const setup = await client.request({ operation: 'setup.status' })
   assert.equal(setup.project.name, 'private-workspace')
+  assert.equal(setup.project.status, PROJECT_BINDING_STATES.CONFIRMED)
+  assert.equal(setup.project.source, 'explicit-env')
+  assert.equal(setup.project.repositoryVerified, true)
   assert.equal(JSON.stringify(setup).includes(projectDir), false)
   const checked = await client.request({ operation: 'setup.codex.check' })
-  assert.deepEqual(checked, { ready: true, authenticated: true, version: 'codex-cli 0.153.4', label: 'Codex' })
+  assert.deepEqual(checked, { ready: true, authenticated: true, version: 'codex-cli 0.153.4', label: 'Codex', profileId: 'local-codex', profileStatus: 'resolved', resolutionReason: 'unique-candidate' })
   assert.deepEqual(calls.map((call) => call.pathname), ['/api/agent/capabilities', '/api/agent/capabilities', '/api/agent/check'])
   assert.deepEqual(calls[2].body, { profileId: 'local-codex' })
 })
@@ -277,7 +448,7 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
   const calls = []
   const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-test-'))
   const projectDir = path.join(fixtureRoot, 'traceweb')
-  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  await makeTraceProject(projectDir, { projectId: 'traceweb-project' })
   t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
   let phase = 'empty'
   const baseHost = () => ({
@@ -305,17 +476,29 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
       if (url.pathname === '/api/product/commands') { phase = 'created'; return response({ revision: 1, host: baseHost() }) }
       if (url.pathname === '/api/product/codex/receive') { phase = 'received'; return response({ receipt: { deliveryId: 'delivery-1', contextHash: 'a'.repeat(64) }, context: { kind: 'trace.codex-context' } }) }
       if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', label: 'Codex', kind: 'codex' }] })
-      if (url.pathname === '/api/agent/runs') return response({ run: { runId: 'run-1', status: 'succeeded', profile: { label: 'Codex' }, result: { answer: '已核对条件。', uncertainties: ['仍需用户确认。'] } } }, 202)
+      if (url.pathname === '/api/agent/runs') return response({ run: { runId: 'run-1', status: 'succeeded', runtime: { threadId: 'thread-native-1' }, profile: { label: 'Codex' }, result: { answer: '已核对条件。', uncertainties: ['仍需用户确认。'] } } }, 202)
       if (url.pathname === '/api/product/codex/return') { phase = 'returned'; return response({ receipt: { status: 'returned_for_review' } }) }
       return response({ error: { message: 'not found' } }, 404)
     },
   })
 
   const environment = await client.request({ operation: 'work.environment' })
-  assert.deepEqual(environment, { connected: true, projectName: 'traceweb', agentLabel: 'Codex', locationLabel: '当前项目' })
+  assert.equal(environment.connected, true)
+  assert.equal(environment.projectName, 'traceweb')
+  assert.equal(environment.agentLabel, 'Codex')
+  assert.equal(environment.locationLabel, '已确认项目')
+  assert.equal(environment.projectBinding.status, PROJECT_BINDING_STATES.CONFIRMED)
+  assert.equal(environment.projectBinding.repositoryVerified, true)
   const returned = await client.request({ operation: 'work.run', workId: 'work-1', matterId: 'matter-1', title: '核对条件', text: '核对这次工作里的条件。', role: 'reference', source: 'none' })
   assert.equal(returned.status, 'returned_for_review')
   assert.equal(returned.result.fact, '已核对条件。')
+  assert.equal(returned.execution.trace_work_id, 'work-1')
+  assert.equal(returned.execution.adapter_execution_id, 'run-1')
+  assert.equal(returned.execution.host_session_id, 'trace-desktop:work-1')
+  assert.equal(returned.execution.codex_thread_id, 'thread-native-1')
+  assert.equal(returned.execution.synthetic_host_session, true)
+  assert.equal(returned.execution.native_codex_thread, true)
+  assert.notEqual(returned.execution.host_session_id, returned.execution.codex_thread_id)
   assert.equal(JSON.stringify(returned).includes(projectDir), false)
   assert.deepEqual(calls.map((call) => call.pathname), [
     '/api/product/workspace',
@@ -330,4 +513,53 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
   assert.equal(calls[1].body.operations[1].destination.project, 'traceweb')
   assert.equal(calls[2].body.projectDir, projectDir)
   assert.deepEqual(calls[6].body.result.artifacts, [])
+})
+
+test('desktop work execution cancels the adapter and refuses return when the project drifts', async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-drift-'))
+  const projectDir = path.join(fixtureRoot, 'traceweb')
+  await makeTraceProject(projectDir, { projectId: 'drift-project', instanceId: 'drift-instance-1' })
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+  const descriptorFile = path.join(projectDir, '.trace', 'project.json')
+  const calls = []
+  let phase = 'empty'
+  const host = () => ({
+    chain: { matters: [{ id: 'matter-1', originalText: '核对条件' }], sessions: { 'matter-1': { contextMode: 'resume', contextEpoch: 0 } } },
+    worksite: {
+      works: { 'work-1': { id: 'work-1', title: '核对', agent: 'Codex', project: 'traceweb', connected: true } },
+      sessions: { 'work-1': { codexDelivery: { deliveryId: 'delivery-1', contextHash: 'a'.repeat(64) } } },
+    },
+  })
+  let drifted = false
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4445', projectDir, wait: async () => {
+      if (!drifted) {
+        drifted = true
+        await writeFile(path.join(projectDir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
+        await writeFile(descriptorFile, JSON.stringify({
+          protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: 'drift-project',
+          instance_id: 'drift-instance-2', template_id: 'fixture', template_version: '0.1.0',
+          source_mode: 'local', source_scope: 'project', state_file: '.trace/state/trace.sqlite',
+          source_root: '.trace/source', created_at: '2026-09-17T00:00:00.000Z',
+        }))
+      }
+    }, now: () => 0,
+    fetchImpl: async (url, init) => {
+      const body = init.body ? JSON.parse(init.body) : undefined
+      calls.push({ pathname: url.pathname, body })
+      if (url.pathname === '/api/product/workspace') return response(phase === 'empty' ? { revision: 0, host: null } : { revision: 1, host: host() })
+      if (url.pathname === '/api/product/commands') { phase = 'created'; return response({ revision: 1, host: host() }) }
+      if (url.pathname === '/api/product/codex/receive') return response({ receipt: { deliveryId: 'delivery-1', contextHash: 'a'.repeat(64) }, context: {} })
+      if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', kind: 'codex' }] })
+      if (url.pathname === '/api/agent/runs') return response({ run: { runId: 'run-drift', status: 'queued' } }, 202)
+      if (url.pathname === '/api/agent/runs/run-drift/cancel') return response({ status: 'cancelled' })
+      throw new Error(`unexpected request ${url.pathname}`)
+    },
+  })
+  await assert.rejects(
+    client.request({ operation: 'work.run', workId: 'work-1', matterId: 'matter-1', title: '核对', text: '核对条件', role: 'reference', source: 'none' }),
+    /项目或仓库 worktree 已变化|漂移/,
+  )
+  assert.equal(calls.some(call => call.pathname === '/api/agent/runs/run-drift/cancel'), true)
+  assert.equal(calls.some(call => call.pathname === '/api/product/codex/return'), false)
 })

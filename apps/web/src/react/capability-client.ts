@@ -133,6 +133,15 @@ export type NativeWorkEnvironment = {
   projectName: string;
   agentLabel: string;
   locationLabel: string;
+  projectBinding?: {
+    status?: 'unbound' | 'candidate' | 'confirmed' | 'conflict-or-drift' | string;
+    source?: string;
+    sourceLabel?: string;
+    projectId?: string | null;
+    identityHint?: string | null;
+    repositoryVerified?: boolean;
+    diagnostic?: { code?: string; message?: string; action?: string } | null;
+  };
 };
 
 export async function nativeWorkEnvironment(): Promise<NativeWorkEnvironment | null> {
@@ -172,6 +181,20 @@ export async function selectDesktopProject(): Promise<any> {
   const bridge = nativeBridge();
   if (!bridge?.requestCapability) return null;
   return bridge.requestCapability({ operation: 'work.project.select' });
+}
+
+/** Confirm the currently observed project candidate before any Codex work. */
+export async function confirmDesktopProject(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return null;
+  return bridge.requestCapability({ operation: 'work.project.confirm' });
+}
+
+/** Persist an explicit Codex profile choice; array order is never a choice. */
+export async function selectCodexProfile(profileId: string): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
+  return bridge.requestCapability({ operation: 'setup.codex.profile.select', profileId });
 }
 
 export async function checkCodexConnection(): Promise<any> {

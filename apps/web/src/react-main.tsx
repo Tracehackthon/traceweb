@@ -8,7 +8,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
-import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
+import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, confirmDesktopProject, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, runDesktopRuntimeAction, searchPublic, selectCodexProfile, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
@@ -416,14 +416,22 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
       const agent = value?.agent || value;
       setAgentInfo(agent);
       const profiles = agent?.profiles || [];
-      const selected = capability.agent === 'codex-native'
-        ? profiles.find((profile: any) => profile.kind === 'codex')?.profileId
+      const candidates = capability.agent === 'codex-native'
+        ? profiles.filter((profile: any) => profile.kind === 'codex')
         : capability.agent === 'custom'
-          ? profiles.find((profile: any) => profile.kind === 'agent')?.profileId
-          : profiles.find((profile: any) => /harness/i.test(`${profile.profileId} ${profile.label}`))?.profileId;
-      const selectedProfile = selected || agent?.defaultProfileId || profiles[0]?.profileId || '';
+          ? profiles.filter((profile: any) => profile.kind === 'agent')
+          : profiles.filter((profile: any) => /harness/i.test(`${profile.profileId} ${profile.label}`));
+      const defaultProfile = profiles.find((profile: any) => profile.profileId === agent?.defaultProfileId && candidates.includes(profile));
+      // A list position is not a configuration.  If this surface has several
+      // matching executors, leave the select unresolved until the user picks
+      // one (the desktop bridge applies the same rule before execution).
+      const selectedProfile = capability.agent === 'codex-native'
+        ? agent?.codexProfile?.profile?.profileId || defaultProfile?.profileId || (candidates.length === 1 ? candidates[0]?.profileId : '')
+        : defaultProfile?.profileId || (candidates.length === 1 ? candidates[0]?.profileId : '');
       setProfileId(selectedProfile);
-      setAgentState(agent?.enabled ? `找到 ${profiles.length} 个可用 Agent，已按刚才的选择为你匹配。` : native ? '桌宠已连接，但还没有找到可用的 Agent。' : '这次交接已经保存。启动桌宠后，才能交给 Codex 或自定义 Agent。');
+      setAgentState(agent?.enabled
+        ? selectedProfile ? `找到 ${profiles.length} 个可用 Agent，已按刚才的选择为你匹配。` : `找到多个可用 ${capability.agent === 'codex-native' ? 'Codex' : 'Agent'}，请先明确选择一个执行器。`
+        : native ? '桌宠已连接，但还没有找到可用的 Agent。' : '这次交接已经保存。启动桌宠后，才能交给 Codex 或自定义 Agent。');
     }).catch((cause) => setAgentState(cause instanceof Error ? cause.message : '暂时无法连接这台设备上的 Agent。'));
   }, [capability.agent]);
 
@@ -478,13 +486,18 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   };
 
   const profiles = agentInfo?.profiles || [];
+  const profileOptions = capability.agent === 'codex-native'
+    ? profiles.filter((profile: any) => profile.kind === 'codex')
+    : capability.agent === 'custom'
+      ? profiles.filter((profile: any) => profile.kind === 'agent')
+      : profiles.filter((profile: any) => /harness/i.test(`${profile.profileId} ${profile.label}`));
   const metric = (item: SearchItem) => [item.vote_up_count == null ? '' : `${item.vote_up_count} 赞同`, item.comment_count == null ? '' : `${item.comment_count} 评论`, item.content_type || ''].filter(Boolean).join(' · ');
   const agentIntent = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[capability.agent] || '未选择';
   return <section className="web-capability-flow">
     <p>原话已经保存。搜索结果和 Agent 回答会先留在这里，只有你确认后才会进入这件事。</p>
     <div className="web-capability-grid">
       {requestedSource !== 'none' && <section><header><i>知</i><div><h3>公开来源</h3><small>知乎经验与全网资料</small></div></header><div className="web-capability-controls"><select aria-label="搜索范围" value={source} disabled={searchBusy} onChange={(event) => setSource(event.target.value as SearchSource)}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select><RecoveryButton disabled={searchBusy} onClick={() => void doSearch()}>{searchBusy ? '正在查找…' : '重新查找'}</RecoveryButton></div><p role="status">{searchState}</p>{items.map((item) => <article className="web-capability-source" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{metric(item) && <span>{metric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>接口未返回原文链接</small>}<RecoveryButton primary disabled={!item.url || kept.includes(item.id)} onClick={() => void keep(item)}>{!item.url ? '暂不能保留' : kept.includes(item.id) ? '已保留到这件事' : '保留到这件事'}</RecoveryButton></footer></article>)}</section>}
-      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>在本机继续</h3><small>Codex、Harness 或自定义 Agent</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>结果回来后</dt><dd>先由你确认</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '交给 Agent 继续'}</RecoveryButton>{agentBusy && <RecoveryButton disabled={!agentRunId} onClick={() => void cancelAgent()}>停止这次运行</RecoveryButton>}{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改建议' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}{agentResult.result.adoption === 'not_applied' && <footer><RecoveryButton primary onClick={() => void changeAdoption('accept')}>接受候选</RecoveryButton><RecoveryButton onClick={() => void changeAdoption('dismiss')}>忽略候选</RecoveryButton></footer>}{agentResult.result.adoption === 'applied' && <RecoveryButton onClick={() => void changeAdoption('undo')}>撤销这次采纳</RecoveryButton>}</article>}</section>}
+      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>在本机继续</h3><small>Codex、Harness 或自定义 Agent</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>结果回来后</dt><dd>先由你确认</dd></div></dl><p role="status">{agentState}</p>{profileOptions.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{!profileId && <option value="">请选择执行器</option>}{profileOptions.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || !profileId || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '交给 Agent 继续'}</RecoveryButton>{agentBusy && <RecoveryButton disabled={!agentRunId} onClick={() => void cancelAgent()}>停止这次运行</RecoveryButton>}{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改建议' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}{agentResult.result.adoption === 'not_applied' && <footer><RecoveryButton primary onClick={() => void changeAdoption('accept')}>接受候选</RecoveryButton><RecoveryButton onClick={() => void changeAdoption('dismiss')}>忽略候选</RecoveryButton></footer>}{agentResult.result.adoption === 'applied' && <RecoveryButton onClick={() => void changeAdoption('undo')}>撤销这次采纳</RecoveryButton>}</article>}</section>}
     </div>
     <footer><RecoveryButton onClick={() => runtime.closeDialog()}>完成，回到这件事</RecoveryButton></footer>
   </section>;
@@ -492,6 +505,13 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
 
 type RuntimePanelState = {
   connected?: boolean;
+  sessionKind?: string;
+  sessionId?: string;
+  projectBinding?: {
+    status?: string;
+    sourceLabel?: string;
+    identityHint?: string | null;
+  };
   sessions?: Array<{ sessionId?: string; status?: string; project?: string; updatedAt?: string }>;
   turnCount?: number;
   findings?: Array<{ kind?: string; status?: string; turn?: string; summary?: string }>;
@@ -542,7 +562,7 @@ function RuntimeOperationsPanel() {
     <header><div><span className="web-panel-eyebrow">TRACE RUNTIME · LOCAL WORKSITE</span><h3>本机能力与工作现场</h3></div><RecoveryButton disabled={busy} onClick={() => void load()}>刷新</RecoveryButton></header>
     <p className="web-runtime-operations-intro">这里是桌面端的真实接口入口：跟随 Codex 会话、查看异步工作状态、处理路由提案和恢复预览。危险操作都需要再次确认；界面只显示经过整理的状态。</p>
     <p className="web-runtime-operations-status" role="status">{message}</p>
-    <section className="web-runtime-operations-section"><header><h4>工作现场</h4><span>{firstSession?.status || '尚未附着'}</span></header><p>{firstSession?.project || '尚未选择项目'}{firstSession?.updatedAt ? ` · 最近活动 ${firstSession.updatedAt}` : ''}</p><div className="web-runtime-actions"><RecoveryButton disabled={busy} onClick={() => void action('session.attach')}>开始跟随</RecoveryButton><RecoveryButton disabled={busy || firstSession?.status !== 'attached'} onClick={() => void action('session.pause')}>暂停接收</RecoveryButton><RecoveryButton disabled={busy || !firstSession || firstSession.status === 'ended'} onClick={() => void action('session.detach', {}, '确认结束当前桌面会话的跟随？')}>结束跟随</RecoveryButton></div><small>{panel?.turnCount || 0} 个会话片段 · {panel?.findings?.length || 0} 条工作发现</small></section>
+    <section className="web-runtime-operations-section"><header><h4>工作现场</h4><span>{firstSession?.status || '尚未附着'}</span></header><p>{firstSession?.project || '尚未选择项目'}{firstSession?.updatedAt ? ` · 最近活动 ${firstSession.updatedAt}` : ''}</p><small>{panel?.sessionKind === 'synthetic-bridge' ? '当前是桌面桥接 synthetic session，不是 Codex Desktop 原生 thread；原生 thread 只以 Agent 回执提供。' : '当前会话身份等待 Runtime 回执。'}{panel?.projectBinding?.sourceLabel ? ` · 项目来源：${panel.projectBinding.sourceLabel}` : ''}</small><div className="web-runtime-actions"><RecoveryButton disabled={busy} onClick={() => void action('session.attach')}>开始跟随</RecoveryButton><RecoveryButton disabled={busy || firstSession?.status !== 'attached'} onClick={() => void action('session.pause')}>暂停接收</RecoveryButton><RecoveryButton disabled={busy || !firstSession || firstSession.status === 'ended'} onClick={() => void action('session.detach', {}, '确认结束当前桌面会话的跟随？')}>结束跟随</RecoveryButton></div><small>{panel?.turnCount || 0} 个会话片段 · {panel?.findings?.length || 0} 条工作发现</small></section>
     <section className="web-runtime-operations-section"><header><h4>异步理解</h4><span>{panel?.worker?.status || '未配置'}</span></header><p>队列 {panel?.worker?.queueDepth ?? 0} · 失败 {panel?.worker?.failedCount ?? 0} · {panel?.jobs?.length || 0} 条最近任务</p><RecoveryButton disabled={busy} onClick={() => void action('sensemaking.drain', { limit: 16 })}>处理已入队任务</RecoveryButton></section>
     <section className="web-runtime-operations-section"><header><h4>路由提案</h4><span>试用 ≠ 采用</span></header>{panel?.proposals?.length ? panel.proposals.slice(0, 4).map((proposal) => <article className="web-runtime-row" key={proposal.id}><div><strong>{proposal.target || '待判断'} · {proposal.scope || '未知范围'}</strong><small>{proposal.rationale || '等待更多证据'}</small></div><span>{proposal.status}</span><div className="web-runtime-actions"><RecoveryButton disabled={busy} onClick={() => void action('routing.decide', { proposalId: proposal.id, decision: 'trial', expectedRevision: proposal.revision || 0 })}>试用</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void action('routing.decide', { proposalId: proposal.id, decision: 'adopt', expectedRevision: proposal.revision || 0 }, '确认采用这条路由提案？它会进入 Trace 的后续能力来源。')}>采用</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void action('routing.decide', { proposalId: proposal.id, decision: 'reject', expectedRevision: proposal.revision || 0 })}>忽略</RecoveryButton></div></article>) : <p className="web-runtime-empty">还没有路由提案。</p>}</section>
     <section className="web-runtime-operations-section"><header><h4>仓库保护与恢复</h4><span>先预览，再决定</span></header><p>apply 只能使用刚返回的只读预检回执；没有已采用的 runtime-guard 提案时不会开放。</p><div className="web-runtime-actions"><RecoveryButton disabled={busy} onClick={async () => { const result = await action('repository.preflight', { ...(adoptedGuard?.id ? { proposalId: adoptedGuard.id } : {}), taskIntent: '为当前工作现场准备受控分支' }, '先做一次只读仓库预检？不会切换、重置、删除或推送。'); if (result?.preflightId) setPreflight(result); }}>只读预检{adoptedGuard ? '（绑定已采用提案）' : ''}</RecoveryButton><RecoveryButton primary disabled={busy || !preflight?.canApply} onClick={() => void action('repository.apply', { preflightId: preflight?.preflightId }, '确认按刚才的预检回执执行受控分支保护？这一步可能切换到新分支，不会 push、merge、delete 或 reset。')}>确认 apply</RecoveryButton>{panel?.recovery?.slice(0, 3).map((item) => <React.Fragment key={item.id}><RecoveryButton disabled={busy || !item.id} onClick={async () => { try { await runDesktopRuntimeAction('repository.recovery.preview', { journalId: item.id }); setPreviewedRecovery(item.id || null); setMessage('恢复预览已返回；没有执行任何 Git 变更。'); } catch (cause) { setMessage(cause instanceof Error ? cause.message : '恢复预览没有完成。'); } }}>{item.state === 'recovery_required' ? '预览恢复' : '查看记录'}</RecoveryButton>{previewedRecovery === item.id && <RecoveryButton primary disabled={busy} onClick={() => void action('repository.recovery.reconcile', { journalId: item.id }, '确认 reconcile 这条恢复记录？只有状态证据充分时才会写入回执，不会自动 reset。')}>确认 reconcile</RecoveryButton>}</React.Fragment>)}</div>{!panel?.recovery?.length && <p className="web-runtime-empty">当前没有待恢复记录。</p>}</section>
@@ -566,9 +586,28 @@ function CodexConnectionPanel() {
     setBusy(true);
     try {
       const project = await selectDesktopProject();
-      setSetup((current: any) => ({ ...current, project: project?.connected ? { connected: true, name: project.projectName } : current?.project }));
-      setMessage(project?.connected ? `已选择项目「${project.projectName}」。` : '没有更改项目。');
+      setSetup((current: any) => ({ ...current, project: project?.projectName ? { ...project, connected: project.status === 'confirmed', name: project.projectName } : current?.project }));
+      setMessage(project?.status === 'confirmed' ? `已确认项目「${project.projectName}」。` : project?.diagnostic?.message || '没有更改项目。');
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : '项目选择没有完成。'); }
+    finally { setBusy(false); }
+  };
+  const confirmProject = async () => {
+    setBusy(true); setMessage('正在核对项目描述与仓库身份…');
+    try {
+      const project = await confirmDesktopProject();
+      setSetup((current: any) => ({ ...current, project: project?.projectName ? { ...project, connected: project.status === 'confirmed', name: project.projectName } : current?.project }));
+      setMessage(project?.status === 'confirmed' ? `已确认项目「${project.projectName}」，现在可以交给 Codex。` : project?.diagnostic?.message || '项目仍未确认。');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : '项目确认没有完成。'); }
+    finally { setBusy(false); }
+  };
+  const chooseProfile = async (profileId: string) => {
+    if (!profileId) return;
+    setBusy(true); setMessage('正在保存 Codex profile 选择…');
+    try {
+      const selected = await selectCodexProfile(profileId);
+      setSetup((current: any) => ({ ...current, codex: { ...current?.codex, profileId: selected?.profileId || profileId, profileStatus: 'resolved', ready: false, authenticated: false } }));
+      setMessage(`已选择 Codex profile「${selected?.label || profileId}」。`);
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Codex profile 选择没有完成。'); }
     finally { setBusy(false); }
   };
   const check = async () => {
@@ -586,12 +625,15 @@ function CodexConnectionPanel() {
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Codex 插件连接没有完成。'); }
     finally { setBusy(false); }
   };
-  const ready = setup?.codex?.ready === true && setup?.project?.connected === true;
+  const ready = setup?.codex?.ready === true && setup?.project?.status === 'confirmed' && setup?.project?.connected === true;
+  const projectStatus = setup?.project?.status || 'unbound';
+  const projectStatusLabel = projectStatus === 'confirmed' ? '已确认' : projectStatus === 'candidate' ? '候选，待确认' : projectStatus === 'conflict-or-drift' ? '发生漂移' : '未绑定';
   return <section className="web-codex-setup" data-ready={ready ? 'true' : 'false'}>
     <header><h3>Codex 接入</h3><span>{ready ? '可以开始工作' : setup ? '需要一次检查' : '正在检查'}</span></header>
     <p role="status">{message}</p>
-    <dl><div><dt>桌宠连接</dt><dd>{setup?.runtime?.connected ? setup.runtime.bundled ? '已随桌面版连接' : '已连接' : '正在检查'}</dd></div><div><dt>当前项目</dt><dd>{setup?.project?.connected ? setup.project.name : '尚未选择'}</dd></div><div><dt>Codex</dt><dd>{setup?.codex?.ready ? '已登录，可以使用' : setup?.codex?.available ? '已找到，等待检查' : '尚未找到'}</dd></div><div><dt>结果回来后</dt><dd>先进入 Trace，由你确认</dd></div></dl>
-    <div className="web-codex-actions"><RecoveryButton disabled={busy} onClick={() => void chooseProject()}>{setup?.project?.connected ? '更换项目' : '选择项目'}</RecoveryButton><RecoveryButton primary disabled={busy || !setup?.codex?.available} onClick={() => void check()}>{busy ? '正在处理…' : '检查 Codex'}</RecoveryButton>{setup?.codex?.ready && <RecoveryButton disabled={busy} onClick={() => void connectPlugin()}>在 Codex 中使用 Trace</RecoveryButton>}</div>
+    <dl><div><dt>桌宠连接</dt><dd>{setup?.runtime?.connected ? setup.runtime.bundled ? '已随桌面版连接' : '已连接' : '正在检查'}</dd></div><div><dt>当前项目</dt><dd>{setup?.project?.name || '尚未选择'} · {projectStatusLabel}{setup?.project?.identityHint ? ` · 身份 ${setup.project.identityHint}` : ''}</dd></div><div><dt>候选来源</dt><dd>{setup?.project?.sourceLabel || setup?.project?.source || '启动目录候选'}</dd></div><div><dt>Codex</dt><dd>{setup?.codex?.ready ? '已登录，可以使用' : setup?.codex?.available ? setup?.codex?.profileStatus === 'unresolved' ? '多个 profile，等待明确选择' : '已找到，等待检查' : '尚未找到'}</dd></div><div><dt>结果回来后</dt><dd>先进入 Trace，由你确认</dd></div></dl>
+    {Array.isArray(setup?.codex?.candidates) && setup.codex.candidates.length > 1 && <label className="web-codex-profile-select">Codex profile<select aria-label="Codex profile" value={setup.codex.profileId || ''} disabled={busy} onChange={(event) => void chooseProfile(event.target.value)}><option value="">请选择执行器</option>{setup.codex.candidates.map((profile: any) => <option key={profile.profileId} value={profile.profileId}>{profile.label || profile.profileId}</option>)}</select></label>}
+    <div className="web-codex-actions"><RecoveryButton disabled={busy} onClick={() => void chooseProject()}>{setup?.project?.status === 'confirmed' ? '更换项目' : '选择项目'}</RecoveryButton>{projectStatus === 'candidate' && <RecoveryButton disabled={busy} onClick={() => void confirmProject()}>确认绑定</RecoveryButton>}<RecoveryButton primary disabled={busy || !setup?.codex?.available || setup?.codex?.profileStatus === 'unresolved'} onClick={() => void check()}>{busy ? '正在处理…' : '检查 Codex'}</RecoveryButton>{setup?.codex?.ready && <RecoveryButton disabled={busy} onClick={() => void connectPlugin()}>在 Codex 中使用 Trace</RecoveryButton>}</div>
     <small className="web-codex-note">“检查 Codex”用于从 Trace 把工作交给本机 Codex；“在 Codex 中使用 Trace”是可选入口，安装后请新开 Codex 任务。项目绝对路径只留在本机，不会显示在页面或发送给模型。</small>
   </section>;
 }

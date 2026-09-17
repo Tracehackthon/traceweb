@@ -58,6 +58,10 @@ function writeDesktopSettings(value) {
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
+function updateDesktopSettings(update) {
+  const current = readDesktopSettings()
+  writeDesktopSettings(typeof update === 'function' ? update(current) : { ...current, ...update })
+}
 async function runtimeReady() {
   if (!backendOrigin) return false
   try {
@@ -85,8 +89,16 @@ async function ensureBundledRuntime() {
   process.env.TRACE_AGENT_RUNTIME_ROOT = join(stateRoot, 'agent-runs')
   process.env.TRACE_AGENT_ENABLED ??= '1'
   process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN ??= randomBytes(32).toString('base64url')
-  const codexExecutable = resolveCodexExecutable()
-  if (codexExecutable) process.env.TRACE_CODEX_BIN = codexExecutable
+  try {
+    const codexExecutable = await resolveCodexExecutable({ verify: true })
+    if (codexExecutable) process.env.TRACE_CODEX_BIN = codexExecutable
+  } catch (error) {
+    // Keep the bundled Runtime available for setup diagnostics, but never let
+    // it silently fall back to an unverified `codex` from PATH.  The Agent
+    // check will fail closed until a compatible binary is installed.
+    if (!process.env.TRACE_CODEX_BIN) process.env.TRACE_CODEX_BIN = join(runtimeRoot, '.trace-no-compatible-codex')
+    console.error(`Trace Codex discovery did not find a compatible binary: ${error instanceof Error ? error.message : String(error)}`)
+  }
   bundledRuntime = await import(pathToFileURL(server).href)
   const binding = await bundledRuntime.ready
   if (dynamicBinding) {
@@ -292,10 +304,21 @@ if (!ownsInstance) {
       try { await ensureBundledRuntime() }
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
       const settings = readDesktopSettings()
+      const explicitProjectDir = typeof process.env.TRACE_PROJECT_DIR === 'string' && process.env.TRACE_PROJECT_DIR.trim() ? process.env.TRACE_PROJECT_DIR.trim() : undefined
+      const savedProjectDir = explicitProjectDir ? undefined : settings.projectDir
       capabilityClient = createRuntimeCapabilityClient({
         origin: backendOrigin || DEFAULT_RUNTIME_ORIGIN,
         cloudOrigin: traceCloudOrigin,
-        projectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir,
+        projectDir: explicitProjectDir,
+        savedProjectDir,
+        projectSource: explicitProjectDir ? 'explicit-env' : savedProjectDir ? 'saved-setting' : 'startup-cwd',
+        startupCwd: process.cwd(),
+        profileId: settings.codexProfileId,
+        workBindings: settings.workBindings,
+        executionBindings: settings.executionBindings,
+        onProfileSelected: (profileId) => updateDesktopSettings({ codexProfileId: profileId }),
+        onWorkBinding: (workId, binding) => updateDesktopSettings((current) => ({ ...current, workBindings: { ...(current.workBindings || {}), [workId]: binding } })),
+        onExecutionBinding: (workId, execution) => updateDesktopSettings((current) => ({ ...current, executionBindings: { ...(current.executionBindings || {}), [workId]: execution } })),
         desktopSnapshotToken: process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
       })
@@ -338,7 +361,7 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
     const result = await dialog.showOpenDialog(senderWindow, { title: '选择要与 Codex 一起工作的项目', properties: ['openDirectory'] })
     if (result.canceled || !result.filePaths[0]) return capabilityClient.request({ operation: 'work.environment' })
     const selected = capabilityClient.setProjectDir(result.filePaths[0])
-    writeDesktopSettings({ ...readDesktopSettings(), projectDir: result.filePaths[0] })
+    updateDesktopSettings({ projectDir: result.filePaths[0] })
     return selected
   }
   const result = await capabilityClient.request(request)

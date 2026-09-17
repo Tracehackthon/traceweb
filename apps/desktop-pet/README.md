@@ -13,7 +13,7 @@
 1. 先安装并登录 Codex CLI。
 2. 打开 Trace，点顶部的「Codex 设置」。
 3. 点「更换项目」选择要工作的项目文件夹；绝对路径只保存在本机，不会显示在页面里。
-4. 点「检查 Codex」。显示“已登录并通过检查”后，即可在工作页把内容交给 Codex，并让结果回到 Trace 复核。
+4. 先在设置中确认项目绑定，再点「检查 Codex」。显示“已登录并通过检查”后，才可在工作页把内容交给 Codex，并让结果回到 Trace 复核。
 5. 需要从 Codex 内主动读取 Trace 时，再点「在 Codex 中使用 Trace」安装可选插件；这不是 Trace → Codex 工作链路的前置条件。
 
 本机 Runtime 会把状态保存在应用数据目录。知乎公开搜索和个人账号授权连接 `https://trace.neutrom.store` 的同源服务，不会把 App Secret 打进安装包。点「授权连接知乎」后，Trace 会打开一个独立的知乎授权窗口；成功回到 Trace 后窗口自动关闭，Token 只保存在桌面应用的加密 HttpOnly Cookie 中。服务不可用时界面只显示清楚的用户提示，不暴露内部接口字段。
@@ -86,12 +86,18 @@ http://127.0.0.1:4173
 
 需要改本机端口时，在启动桌宠前设置 `TRACE_BACKEND_ORIGIN`。为避免把本机 Codex、用户内容或密钥暴露给远程页面，这个值只接受 `127.0.0.1`、`localhost` 或 `::1` 的 HTTP origin。
 
-桌宠会从启动位置向上寻找最近的 `.git`，自动识别当前项目。需要固定到另一个项目时可显式设置 `TRACE_PROJECT_DIR`。绝对路径只会通过本机 IPC 送给 Runtime，不会进入页面、工作卡片或返回给 Renderer。
+桌宠会从启动位置、已保存选择或 `TRACE_PROJECT_DIR` 生成**候选**，向上寻找最近的 `.trace/project.json`，并同时验证 Git 仓库与 Trace descriptor。候选不会自动成为执行绑定；必须在设置中明确选择并确认后，才允许执行、仓库 guard 或发布。需要固定到另一个项目时可显式设置 `TRACE_PROJECT_DIR`，它仍会经过同样的验证。绝对路径只会通过本机 IPC 送给 Runtime，不会进入页面、工作卡片或返回给 Renderer。
+
+项目状态会明确显示为 `unbound`（没有可验证候选）、`candidate`（已发现但等待确认）、`confirmed`（可执行）或 `conflict-or-drift`（descriptor、仓库或 worktree 身份发生变化，旧操作已停止）。项目名称只用于展示；稳定身份使用 descriptor `project_id`、规范路径和仓库 fingerprint。切换项目后请重新确认，旧项目的执行、guard 和发布不会继续。
+
+桌面桥接还会明确区分 `trace_work_id`（Trace 工作记录）、`adapter_execution_id`（Agent adapter run）、`host_session_id`（桌面桥接的 synthetic host session）和 `codex_thread_id`（Codex app-server 返回的原生线程）。兼容字段 `sessionId` 仍可能形如 `trace-desktop:<workId>`，但它始终标记为 synthetic/bridge，不冒充 Codex Desktop 原生 thread。
 
 连接后面板会分别显示：
 
 - 知乎搜索／全网搜索：调用 Trace 同源服务的 `/api/search/*`，返回公开摘要与原文链接；用户点击后才保留为当前会话观察，密钥不进入本机安装包。
 - Agent 执行器：读取 `/api/agent/capabilities` 的安全 profile 描述，不接收浏览器提交的 endpoint、model、cwd 或 secret。
+- Codex 可执行文件：`TRACE_CODEX_BIN` 显式优先；未设置时按稳定路径顺序逐个检查 `--version`、`app-server --help` 和已验证兼容版本，找不到兼容项就保持不可执行，不按文件修改时间猜测。
+- 多个 Codex profile：优先本次显式选择、已保存选择或 Runtime 声明的默认 profile；没有唯一候选或默认时保持 unresolved，不能按列表第一项执行。
 - Agent 运行：先通过 `/api/product/commands` 保存原话，再创建 `/api/agent/runs`；结果保持为未采纳候选，点击「保留为观察」才进入桌宠当前会话。
 - Trace Web 工作交接：页面只提交工作 ID、事项 ID、原话、任务和本次使用方式；Bridge 自动补齐当前项目位置，依次调用 `product/commands → product/codex/receive → agent/runs → product/codex/return`，最后只把事实、解释、待确认项和建议理解送回页面。
 
@@ -100,7 +106,7 @@ http://127.0.0.1:4173
 1. 从项目目录启动 `trace-runtime`，并启用一个 `kind: codex` 的 Agent profile。
 2. 在同一项目目录运行 `npm run desktop`。
 3. 在 Trace 首页写下原话，Agent 下拉选择「Codex 原生」，保存后进入「带去工作」。
-4. 页面会显示“当前项目已自动识别”，但不会显示项目绝对路径；填写任务后点击「交给 Codex」。
+4. 页面会显示当前项目候选及其来源、状态和短身份提示，但不会显示项目绝对路径；确认绑定后填写任务并点击「交给 Codex」。
 5. Codex 完成后，Trace 自动进入工作结果页。事实、解释和仍需确认内容先处于复核状态，不会自动改写“我的理解”。
 
 相同 `workId` 的重试会优先读取已返回结果；Bridge 不会因页面重开而重复创建另一份工作。

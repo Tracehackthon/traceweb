@@ -107,6 +107,10 @@ export class WebRuntime {
   private startPromise: Promise<void> | null = null;
   private routeRoot: HTMLElement | null = null;
   private nativeWorkReady = false;
+  // Safe, path-free project binding projection from the desktop bridge.  The
+  // handoff screen must not describe a cwd candidate as an automatically
+  // confirmed project.
+  private nativeProjectBinding: any = null;
   // Matters keeps a short-lived presentation state for the approved
   // overview → growth → reentry interaction. The canonical matter remains in
   // the bridge; leaving this route discards only the presentation state.
@@ -504,6 +508,7 @@ export class WebRuntime {
     if (value) {
       value.notice = (value.notice || '').replaceAll('本次会话', '本机').replaceAll('本地原型', '本地记录');
       value.nativeConnected = this.nativeWorkReady;
+      value.nativeProjectBinding = this.nativeProjectBinding;
     }
     return value;
   }
@@ -532,6 +537,7 @@ export class WebRuntime {
     const matterId = uid('matter');
     const environment = options.agent && options.agent !== 'none' ? await nativeWorkEnvironment().catch(() => null) : null;
     this.nativeWorkReady = environment?.connected === true;
+    this.nativeProjectBinding = environment?.projectBinding || null;
     const selectedAgent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as string : 'none';
     const agentLabel = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[selectedAgent] || 'Codex';
     const destination = { agent: environment?.connected ? environment.agentLabel : agentLabel, project: environment?.connected ? environment.projectName : '当前项目', task: `接续：${Array.from(text).slice(0, 26).join('')}` };
@@ -591,7 +597,7 @@ export class WebRuntime {
       const matterId = this.route.matterId;
       void this.commit((state) => (B.createWorkFromHandoff as any)(state, { matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }), (next) => {
         this.navigate(next.route);
-        if (hasNativeCapabilityBridge() && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
+        if (hasNativeCapabilityBridge() && this.nativeWorkReady && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
       }, [{ type: 'handoff.create', matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }]);
       return;
     }
@@ -615,6 +621,7 @@ export class WebRuntime {
     const current = B.selectChain(this.host, matterId);
     const environment = await nativeWorkEnvironment().catch(() => null);
     this.nativeWorkReady = environment?.connected === true;
+    this.nativeProjectBinding = environment?.projectBinding || null;
     const task = current.handoff?.destination?.task || `接续：${Array.from(current.matter?.originalText || current.matter?.title || '这件事').slice(0, 26).join('')}`;
     const agent = current.handoff?.destination?.agent || (environment?.connected ? environment.agentLabel : 'Codex');
     const project = environment?.connected ? environment.projectName : current.handoff?.destination?.project || '当前项目';
