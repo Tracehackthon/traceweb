@@ -6,6 +6,8 @@ Trace 的独立产品交付仓库：集中维护可由 Vercel 部署的 **Trace 
 
 **Windows 桌面版：只从 [GitHub Releases 最新版本](https://github.com/Tracehackthon/traceweb/releases/latest) 下载。** README 不固定旧版本号或旧安装包地址，避免拿到已经被替代的构建。
 
+当前桌面发布线为 **0.1.11**。发布构建会从 sibling `trace-runtime` 生成带 source identity 的 Runtime，默认拒绝 dirty/development checkout；安装包、解包目录和 Runtime manifest 均需通过可重放的 smoke 与 SHA-256 检查后，才允许上传到 Releases。具体命令见 [`apps/desktop-pet/README.md`](apps/desktop-pet/README.md)。
+
 - 产品交互介绍：<https://trace.neutrom.store/>
 - 六个动作的完整演示数据：<https://trace.neutrom.store/app/demo>
 - 个人浏览器空间：<https://trace.neutrom.store/app>

@@ -2,7 +2,7 @@
 
 同一套 Trace 体验有两个本机入口：DeepSeek Harness Web profile 插件，以及独立运行的原生桌面悬浮插件。原生 Electron 入口通过受限 IPC 连接本机 `trace-runtime`，把最新 Trace Web 中准备好的工作真正交给 Codex，并把结果带回 Trace 复核区。
 
-## Windows 首版安装包
+## Windows 桌面端 0.1.11
 
 始终从 [Trace Desktop 最新 Release](https://github.com/Tracehackthon/traceweb/releases/latest) 下载；不要保存或传播带固定旧版本号的安装包链接。
 
@@ -25,7 +25,24 @@ npm ci
 npm run dist:win
 ```
 
-产物位于 `release/Trace-Desktop-<version>-Setup.exe`。首版尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+产物位于 `release/Trace-Desktop-<version>-Setup.exe`。0.1.11 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+
+发布前必须从干净的 `trace-runtime` checkout 重新 stage；脚本会把 Runtime 的版本、commit/tree、内容摘要、API surface 和 Codex host compatibility 写入 `runtime-dist/desktop-runtime-source.json`，并校验 `runtime.json` 与 `release-manifest.json` 的逐文件 SHA-256。正式 staging 默认拒绝 dirty/development Runtime；本地调试若确实需要，可显式使用 `TRACE_DESKTOP_RUNTIME_MODE=development`，该产物会保持 `development-dirty`，不能作为 Release 上传。
+
+可重放检查（不构建、不上传）：
+
+```powershell
+# 检查已解包目录中的 Electron、桌面 UI 和 Runtime manifest
+npm run release:smoke -- --unpacked apps/desktop-pet/release/win-unpacked --expected-version 0.1.11
+
+# 输出安装包或目录的 SHA-256 清单；目录摘要按稳定路径顺序计算
+npm run release:checksum -- --artifact apps/desktop-pet/release/Trace-Desktop-0.1.11-Setup.exe
+
+# 工具自身的离线回归
+npm run test:release-tools
+```
+
+`release:smoke` 只把 `--allow-development` 作为明确的本地调试例外；默认拒绝非 `release-ready` identity。上传前还应保留命令输出与安装包 SHA-256，避免把旧版本或未验证的解包目录当成当前 Release。
 
 ## 本地构建
 
