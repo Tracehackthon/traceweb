@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient, resolveCodexExecutable } from './runtime-client.mjs'
+import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, RUNTIME_IDENTITY_PROTOCOL_VERSION, createRuntimeCapabilityClient, resolveCodexExecutable, validateRuntimeServiceIdentity } from './runtime-client.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -65,10 +65,13 @@ function updateDesktopSettings(update) {
 async function runtimeReady() {
   if (!backendOrigin) return false
   try {
-    const responses = await Promise.all(['/api/product/workspace', '/api/agent/capabilities'].map((pathname) => (
-      fetch(new URL(pathname, backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
-    )))
-    return responses.every((response) => response.ok && (response.headers.get('content-type') || '').includes('application/json'))
+    const response = await fetch(new URL('/api/runtime/identity', backendOrigin), {
+      redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(1200),
+      headers: { origin: backendOrigin, accept: 'application/json', 'x-trace-runtime-protocol': String(RUNTIME_IDENTITY_PROTOCOL_VERSION) },
+    })
+    if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) return false
+    validateRuntimeServiceIdentity(await response.json())
+    return true
   } catch { return false }
 }
 async function ensureBundledRuntime() {

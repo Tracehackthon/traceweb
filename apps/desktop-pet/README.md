@@ -78,15 +78,15 @@ npm run desktop
 
 ### 连接本机能力
 
-先按 `trace_backend` 的 Runtime 文档启动产品、知乎和 Agent 模块。桌宠默认连接：
+先按 `trace_backend` 的 Runtime 文档启动产品、知乎和 Agent 模块。开发模式默认连接：
 
 ```text
 http://127.0.0.1:4173
 ```
 
-需要改本机端口时，在启动桌宠前设置 `TRACE_BACKEND_ORIGIN`。为避免把本机 Codex、用户内容或密钥暴露给远程页面，这个值只接受 `127.0.0.1`、`localhost` 或 `::1` 的 HTTP origin。
+打包版启动内置 Runtime 时使用系统分配的空闲 loopback 端口；独立构造 Bridge 的保守回退端口是 `42731`。需要显式指定端口时，在启动桌宠前设置 `TRACE_BACKEND_ORIGIN`。为避免把本机 Codex、用户内容或密钥暴露给远程页面，这个值只接受 `127.0.0.1`、`localhost` 或 `::1` 的 HTTP origin。连接后必须先通过 `/api/runtime/identity` 核验 Trace Product 协议、数据库角色、installation 与 workspace 身份；端口被非 Trace 服务或另一工作区复用时会停止操作。
 
-桌宠会从启动位置、已保存选择或 `TRACE_PROJECT_DIR` 生成**候选**，向上寻找最近的 `.trace/project.json`，并同时验证 Git 仓库与 Trace descriptor。候选不会自动成为执行绑定；必须在设置中明确选择并确认后，才允许执行、仓库 guard 或发布。需要固定到另一个项目时可显式设置 `TRACE_PROJECT_DIR`，它仍会经过同样的验证。绝对路径只会通过本机 IPC 送给 Runtime，不会进入页面、工作卡片或返回给 Renderer。
+桌宠会从启动位置或已保存选择生成**候选**，向上寻找最近的 `.trace/project.json`，并同时验证 Git 仓库与 Trace descriptor。这些候选不会自动成为执行绑定；必须在设置中明确选择并确认后，才允许执行、仓库 guard 或发布。`TRACE_PROJECT_DIR` 是用户／管理员的显式绑定配置，可以在验证通过后直接成为 confirmed；验证失败仍保持不可执行。绝对路径只会通过本机 IPC 送给 Runtime，不会进入页面、工作卡片或返回给 Renderer。
 
 项目状态会明确显示为 `unbound`（没有可验证候选）、`candidate`（已发现但等待确认）、`confirmed`（可执行）或 `conflict-or-drift`（descriptor、仓库或 worktree 身份发生变化，旧操作已停止）。项目名称只用于展示；稳定身份使用 descriptor `project_id`、规范路径和仓库 fingerprint。切换项目后请重新确认，旧项目的执行、guard 和发布不会继续。
 

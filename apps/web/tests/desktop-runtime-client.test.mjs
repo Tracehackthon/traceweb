@@ -15,6 +15,7 @@ import {
   resolveAgentProfile,
   resolveCodexExecutable,
   resolveCodexProfile,
+  validateRuntimeServiceIdentity,
   validateRuntimeOrigin,
 } from '../../desktop-pet/src/desktop/runtime-client.mjs'
 import { REDIRECT_URI } from '../../../lib/zhihu-oauth.mjs'
@@ -23,6 +24,14 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json' },
 })
+
+const RUNTIME_IDENTITY = Object.freeze({
+  protocol: 'trace.runtime.identity@1', protocol_version: 1, product_id: 'trace',
+  service_id: 'trace-product-service', service_role: 'product', runtime_version: '0.7.1',
+  installation_id: 'installation-test', workspace_id: 'workspace-test',
+  identity_state: 'verified', database_role: 'product-web',
+})
+const identityFetch = async () => response(RUNTIME_IDENTITY)
 
 async function makeTraceProject(projectDir, { projectId = 'project-fixture', instanceId = `instance-${projectId}` } = {}) {
   await mkdir(path.join(projectDir, '.git'), { recursive: true })
@@ -43,6 +52,23 @@ test('desktop runtime client accepts only loopback HTTP origins', () => {
   assert.throws(() => validateRuntimeOrigin('https://trace.example.test'), /loopback HTTP origin/)
   assert.throws(() => validateRuntimeOrigin('http://user:pass@127.0.0.1:4173'), /loopback HTTP origin/)
   assert.throws(() => validateRuntimeOrigin('http://127.0.0.1:4173/api'), /loopback HTTP origin/)
+})
+
+test('desktop runtime handshake rejects wrong services and pins the workspace across port reuse', async () => {
+  assert.throws(() => validateRuntimeServiceIdentity({ ...RUNTIME_IDENTITY, service_id: 'unrelated-service' }), /不是 Trace Product/)
+  assert.throws(() => validateRuntimeServiceIdentity({ ...RUNTIME_IDENTITY, protocol_version: 2 }), /协议不兼容/)
+  let handshake = 0
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4999',
+    projectDir: process.cwd(),
+    identityFetchImpl: async () => response({ ...RUNTIME_IDENTITY, workspace_id: handshake++ === 0 ? 'workspace-test' : 'workspace-reused-port' }),
+    fetchImpl: async (url) => {
+      if (new URL(url).pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [] })
+      throw new Error('unexpected request')
+    },
+  })
+  await client.request({ operation: 'capabilities' })
+  await assert.rejects(() => client.request({ operation: 'setup.status' }), /另一个安装或工作区/)
 })
 
 test('desktop discovers the Codex App executable outside a stale Explorer PATH', async (t) => {
@@ -127,7 +153,7 @@ test('desktop project binding treats cwd and saved settings as candidates until 
   await mkdir(nested, { recursive: true })
   t.after(() => rm(root, { recursive: true, force: true }))
   assert.equal(inspectDesktopProject({ projectDir: nested, source: 'startup-cwd' }).status, PROJECT_BINDING_STATES.CANDIDATE)
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4441', savedProjectDir: repo, startupCwd: nested, projectSource: 'saved-setting',
     fetchImpl: async () => response({ revision: 0, host: null }),
   })
@@ -140,7 +166,7 @@ test('desktop project binding treats cwd and saved settings as candidates until 
   assert.equal(confirmed.status, PROJECT_BINDING_STATES.CONFIRMED)
   assert.equal((await client.request({ operation: 'work.environment' })).connected, true)
 
-  const stale = createRuntimeCapabilityClient({
+  const stale = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4442', savedProjectDir: path.join(root, 'deleted-project'), startupCwd: nested, projectSource: 'saved-setting',
     fetchImpl: async () => response({ revision: 0, host: null }),
   })
@@ -158,18 +184,37 @@ test('desktop project identity distinguishes repositories with the same basename
   await makeTraceProject(left, { projectId: 'left-project' })
   await makeTraceProject(right, { projectId: 'right-project' })
   t.after(() => rm(root, { recursive: true, force: true }))
-  const leftClient = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:4443', projectDir: left, fetchImpl: async () => response({ revision: 0, host: null }) })
-  const rightClient = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:4444', projectDir: right, fetchImpl: async () => response({ revision: 0, host: null }) })
+  const leftClient = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch, origin: 'http://127.0.0.1:4443', projectDir: left, fetchImpl: async () => response({ revision: 0, host: null }) })
+  const rightClient = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch, origin: 'http://127.0.0.1:4444', projectDir: right, fetchImpl: async () => response({ revision: 0, host: null }) })
   const leftBinding = await leftClient.request({ operation: 'work.environment' })
   const rightBinding = await rightClient.request({ operation: 'work.environment' })
   assert.equal(leftBinding.projectName, 'same-name')
   assert.equal(rightBinding.projectName, 'same-name')
   assert.notEqual(leftBinding.projectBinding.identityHint, rightBinding.projectBinding.identityHint)
   assert.notEqual(leftBinding.projectBinding.projectId, rightBinding.projectBinding.projectId)
-  const switchingClient = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:4447', projectDir: left, fetchImpl: async () => response({ revision: 0, host: null }) })
+  const switchingClient = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch, origin: 'http://127.0.0.1:4447', projectDir: left, fetchImpl: async () => response({ revision: 0, host: null }) })
   const switched = switchingClient.setProjectDir(right)
   assert.equal(switched.status, PROJECT_BINDING_STATES.CONFIRMED)
   assert.equal(switched.projectId, 'right-project')
+})
+
+test('desktop binding survives commits on the confirmed branch but stops on branch drift', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-branch-identity-'))
+  const projectDir = path.join(root, 'project')
+  await makeTraceProject(projectDir, { projectId: 'branch-project' })
+  await mkdir(path.join(projectDir, '.git', 'refs', 'heads'), { recursive: true })
+  await writeFile(path.join(projectDir, '.git', 'refs', 'heads', 'main'), `${'1'.repeat(40)}\n`)
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
+    origin: 'http://127.0.0.1:4448', projectDir, fetchImpl: async () => response({ revision: 0, host: null }),
+  })
+  assert.equal((await client.request({ operation: 'work.environment' })).connected, true)
+  await writeFile(path.join(projectDir, '.git', 'refs', 'heads', 'main'), `${'2'.repeat(40)}\n`)
+  assert.equal((await client.request({ operation: 'work.environment' })).connected, true, 'a commit on the same branch is state, not project identity drift')
+  await writeFile(path.join(projectDir, '.git', 'HEAD'), 'ref: refs/heads/release\n')
+  const drifted = await client.request({ operation: 'work.environment' })
+  assert.equal(drifted.connected, false)
+  assert.equal(drifted.projectBinding.status, PROJECT_BINDING_STATES.CONFLICT_OR_DRIFT)
 })
 
 test('desktop does not bind a legacy work by its display basename alone', async (t) => {
@@ -177,7 +222,7 @@ test('desktop does not bind a legacy work by its display basename alone', async 
   const projectDir = path.join(root, 'same-name')
   await makeTraceProject(projectDir, { projectId: 'legacy-project' })
   t.after(() => rm(root, { recursive: true, force: true }))
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4446', projectDir,
     fetchImpl: async (url) => url.pathname === '/api/product/workspace' ? response({ revision: 1, host: {
       chain: { matters: [{ id: 'matter-1', originalText: '原话' }], sessions: { 'matter-1': { contextMode: 'resume', contextEpoch: 0 } } },
@@ -206,7 +251,7 @@ test('desktop profile resolution never selects the first Codex profile silently'
 
 test('desktop runtime client discovers search and Agent independently', async () => {
   const calls = []
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4417',
     fetchImpl: async (url, init) => {
       calls.push({ url: String(url), init })
@@ -226,7 +271,7 @@ test('desktop runtime client discovers search and Agent independently', async ()
 })
 
 test('desktop runtime client never sends backend paths or protocol fields to the renderer in errors', async () => {
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4416',
     fetchImpl: async () => response({ error: { message: 'projectDir C:\\private\\repo failed with contextHash abc' } }, 500),
   })
@@ -242,7 +287,7 @@ test('desktop first-run setup reports only safe project and verified Codex detai
   await makeTraceProject(projectDir, { projectId: 'private-workspace-project' })
   t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
   const calls = []
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     projectDir,
     fetchImpl: async (url, init) => {
       const body = init.body ? JSON.parse(init.body) : undefined
@@ -266,7 +311,7 @@ test('desktop first-run setup reports only safe project and verified Codex detai
 })
 
 test('desktop first-run Zhihu status fails safely when the cloud route is unavailable', async () => {
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     fetchImpl: async () => new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } }),
   })
   await assert.rejects(client.request({ operation: 'zhihu.status' }), (error) => {
@@ -277,7 +322,7 @@ test('desktop first-run Zhihu status fails safely when the cloud route is unavai
 })
 
 test('desktop setup hides transport and non-JSON runtime errors from the product UI', async () => {
-  const networkFailure = createRuntimeCapabilityClient({
+  const networkFailure = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     fetchImpl: async () => { throw new TypeError('fetch failed: ECONNREFUSED 127.0.0.1:42731') },
   })
   await assert.rejects(networkFailure.request({ operation: 'setup.status' }), (error) => {
@@ -286,7 +331,7 @@ test('desktop setup hides transport and non-JSON runtime errors from the product
     return true
   })
 
-  const htmlFailure = createRuntimeCapabilityClient({
+  const htmlFailure = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     fetchImpl: async () => new Response('<h1>Not found</h1>', { status: 404, headers: { 'content-type': 'text/html' } }),
   })
   await assert.rejects(htmlFailure.request({ operation: 'setup.status' }), (error) => {
@@ -297,7 +342,7 @@ test('desktop setup hides transport and non-JSON runtime errors from the product
 })
 
 test('desktop Zhihu status hides redirect and transport implementation errors', async () => {
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     cloudFetchImpl: async () => { throw new TypeError("Attempted to redirect, but redirect policy was 'error'") },
   })
   await assert.rejects(client.request({ operation: 'zhihu.status' }), (error) => {
@@ -310,7 +355,7 @@ test('desktop Zhihu status hides redirect and transport implementation errors', 
 test('desktop runtime client executes the bounded product to Agent chain', async () => {
   const calls = []
   let id = 0
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4418',
     randomId: () => `id-${++id}`,
     wait: async () => {},
@@ -349,7 +394,7 @@ test('desktop runtime client executes the bounded product to Agent chain', async
 
 test('desktop workspace bridge proxies only bounded local storage routes with its private token', async () => {
   const calls = []
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4430',
     desktopSnapshotToken: 'private-desktop-token',
     fetchImpl: async (url, init) => {
@@ -375,7 +420,7 @@ test('desktop workspace bridge proxies only bounded local storage routes with it
 test('desktop pet reads and writes the same authoritative workspace as the product window', async () => {
   let revision = 0
   let host = null
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4431',
     randomId: (() => { let id = 0; return () => `shared-${++id}` })(),
     fetchImpl: async (url, init) => {
@@ -400,7 +445,7 @@ test('desktop pet reads and writes the same authoritative workspace as the produ
 
 test('desktop runtime client routes public searches by explicit source', async () => {
   const paths = []
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     fetchImpl: async (url, init) => {
       paths.push({ pathname: url.pathname, body: JSON.parse(init.body) })
       return response({ source: url.pathname.endsWith('global') ? 'global' : 'zhihu', items: [] })
@@ -416,7 +461,7 @@ test('desktop runtime client routes public searches by explicit source', async (
 
 test('desktop runtime client keeps Zhihu OAuth and user reads behind bounded native operations', async () => {
   const calls = []
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     fetchImpl: async (url, init) => {
       const body = init.body ? JSON.parse(init.body) : undefined
       calls.push({ pathname: url.pathname, method: init.method, body })
@@ -444,7 +489,7 @@ test('desktop runtime client keeps Zhihu OAuth and user reads behind bounded nat
   ])
 })
 
-test('desktop bridge auto-binds the current project and returns a Codex work result without exposing paths', async (t) => {
+test('desktop bridge uses an explicitly configured verified project and returns separated execution identities', async (t) => {
   const calls = []
   const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-test-'))
   const projectDir = path.join(fixtureRoot, 'traceweb')
@@ -464,7 +509,7 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
       } },
     },
   })
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4420',
     projectDir,
     wait: async () => {},
@@ -531,7 +576,7 @@ test('desktop work execution cancels the adapter and refuses return when the pro
     },
   })
   let drifted = false
-  const client = createRuntimeCapabilityClient({
+  const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     origin: 'http://127.0.0.1:4445', projectDir, wait: async () => {
       if (!drifted) {
         drifted = true

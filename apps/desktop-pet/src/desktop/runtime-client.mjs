@@ -7,6 +7,9 @@ import path from 'node:path'
 // host asks the OS for a free loopback port and passes that resolved origin
 // explicitly, so it does not depend on this fixed port.
 export const DEFAULT_RUNTIME_ORIGIN = 'http://127.0.0.1:42731'
+export const RUNTIME_IDENTITY_PROTOCOL = 'trace.runtime.identity@1'
+export const RUNTIME_IDENTITY_PROTOCOL_VERSION = 1
+export const TRACE_PRODUCT_SERVICE_ID = 'trace-product-service'
 // OAuth start, callback, status and user-data reads must use one cookie
 // origin. The registered Zhihu callback is on the public Trace domain, so
 // native cloud requests deliberately stay on that same origin instead of
@@ -32,6 +35,34 @@ export const PROJECT_BINDING_STATES = Object.freeze({
   CONFIRMED: 'confirmed',
   CONFLICT_OR_DRIFT: 'conflict-or-drift',
 })
+
+const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
+const SAFE_IDENTITY = /^[^\x00-\x1f\x7f]{1,256}$/
+
+/**
+ * Verify the service behind a discovery origin before any Product or Agent
+ * request. A loopback port is only a location hint; these opaque IDs are the
+ * durable installation/workspace boundary used to detect port reuse.
+ */
+export function validateRuntimeServiceIdentity(value, expected = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Trace 本机能力身份响应无效')
+  if (value.protocol !== RUNTIME_IDENTITY_PROTOCOL || value.protocol_version !== RUNTIME_IDENTITY_PROTOCOL_VERSION) throw new Error('Trace 本机能力协议不兼容')
+  if (value.product_id !== 'trace' || value.service_id !== TRACE_PRODUCT_SERVICE_ID || value.service_role !== 'product') throw new Error('该端口不是 Trace Product 服务')
+  if (value.database_role !== 'product-web' || value.identity_state !== 'verified') throw new Error('Trace Product 工作区身份尚未验证，请先完成本机数据升级')
+  if (typeof value.runtime_version !== 'string' || !SEMVER.test(value.runtime_version)) throw new Error('Trace Runtime 版本身份无效')
+  for (const field of ['installation_id', 'workspace_id']) {
+    if (typeof value[field] !== 'string' || !SAFE_IDENTITY.test(value[field]) || value[field].trim() !== value[field]) throw new Error(`Trace ${field} 身份无效`)
+    if (expected[field] !== undefined && value[field] !== expected[field]) throw new Error('Trace 本机端口已切换到另一个安装或工作区，已停止操作')
+  }
+  return {
+    protocol: value.protocol,
+    protocolVersion: value.protocol_version,
+    serviceId: value.service_id,
+    runtimeVersion: value.runtime_version,
+    installationId: value.installation_id,
+    workspaceId: value.workspace_id,
+  }
+}
 
 const PROJECT_SOURCE_LABELS = Object.freeze({
   'explicit-env': 'TRACE_PROJECT_DIR',
@@ -144,21 +175,11 @@ function gitIdentity(projectDir) {
     if (common) commonDir = path.resolve(gitDir, common)
   } catch { /* a normal repository has no commondir file */ }
   try { commonDir = fs.realpathSync.native(commonDir) } catch { commonDir = path.resolve(commonDir) }
-  let head = headContent
-  try {
-    head = headContent.slice(0, 4096)
-    const ref = head.match(/^ref:\s*(refs\/[A-Za-z0-9._/-]+)$/)?.[1]
-    if (ref) {
-      try { head = `${head}\n${fs.readFileSync(path.join(gitDir, ref), 'utf8').trim().slice(0, 200)}` } catch {
-        try {
-          const packed = fs.readFileSync(path.join(gitDir, 'packed-refs'), 'utf8').slice(0, 512 * 1024)
-          const line = packed.split(/\r?\n/).find(value => value.endsWith(` ${ref}`) && !value.startsWith('#') && !value.startsWith('^'))
-          if (line) head = `${head}\n${line.slice(0, 200)}`
-        } catch { /* an incomplete fixture is still identified by its gitdir */ }
-      }
-    }
-  } catch { /* an empty or partially-created .git is identified by its gitdir */ }
-  return { gitKind: stat.isFile() ? 'worktree' : 'repository', gitDir, commonDir, pointer, head, gitEntryIdentity, gitDirIdentity }
+  // Branch selection is part of a confirmed worktree binding, but its moving
+  // commit is not. Including the resolved ref SHA here would turn every normal
+  // commit on the same branch into an identity drift and force re-confirmation.
+  const branchRef = headContent.match(/^ref:\s*(refs\/[A-Za-z0-9._/-]+)$/)?.[1] || 'detached'
+  return { gitKind: stat.isFile() ? 'worktree' : 'repository', gitDir, commonDir, pointer, branchRef, gitEntryIdentity, gitDirIdentity }
 }
 
 function projectIdentity(projectDir, descriptorInfo, git) {
@@ -166,7 +187,7 @@ function projectIdentity(projectDir, descriptorInfo, git) {
     try { return fs.realpathSync.native(projectDir) } catch { return path.resolve(projectDir) }
   })()
   const pathKey = normalizePathKey(canonicalPath)
-  const repositoryFingerprint = sha256(JSON.stringify({ path: pathKey, gitDir: normalizePathKey(git.gitDir), commonDir: normalizePathKey(git.commonDir), pointer: git.pointer, head: git.head, gitEntryIdentity: git.gitEntryIdentity, gitDirIdentity: git.gitDirIdentity }))
+  const repositoryFingerprint = sha256(JSON.stringify({ path: pathKey, gitDir: normalizePathKey(git.gitDir), commonDir: normalizePathKey(git.commonDir), pointer: git.pointer, branchRef: git.branchRef, gitEntryIdentity: git.gitEntryIdentity, gitDirIdentity: git.gitDirIdentity }))
   const fingerprint = sha256(JSON.stringify({ path: pathKey, projectId: descriptorInfo.descriptor.project_id, instanceId: descriptorInfo.descriptor.instance_id, descriptorHash: descriptorInfo.descriptorHash, repositoryFingerprint }))
   return {
     projectId: descriptorInfo.descriptor.project_id,
@@ -617,6 +638,7 @@ export function createRuntimeCapabilityClient({
   onWorkBinding,
   onExecutionBinding,
   fetchImpl = globalThis.fetch,
+  identityFetchImpl = fetchImpl,
   cloudFetchImpl = fetchImpl,
   randomId = randomUUID,
   desktopSnapshotToken = process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
@@ -645,6 +667,8 @@ export function createRuntimeCapabilityClient({
   const recoveryPreviews = new Map()
   const publicationPreviews = new Map()
   let lastPanelRows = null
+  let pinnedRuntimeIdentity
+  let runtimeHandshakePromise
   const remember = (map, key, value) => {
     map.set(key, {...value, createdAt: now()})
     while (map.size > 16) map.delete(map.keys().next().value)
@@ -652,6 +676,38 @@ export function createRuntimeCapabilityClient({
   }
   const confirmationRequired = (request, message) => {
     if (request.confirmation !== 'user-confirmed') throw new Error(message)
+  }
+
+  async function ensureRuntimeIdentity() {
+    if (!runtimeHandshakePromise) {
+      const pending = (async () => {
+        const url = new URL('/api/runtime/identity', backendOrigin)
+        let response
+        try {
+          response = await identityFetchImpl(url, {
+            method: 'GET', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(5_000),
+            headers: { origin: backendOrigin, accept: 'application/json', 'x-trace-runtime-protocol': String(RUNTIME_IDENTITY_PROTOCOL_VERSION) },
+          })
+        } catch {
+          throw new Error('Trace 本机能力身份握手失败，请重新打开 Trace 后再试')
+        }
+        let text
+        try { text = await response.text() } catch { throw new Error('Trace 本机能力身份响应不可读') }
+        if (!response.ok || text.length > 64 * 1024) throw new Error('Trace 本机能力身份握手失败，请重新打开 Trace 后再试')
+        let value
+        try { value = JSON.parse(text) } catch { throw new Error('Trace 本机能力身份响应无效') }
+        const identity = validateRuntimeServiceIdentity(value, pinnedRuntimeIdentity ? {
+          installation_id: pinnedRuntimeIdentity.installationId,
+          workspace_id: pinnedRuntimeIdentity.workspaceId,
+        } : {})
+        pinnedRuntimeIdentity ||= identity
+        return identity
+      })()
+      let settled
+      settled = pending.finally(() => { if (runtimeHandshakePromise === settled) runtimeHandshakePromise = undefined })
+      runtimeHandshakePromise = settled
+    }
+    return runtimeHandshakePromise
   }
   function refreshProjectBinding() {
     const observed = inspectProjectCandidate(selectedProjectDir, selectedProjectSource)
@@ -812,6 +868,7 @@ export function createRuntimeCapabilityClient({
   }
 
   async function runtimeRequest(pathname, body, timeoutMs = 35_000, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
+    await ensureRuntimeIdentity()
     const url = new URL(pathname, backendOrigin)
     if (url.origin !== backendOrigin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Runtime path')
     let response

@@ -9,6 +9,13 @@ function json(value, status = 200, headers = {}) {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } })
 }
 
+const identityFetch = async () => json({
+  protocol: 'trace.runtime.identity@1', protocol_version: 1, product_id: 'trace',
+  service_id: 'trace-product-service', service_role: 'product', runtime_version: '0.7.1',
+  installation_id: 'installation-test', workspace_id: 'workspace-test',
+  identity_state: 'verified', database_role: 'product-web',
+})
+
 test('desktop bridge exposes a safe worksite projection and bounded controls', async () => {
   const calls = []
   const fetchImpl = async (url, options = {}) => {
@@ -50,7 +57,7 @@ test('desktop bridge exposes a safe worksite projection and bounded controls', a
     created_at: '2026-09-17T00:00:00.000Z',
   }))
   try {
-    const client = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:42731', cloudOrigin: 'https://trace.neutrom.store', projectDir, fetchImpl, cloudFetchImpl: fetchImpl })
+    const client = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:42731', cloudOrigin: 'https://trace.neutrom.store', projectDir, fetchImpl, identityFetchImpl: identityFetch, cloudFetchImpl: fetchImpl })
   const panel = await client.request({ operation: 'host.panel.read' })
   assert.equal(panel.connected, true)
   assert.equal(panel.sessions[0].project, '已绑定当前项目')
