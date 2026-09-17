@@ -43,7 +43,33 @@ export function routeForRecord(record) {
   return record.kind === 'work' ? {...record.route} : {...record.route,recordId:record.id};
 }
 export function homeEntries(host) {
-  return Object.fromEntries([...host.chain.matters].reverse().slice(0,4).map((m,i)=>[['thought','work','fresh','handoff'][i],{matterId:m.id,title:short(titleOf(m),40),subtitle:m.stop?`停在：${short(m.stop,35)}`:m.understanding?`我的理解 v${m.understandingVersion} · ${short(m.understanding,30)}`:'原话已保留 · 从这里接着'}]));
+  return Object.fromEntries([...host.chain.matters].reverse().slice(0,4).map((m,i)=>{
+    const sourceIds = [...new Set([...(m.sourceIds || []), ...(m.links || []).map(link => link.sourceId)])];
+    const sources = sourceIds.map(id => host.chain.sources.find(source => source.id === id)).filter(Boolean)
+      .map(source => ({ title: source.title || '一份材料', excerpt: source.excerpt || '', author: source.author || '', url: source.url || null }));
+    const results = [
+      ...(m.results || []),
+      ...Object.values(host.worksite.sessions || {}).flatMap(session => (session.results || []).filter(result => result.matterId === m.id)),
+    ].filter(result => result?.fact || result?.interpretation || result?.unconfirmed)
+      .map(result => ({ fact: result.fact || '', interpretation: result.interpretation || '', unconfirmed: result.unconfirmed || '' }));
+    const history = (m.revisions || []).map(revision => ({ before: revision.before || '', after: revision.after || '' }));
+    return [['thought','work','fresh','handoff'][i],{
+      matterId:m.id,
+      title:short(titleOf(m),40),
+      detailTitle:titleOf(m),
+      subtitle:m.stop?`停在：${short(m.stop,35)}`:m.understanding?`我的理解 v${m.understandingVersion} · ${short(m.understanding,30)}`:'原话已保留 · 从这里接着',
+      // The overview bubble stays concise; the adjacent reader gets the
+      // canonical fields below without exposing ids, versions or storage
+      // details to the interface.
+      originalText: m.originalText || m.whyCare || '',
+      whyCare: m.whyCare || '',
+      understanding: m.understanding || '',
+      stop: m.stop || '',
+      sources,
+      results,
+      history,
+    }];
+  }));
 }
 export function mattersView(host) {
   const matters = [...host.chain.matters].reverse().map(m => {

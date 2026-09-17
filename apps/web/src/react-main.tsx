@@ -8,7 +8,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
-import { agentCapabilities, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readZhihuUserContent, runNativeAgent, searchPublic, selectDesktopProject, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus } from './react/capability-client';
+import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
@@ -373,7 +373,7 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   const [reduceMotion, setReduceMotion] = useState(Boolean(snapshot.host?.preferences?.reduceMotion));
   useEffect(() => { setName(snapshot.host?.preferences?.displayName || ''); setReduceMotion(Boolean(snapshot.host?.preferences?.reduceMotion)); }, [dialog.type, snapshot.host]);
   if (dialog.type === 'message') return <><p>{dialog.message}</p><footer><RecoveryButton onClick={() => runtime.closeDialog()}>{dialog.confirm ? '取消' : '回到原处'}</RecoveryButton>{dialog.confirm && <RecoveryButton primary onClick={() => { const action = dialog.confirm?.action; runtime.closeDialog(); action?.(); }}>{dialog.confirm.label}</RecoveryButton>}</footer></>;
-  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示内容与个人空间完全分开，可以随时恢复。' : browserStorage ? '内容只保存在当前浏览器，不上传，也不会跨设备同步。清除浏览器数据前请先导出。' : '内容保存在这台设备的 Trace 中，目前没有云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : browserStorage ? '当前浏览器中的内容' : '这台设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '只保存在当前浏览器' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && hasNativeCapabilityBridge() && <CodexConnectionPanel/>}{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
+  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示内容与个人空间完全分开，可以随时恢复。' : browserStorage ? '内容只保存在当前浏览器，不上传，也不会跨设备同步。清除浏览器数据前请先导出。' : '内容保存在这台设备的 Trace 中，目前没有云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : browserStorage ? '当前浏览器中的内容' : '这台设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '只保存在当前浏览器' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && hasNativeCapabilityBridge() && <><CodexConnectionPanel/><RuntimeOperationsPanel/></>}{!completeDemoMode && <ZhihuAuthorization/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
   if (dialog.type === 'capability' && dialog.capability) return <CapabilityDialog capability={dialog.capability} />;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);
@@ -396,6 +396,7 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const [agentState, setAgentState] = useState(capability.agent === 'none' ? '这次没有选择 Agent。' : '正在检查这台设备上的 Agent…');
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentResult, setAgentResult] = useState<any>(null);
+  const [agentRunId, setAgentRunId] = useState('');
   const [profileId, setProfileId] = useState('');
   const native = hasNativeCapabilityBridge();
 
@@ -433,10 +434,47 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const runAgent = async () => {
     setAgentBusy(true); setAgentResult(null); setAgentState('正在交给 Agent 处理…');
     try {
-      const result = await runNativeAgent({ text: capability.query, source: requestedSource, ...(profileId ? { profileId } : {}) });
-      setAgentResult(result); setAgentState(result.status === 'succeeded' ? 'Agent 已返回回答，确认前不会写入“我的理解”。' : result.error?.message || 'Agent 没有完成这次处理，可以稍后重试。');
+      const created = await startNativeAgent({ text: capability.query, source: requestedSource, ...(profileId ? { profileId } : {}) });
+      const runId = String(created?.runId || '');
+      if (!runId) throw new Error('Agent 没有返回本次运行身份。');
+      setAgentRunId(runId); setAgentState('Agent 已接收，正在实时更新状态…');
+      let current = created;
+      const terminal = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted']);
+      let cursor = 0;
+      while (!terminal.has(current?.status)) {
+        try {
+          const page = await readNativeAgentEvents(runId, cursor);
+          const events = Array.isArray(page?.events) ? page.events : [];
+          const last = events.at(-1);
+          if (last?.id && /^\d+$/.test(String(last.id))) cursor = Number(last.id);
+          if (last?.data?.status && !terminal.has(last.data.status)) setAgentState(last.data.status === 'running' ? 'Agent 正在处理…' : 'Agent 已进入队列…');
+        } catch {
+          // A disconnected event stream must not lose the run. Fall back to a
+          // bounded status read; the local Agent keeps the authoritative run.
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+        current = await readNativeAgentRun(runId);
+        if (current?.status && !terminal.has(current.status)) setAgentState(current.status === 'running' ? 'Agent 正在处理…' : 'Agent 已进入队列…');
+      }
+      setAgentResult(current); setAgentState(current.status === 'succeeded' ? 'Agent 已返回回答，确认前不会写入“我的理解”。' : current.error?.message || 'Agent 没有完成这次处理，可以稍后重试。');
     } catch (cause) { setAgentState(cause instanceof Error ? cause.message : 'Agent 运行没有完成。'); }
     finally { setAgentBusy(false); }
+  };
+
+  const cancelAgent = async () => {
+    if (!agentRunId) return;
+    setAgentState('正在请求停止这次运行…');
+    try { const value = await cancelNativeAgent(agentRunId); setAgentResult(value); setAgentState('这次运行已停止，原话与已有内容没有改变。'); }
+    catch (cause) { setAgentState(cause instanceof Error ? cause.message : '停止请求没有完成。'); }
+    finally { setAgentBusy(false); }
+  };
+
+  const changeAdoption = async (action: 'accept' | 'dismiss' | 'undo') => {
+    if (!agentRunId) return;
+    try {
+      const value = await adoptNativeAgent(agentRunId, action, runtime.getSnapshot().revision);
+      setAgentResult(value?.run || value); setAgentState(action === 'accept' ? '候选已应用到草稿，仍需你确认。' : action === 'undo' ? '这次采纳已撤销。' : '候选已忽略，原理解没有变化。');
+    } catch (cause) { setAgentState(cause instanceof Error ? cause.message : '结果处理没有完成。'); }
   };
 
   const profiles = agentInfo?.profiles || [];
@@ -446,9 +484,69 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
     <p>原话已经保存。搜索结果和 Agent 回答会先留在这里，只有你确认后才会进入这件事。</p>
     <div className="web-capability-grid">
       {requestedSource !== 'none' && <section><header><i>知</i><div><h3>公开来源</h3><small>知乎经验与全网资料</small></div></header><div className="web-capability-controls"><select aria-label="搜索范围" value={source} disabled={searchBusy} onChange={(event) => setSource(event.target.value as SearchSource)}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select><RecoveryButton disabled={searchBusy} onClick={() => void doSearch()}>{searchBusy ? '正在查找…' : '重新查找'}</RecoveryButton></div><p role="status">{searchState}</p>{items.map((item) => <article className="web-capability-source" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{metric(item) && <span>{metric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>接口未返回原文链接</small>}<RecoveryButton primary disabled={!item.url || kept.includes(item.id)} onClick={() => void keep(item)}>{!item.url ? '暂不能保留' : kept.includes(item.id) ? '已保留到这件事' : '保留到这件事'}</RecoveryButton></footer></article>)}</section>}
-      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>在本机继续</h3><small>Codex、Harness 或自定义 Agent</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>结果回来后</dt><dd>先由你确认</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '交给 Agent 继续'}</RecoveryButton>{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改建议' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}</article>}</section>}
+      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>在本机继续</h3><small>Codex、Harness 或自定义 Agent</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>结果回来后</dt><dd>先由你确认</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '交给 Agent 继续'}</RecoveryButton>{agentBusy && <RecoveryButton disabled={!agentRunId} onClick={() => void cancelAgent()}>停止这次运行</RecoveryButton>}{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改建议' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}{agentResult.result.adoption === 'not_applied' && <footer><RecoveryButton primary onClick={() => void changeAdoption('accept')}>接受候选</RecoveryButton><RecoveryButton onClick={() => void changeAdoption('dismiss')}>忽略候选</RecoveryButton></footer>}{agentResult.result.adoption === 'applied' && <RecoveryButton onClick={() => void changeAdoption('undo')}>撤销这次采纳</RecoveryButton>}</article>}</section>}
     </div>
     <footer><RecoveryButton onClick={() => runtime.closeDialog()}>完成，回到这件事</RecoveryButton></footer>
+  </section>;
+}
+
+type RuntimePanelState = {
+  connected?: boolean;
+  sessions?: Array<{ sessionId?: string; status?: string; project?: string; updatedAt?: string }>;
+  turnCount?: number;
+  findings?: Array<{ kind?: string; status?: string; turn?: string; summary?: string }>;
+  jobs?: Array<{ status?: string; execution_mode?: string; error_code?: string }>;
+  proposals?: Array<{ id?: string; status?: string; target?: string; scope?: string; rationale?: string; revision?: number }>;
+  activations?: Array<{ id?: string; status?: string; count?: number; createdAt?: string }>;
+  worker?: { status?: string; mode?: string; queueDepth?: number; failedCount?: number };
+  recovery?: Array<{ state?: string; id?: string; expectedBranch?: string }>;
+  policies?: Array<{ status?: string; scope?: string; id?: string; revision?: number }>;
+  orchestrations?: Array<{ status?: string; id?: string; revision?: number; hasCandidate?: boolean; hasManifest?: boolean; producerStatus?: string }>;
+  trials?: Array<{ status?: string; id?: string; orchestrationId?: string; revision?: number; outcome?: string }>;
+};
+
+function RuntimeOperationsPanel() {
+  const [panel, setPanel] = useState<RuntimePanelState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('正在读取工作现场…');
+  const [previewedRecovery, setPreviewedRecovery] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<{ preflightId?: string; canApply?: boolean } | null>(null);
+  const [policyPreview, setPolicyPreview] = useState<{ previewId?: string; scope?: string } | null>(null);
+  const [trialScenario, setTrialScenario] = useState('验证这条能力在当前项目中的边界');
+  const [publicationReceipt, setPublicationReceipt] = useState('');
+  const [rollbackReceipt, setRollbackReceipt] = useState('');
+  const load = async () => {
+    setBusy(true);
+    try {
+      const value = await readDesktopRuntimePanel();
+      setPanel(value || null);
+      setMessage(value?.connected ? '工作现场已连接。原始正文与本机路径不会显示在这里。' : '桌面 Runtime 尚未连接。');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : '工作现场暂时不可用。'); }
+    finally { setBusy(false); }
+  };
+  useEffect(() => { void load(); }, []);
+  const action = async (name: string, payload: Record<string, unknown> = {}, confirmText = '') => {
+    if (busy) return;
+    if (confirmText && !window.confirm(confirmText)) return;
+    setBusy(true); setMessage('正在更新工作现场…');
+    try { const result = await runDesktopRuntimeAction(name, { ...payload, ...(confirmText ? { confirmation: 'user-confirmed' } : {}) }); setMessage('已收到 Runtime 回执，正在刷新现场…'); await load(); return result; }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : '这一步没有完成，原有记录没有被覆盖。'); }
+    finally { setBusy(false); }
+  };
+  const firstSession = panel?.sessions?.[0];
+  const candidate = panel?.orchestrations?.[0];
+  const trial = candidate ? panel?.trials?.find((item) => item.orchestrationId === candidate.id && ['queued', 'running'].includes(item.status || '')) : panel?.trials?.[0];
+  const adoptedGuard = panel?.proposals?.find((item) => item.status === 'adopted' && item.target === 'runtime-guard');
+  const activePolicy = panel?.policies?.find((item) => item.status === 'active');
+  return <section className="web-runtime-operations" aria-label="本机能力与工作现场">
+    <header><div><span className="web-panel-eyebrow">TRACE RUNTIME · LOCAL WORKSITE</span><h3>本机能力与工作现场</h3></div><RecoveryButton disabled={busy} onClick={() => void load()}>刷新</RecoveryButton></header>
+    <p className="web-runtime-operations-intro">这里是桌面端的真实接口入口：跟随 Codex 会话、查看异步工作状态、处理路由提案和恢复预览。危险操作都需要再次确认；界面只显示经过整理的状态。</p>
+    <p className="web-runtime-operations-status" role="status">{message}</p>
+    <section className="web-runtime-operations-section"><header><h4>工作现场</h4><span>{firstSession?.status || '尚未附着'}</span></header><p>{firstSession?.project || '尚未选择项目'}{firstSession?.updatedAt ? ` · 最近活动 ${firstSession.updatedAt}` : ''}</p><div className="web-runtime-actions"><RecoveryButton disabled={busy} onClick={() => void action('session.attach')}>开始跟随</RecoveryButton><RecoveryButton disabled={busy || firstSession?.status !== 'attached'} onClick={() => void action('session.pause')}>暂停接收</RecoveryButton><RecoveryButton disabled={busy || !firstSession || firstSession.status === 'ended'} onClick={() => void action('session.detach', {}, '确认结束当前桌面会话的跟随？')}>结束跟随</RecoveryButton></div><small>{panel?.turnCount || 0} 个会话片段 · {panel?.findings?.length || 0} 条工作发现</small></section>
+    <section className="web-runtime-operations-section"><header><h4>异步理解</h4><span>{panel?.worker?.status || '未配置'}</span></header><p>队列 {panel?.worker?.queueDepth ?? 0} · 失败 {panel?.worker?.failedCount ?? 0} · {panel?.jobs?.length || 0} 条最近任务</p><RecoveryButton disabled={busy} onClick={() => void action('sensemaking.drain', { limit: 16 })}>处理已入队任务</RecoveryButton></section>
+    <section className="web-runtime-operations-section"><header><h4>路由提案</h4><span>试用 ≠ 采用</span></header>{panel?.proposals?.length ? panel.proposals.slice(0, 4).map((proposal) => <article className="web-runtime-row" key={proposal.id}><div><strong>{proposal.target || '待判断'} · {proposal.scope || '未知范围'}</strong><small>{proposal.rationale || '等待更多证据'}</small></div><span>{proposal.status}</span><div className="web-runtime-actions"><RecoveryButton disabled={busy} onClick={() => void action('routing.decide', { proposalId: proposal.id, decision: 'trial', expectedRevision: proposal.revision || 0 })}>试用</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void action('routing.decide', { proposalId: proposal.id, decision: 'adopt', expectedRevision: proposal.revision || 0 }, '确认采用这条路由提案？它会进入 Trace 的后续能力来源。')}>采用</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void action('routing.decide', { proposalId: proposal.id, decision: 'reject', expectedRevision: proposal.revision || 0 })}>忽略</RecoveryButton></div></article>) : <p className="web-runtime-empty">还没有路由提案。</p>}</section>
+    <section className="web-runtime-operations-section"><header><h4>仓库保护与恢复</h4><span>先预览，再决定</span></header><p>apply 只能使用刚返回的只读预检回执；没有已采用的 runtime-guard 提案时不会开放。</p><div className="web-runtime-actions"><RecoveryButton disabled={busy} onClick={async () => { const result = await action('repository.preflight', { ...(adoptedGuard?.id ? { proposalId: adoptedGuard.id } : {}), taskIntent: '为当前工作现场准备受控分支' }, '先做一次只读仓库预检？不会切换、重置、删除或推送。'); if (result?.preflightId) setPreflight(result); }}>只读预检{adoptedGuard ? '（绑定已采用提案）' : ''}</RecoveryButton><RecoveryButton primary disabled={busy || !preflight?.canApply} onClick={() => void action('repository.apply', { preflightId: preflight?.preflightId }, '确认按刚才的预检回执执行受控分支保护？这一步可能切换到新分支，不会 push、merge、delete 或 reset。')}>确认 apply</RecoveryButton>{panel?.recovery?.slice(0, 3).map((item) => <React.Fragment key={item.id}><RecoveryButton disabled={busy || !item.id} onClick={async () => { try { await runDesktopRuntimeAction('repository.recovery.preview', { journalId: item.id }); setPreviewedRecovery(item.id || null); setMessage('恢复预览已返回；没有执行任何 Git 变更。'); } catch (cause) { setMessage(cause instanceof Error ? cause.message : '恢复预览没有完成。'); } }}>{item.state === 'recovery_required' ? '预览恢复' : '查看记录'}</RecoveryButton>{previewedRecovery === item.id && <RecoveryButton primary disabled={busy} onClick={() => void action('repository.recovery.reconcile', { journalId: item.id }, '确认 reconcile 这条恢复记录？只有状态证据充分时才会写入回执，不会自动 reset。')}>确认 reconcile</RecoveryButton>}</React.Fragment>)}</div>{!panel?.recovery?.length && <p className="web-runtime-empty">当前没有待恢复记录。</p>}</section>
+    <section className="web-runtime-operations-section"><header><h4>能力治理</h4><span>发布前必须有证据</span></header><div className="web-runtime-compact-grid"><div><b>发布策略</b><small>{panel?.policies?.length || 0} 条现有策略 · {activePolicy ? '已有 active 策略' : '尚无 active 策略'}</small><RecoveryButton disabled={busy} onClick={async () => { const result = await action('publication.policy.preview', { scope: 'project' }, '先预览当前项目的发布策略？不会发布文件。'); if (result?.previewId) setPolicyPreview(result); }}>预览策略</RecoveryButton><RecoveryButton primary disabled={busy || !policyPreview?.previewId} onClick={() => void action('publication.policy.adopt', { previewId: policyPreview?.previewId }, '确认采用刚才的发布策略预览？它只允许明确的能力发布，不会自动发布文件。')}>采用预览</RecoveryButton><RecoveryButton disabled={busy || !activePolicy?.id} onClick={() => void action('publication.policy.revoke', { policyId: activePolicy?.id, expectedRevision: activePolicy?.revision }, '确认撤回当前 active 发布策略？撤回后相关发布会被阻止。')}>撤回 active 策略</RecoveryButton></div><div><b>能力候选</b><small>{panel?.orchestrations?.length || 0} 条编排记录 · {candidate?.status || '未选择'}</small><RecoveryButton disabled={busy || !candidate?.id || !candidate.hasManifest} onClick={() => void action('capability.stage', { orchestrationId: candidate?.id, expectedRevision: candidate?.revision || 0 }, '确认把已由 producer 暂存的候选登记为 staged？这不是发布。')}>暂存候选</RecoveryButton><RecoveryButton disabled={busy || !candidate?.id || !['staged', 'trial_queued'].includes(candidate.status || '')} onClick={() => void action('capability.validate', { orchestrationId: candidate?.id, expectedRevision: candidate?.revision || 0, validation: { schema: 'passed', replay: 'passed', behavior: 'passed', rollback: 'passed', source_hashes: 'passed' } }, '确认你已经核对结构、回放、行为、回滚和来源哈希证据，并标记为通过？')}>标记验证通过</RecoveryButton></div><div><b>能力试用</b><small>{panel?.trials?.length || 0} 条试用 · 需要已暂存清单</small><input className="web-runtime-inline-input" value={trialScenario} maxLength={160} onChange={(event) => setTrialScenario(event.target.value)} aria-label="试用场景" placeholder="简短试用场景"/><RecoveryButton disabled={busy || !candidate?.id || !candidate.hasManifest} onClick={() => void action('capability.trial.create', { orchestrationId: candidate?.id, expectedRevision: candidate?.revision || 0, scenario: trialScenario })}>创建试用</RecoveryButton><RecoveryButton disabled={busy || !trial?.id} onClick={() => void action('capability.trial.complete', { trialId: trial?.id, expectedRevision: trial?.revision || 0, outcome: 'inconclusive', observed: '已从 Trace 工作现场完成一次显式试用，等待进一步证据。' })}>记录未决</RecoveryButton></div><div><b>发布与回滚</b><small>{candidate?.status === 'validated' ? '已通过验证，等待 publisher 回执' : candidate?.status === 'published' ? '已发布，可回滚' : '验证通过后开放'}</small><input className="web-runtime-inline-input" value={publicationReceipt} maxLength={160} onChange={(event) => setPublicationReceipt(event.target.value)} aria-label="发布回执" placeholder="CapabilityPublisher 发布回执 ID"/><input className="web-runtime-inline-input" value={rollbackReceipt} maxLength={160} onChange={(event) => setRollbackReceipt(event.target.value)} aria-label="回滚回执" placeholder="CapabilityPublisher 回滚回执"/><RecoveryButton primary disabled={busy || candidate?.status !== 'validated' || !publicationReceipt.trim() || !rollbackReceipt.trim()} onClick={() => void action('capability.publish', { orchestrationId: candidate?.id, expectedRevision: candidate?.revision || 0, producerStatus: 'published', publicationReceipt: { receipt_id: publicationReceipt.trim(), source: 'CapabilityPublisher' }, rollbackReceipt: rollbackReceipt.trim(), ...(activePolicy?.id ? { policyId: activePolicy.id } : {}) }, '确认按外部 CapabilityPublisher 回执发布这条能力？Trace 不会代替 publisher 写入能力文件。')}>发布能力</RecoveryButton><RecoveryButton disabled={busy || candidate?.status !== 'published' || !rollbackReceipt.trim()} onClick={() => void action('capability.rollback', { orchestrationId: candidate?.id, expectedRevision: candidate?.revision || 0, rollbackReceipt: rollbackReceipt.trim() }, '确认回滚这条已发布能力？这会写入回滚回执。')}>回滚能力</RecoveryButton></div></div><small>没有候选、暂存清单、验证回执或外部 publisher 回执时，后续动作会保持禁用；界面不展示路径、哈希或原始系统 JSON。</small></section>
   </section>;
 }
 
@@ -502,7 +600,8 @@ function ZhihuAuthorization() {
   const [status, setStatus] = useState<ZhihuAuthorizationStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [resource, setResource] = useState('');
+  const [resource, setResource] = useState<ZhihuUserContentKind | ''>('');
+  const [favoriteId, setFavoriteId] = useState('');
   const [items, setItems] = useState<Array<{ id?: string | null; title?: string; summary?: string; url?: string | null }>>([]);
   const load = async () => {
     try {
@@ -535,10 +634,10 @@ function ZhihuAuthorization() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : '未能断开知乎授权。'); }
     finally { setBusy(false); }
   };
-  const read = async (kind: 'contents' | 'favorites' | 'followees') => {
+  const read = async (kind: ZhihuUserContentKind, selectedFavoriteId?: string) => {
     setBusy(true); setError('');
     try {
-      const value = await readZhihuUserContent(kind, 3);
+      const value = await readZhihuUserContent(kind, 3, selectedFavoriteId);
       setResource(kind); setItems(value.items || []);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '没有读到知乎资料。'); }
     finally { setBusy(false); }
@@ -546,7 +645,7 @@ function ZhihuAuthorization() {
   const authorized = status?.oauth?.status === 'authorized';
   const stateLabel = authorized ? '已连接' : status === null && !error ? '正在检查' : status?.oauth?.configured ? '未连接' : '暂不可用';
   const userContentUnavailable = status?.user_content_configured === false;
-  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>我的知乎内容</h3><span>{stateLabel}</span></div><p>{authorized ? '你可以选择读取近期创作、关注和收藏；Trace 不会自动导入。' : status?.oauth?.configured ? '连接后，你可以按需读取创作、关注和收藏。公开搜索不需要登录知乎。' : status === null && !error ? '正在检查是否可以连接知乎…' : '当前版本暂时不能连接个人知乎内容；知乎公开搜索仍可单独使用。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开连接</RecoveryButton></> : <><RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在处理…' : status?.oauth?.status === 'pending_user_authorization' ? '重新打开知乎授权' : '连接我的知乎'}</RecoveryButton>{hasNativeCapabilityBridge() && status?.oauth?.status === 'pending_user_authorization' && <RecoveryButton disabled={busy} onClick={() => void check()}>我已授权，检查结果</RecoveryButton>}</>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>这次没有读取到内容。</p>}<small>这里只展示你本次读取的 3 条，尚未保存到 Trace。</small></div>}<small>{authorized ? '这项连接只用于读取你明确选择的知乎资料。' : '公开搜索与个人知乎内容分开使用。'}</small></section>;
+  return <section className="web-zhihu-auth" data-state={authorized ? 'authorized' : status?.oauth?.configured ? 'ready' : 'unconfigured'}><div className="web-auth-title"><h3>我的知乎内容</h3><span>{stateLabel}</span></div><p>{authorized ? '你可以选择读取近期创作、关注和收藏；Trace 不会自动导入。' : status?.oauth?.configured ? '连接后，你可以按需读取创作、关注和收藏。公开搜索不需要登录知乎。' : status === null && !error ? '正在检查是否可以连接知乎…' : '当前版本暂时不能连接个人知乎内容；知乎公开搜索仍可单独使用。'}</p>{status?.oauth?.expires_at && <small>本次授权最晚有效至 {new Date(status.oauth.expires_at).toLocaleString('zh-CN')}</small>}{error && <p className="web-auth-error" role="alert">{error}</p>}<div>{authorized ? <><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('contents')}>读取近期创作</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('favorites')}>读取近期收藏</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('favorite_lists')}>读取收藏夹</RecoveryButton><RecoveryButton disabled={busy || userContentUnavailable} onClick={() => void read('followees')}>读取关注</RecoveryButton><RecoveryButton disabled={busy} onClick={() => void disconnect()}>断开连接</RecoveryButton></> : <><RecoveryButton primary disabled={busy || status?.oauth?.configured !== true} onClick={() => void start()}>{busy ? '正在处理…' : status?.oauth?.status === 'pending_user_authorization' ? '重新打开知乎授权' : '连接我的知乎'}</RecoveryButton>{hasNativeCapabilityBridge() && status?.oauth?.status === 'pending_user_authorization' && <RecoveryButton disabled={busy} onClick={() => void check()}>我已授权，检查结果</RecoveryButton>}</>}<RecoveryButton disabled={busy} onClick={() => void load()}>刷新状态</RecoveryButton></div>{resource === 'favorite_lists' && <p className="web-zhihu-favorite-hint">先读取收藏夹列表，再选择一个收藏夹读取其中的内容。</p>}{resource === 'favorite_lists' && items.map((item) => <RecoveryButton key={item.id || item.title} disabled={busy || !item.id} onClick={() => { setFavoriteId(String(item.id || '')); void read('favorite_items', String(item.id || '')); }}>打开「{item.title || '未命名收藏夹'}」</RecoveryButton>)}{resource && <div className="web-zhihu-results" aria-live="polite"><strong>{({ contents: '近期创作', favorites: '近期收藏', favorite_lists: '我的收藏夹', favorite_items: favoriteId ? `收藏夹 ${favoriteId}` : '收藏夹内容', followees: '关注' } as Record<string, string>)[resource]} · {items.length} 条</strong>{items.length ? items.map((item, index) => <article key={item.id || `${resource}-${index}`}><b>{item.title || '未命名内容'}</b>{item.summary && <p>{item.summary}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">打开知乎原处</a>}</article>) : <p>这次没有读取到内容。</p>}<small>这里只展示你本次读取的 3 条，尚未保存到 Trace。</small></div>}<small>{authorized ? '这项连接只用于读取你明确选择的知乎资料。' : '公开搜索与个人知乎内容分开使用。'}</small></section>;
 }
 
 function DialogHost({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {

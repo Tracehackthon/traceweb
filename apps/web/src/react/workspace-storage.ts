@@ -3,7 +3,9 @@
 // records can never be written into a maintainer's personal SQLite workspace.
 const completeDemoStorage = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 type NativeWorkspaceBridge = { requestWorkspace?: (pathname: string, options: { method?: string; body?: string }) => Promise<{ status: number; body: string; contentType?: string; contentDisposition?: string }> };
+type NativeCapabilityBridge = { requestCapability?: (request: Record<string, unknown>) => Promise<any> };
 const nativeBridge = (): NativeWorkspaceBridge | undefined => (window as Window & { traceNative?: NativeWorkspaceBridge }).traceNative;
+const nativeCapabilityBridge = (): NativeCapabilityBridge | undefined => (window as Window & { traceNative?: NativeCapabilityBridge }).traceNative;
 const nativeStorage = !completeDemoStorage && typeof nativeBridge()?.requestWorkspace === 'function';
 export const browserStorage = !nativeStorage && (import.meta.env.VITE_TRACE_STORAGE === 'browser' || completeDemoStorage);
 export const storageLabel = completeDemoStorage ? '本次演示会话' : nativeStorage ? 'Trace 桌面端' : browserStorage ? '当前浏览器' : '本机';
@@ -16,6 +18,19 @@ async function requestNativeWorkspace(url: string, options: RequestInit): Promis
     'content-type': result.contentType || 'application/json; charset=utf-8',
     ...(result.contentDisposition ? { 'content-disposition': result.contentDisposition } : {}),
   } });
+}
+
+/**
+ * Product writes are command-shaped, not whole-host snapshots. Keep this
+ * helper beside the legacy workspace transport so an older installed shell
+ * can still use its read/migration path while current desktop builds use the
+ * authoritative Product Workspace CAS ledger.
+ */
+export async function productCommandRequest(payload: { protocolVersion?: number; commandId: string; expectedRevision: number; operations: unknown[] }): Promise<Response> {
+  const bridge = nativeCapabilityBridge();
+  if (!bridge?.requestCapability) throw new Error('Trace 桌面工作区尚未连接。');
+  const value = await bridge.requestCapability({ operation: 'product.command', protocolVersion: payload.protocolVersion ?? 1, ...payload });
+  return new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
 }
 
 export async function workspaceRequest(url: string, options: RequestInit = {}): Promise<Response> {

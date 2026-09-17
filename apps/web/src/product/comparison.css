@@ -333,3 +333,53 @@
 .compare-root.compare-compact .compare-trajectory p{max-height:100px;font-size:16px}
 .compare-root.compare-compact .compare-notice{position:fixed;bottom:12px;left:20px;right:20px;transform:none;max-width:unset;font-size:15px;padding:10px 13px}
 @media(prefers-reduced-motion:reduce){.compare-root *{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+/* Candidate browsing uses one shared, scene-space canvas. Header and heading
+   remain in the fixed shell while query/cards/trajectory travel together; the
+   reader is a sibling chrome surface and therefore never shrinks with zoom. */
+.compare-root .compare-canvas-viewport{position:absolute;inset:0;z-index:1;overflow:hidden;touch-action:none;cursor:grab;outline:0}
+.compare-root .compare-canvas-viewport.is-panning{cursor:grabbing}
+.compare-root .compare-canvas-world{position:absolute;left:0;top:0;width:1672px;height:941px;transform-origin:0 0;will-change:transform}
+.compare-root .compare-canvas-world.is-camera-settling{transition:transform .38s cubic-bezier(.16,1,.3,1)}
+.compare-root .compare-canvas-controls{position:absolute;right:26px;bottom:22px;z-index:16}
+.compare-root .compare-canvas-viewport:focus-visible{outline:3px solid #358e7d;outline-offset:-6px}
+.compare-root .compare-heading{z-index:5;pointer-events:none}
+.compare-root .compare-heading h1,.compare-root .compare-heading p{pointer-events:auto}
+.compare-root .compare-canvas-world .compare-candidate-list{overflow:visible}
+.compare-root .compare-canvas-world .compare-candidate{overflow:visible}
+.compare-root .compare-canvas-world .compare-candidate-head{max-height:none;overflow:visible}
+.compare-root .compare-canvas-world .compare-candidate-excerpt,.compare-root .compare-canvas-world .compare-candidate-relation{max-height:none;overflow:visible}
+.compare-root .compare-canvas-world .compare-candidate-excerpt{overflow-wrap:anywhere}
+
+.compare-root .compare-reader-panel{position:absolute;z-index:22;top:84px;right:22px;bottom:18px;width:520px;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #ffffffed;border-radius:28px;background:linear-gradient(145deg,#fbfefcf4,#eef8f3f2);box-shadow:0 23px 70px #2559472c,inset 0 1px 0 #fff;color:#17352e;opacity:1;transform:translateX(0);transition:opacity .25s ease,transform .38s cubic-bezier(.16,1,.3,1)}
+.compare-root .compare-reader-panel[data-open=false]{opacity:0;transform:translateX(22px);pointer-events:none}
+.compare-root .compare-reader-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:26px 27px 17px;flex:0 0 auto;border-bottom:1px solid #c8ded533}
+.compare-root .compare-reader-panel>header>div{min-width:0}
+.compare-root .compare-reader-kicker{display:block;margin-bottom:7px;color:#0d735c;font-size:14px;font-weight:600}
+.compare-root .compare-reader-panel h2{font-family:'Trace Compare Serif','Songti SC',SimSun,serif;font-size:28px;line-height:1.4;overflow-wrap:anywhere}
+.compare-root .compare-reader-panel header p{margin-top:7px;color:#638079;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.compare-root .compare-icon-button{display:grid;place-items:center;width:37px;height:37px;flex:0 0 auto;padding:6px;border:0;border-radius:50%;background:transparent;color:#3c6559}
+.compare-root .compare-icon-button:hover{background:#deeee6}
+.compare-root .compare-reader-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:6px 27px 22px;scrollbar-width:thin;scrollbar-color:#a9cabc transparent}
+.compare-root .compare-reader-scroll section{padding:18px 0 20px;border-bottom:1px solid #c9ddd433}
+.compare-root .compare-reader-scroll section:last-child{border-bottom:0}
+.compare-root .compare-reader-scroll h3{margin-bottom:7px;font-size:17px;line-height:1.45;color:#174d40}
+.compare-root .compare-reader-scroll p{white-space:pre-wrap;overflow-wrap:anywhere;color:#466676;font-size:16px;line-height:1.78}
+.compare-root .compare-reader-scroll .compare-reader-relation{color:#5a6b71}
+.compare-root .compare-reader-panel>footer{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;padding:14px 23px 19px;border-top:1px solid #c8ded533;flex:0 0 auto;background:#f6fcf8c9}
+.compare-root .compare-reader-panel>footer .compare-button{min-height:42px;padding:8px 15px;font-size:14px}
+.compare-root .compare-reader-source{margin-right:auto;color:#165b79!important;background:transparent!important;border-color:transparent!important;text-decoration:underline;text-underline-offset:4px}
+@media(prefers-reduced-motion:reduce){.compare-root .compare-canvas-world.is-camera-settling,.compare-root .compare-reader-panel{transition:none!important}}
+@media(max-width:999px){
+  .compare-root.compare-compact .compare-canvas-viewport{position:relative;inset:auto;width:100%;height:auto;min-height:560px;overflow:visible;touch-action:none}
+  .compare-root.compare-compact .compare-canvas-world{position:relative;width:100%;height:auto;min-height:560px;transform-origin:0 0}
+  .compare-root .compare-canvas-world{width:100%;height:100%}
+  .compare-root .compare-canvas-controls{right:16px;bottom:16px}
+  .compare-root .compare-reader-panel{left:12px;right:12px;top:auto;bottom:12px;width:auto;max-height:calc(100% - 310px);border-radius:24px}
+  .compare-root .compare-reader-panel>header{padding:20px 20px 13px}
+  .compare-root .compare-reader-panel h2{font-size:23px}
+  .compare-root .compare-reader-scroll{padding:2px 20px 15px}
+  .compare-root .compare-reader-scroll p{font-size:15px;line-height:1.68}
+  .compare-root .compare-reader-panel>footer{padding:11px 16px 15px}
+  .compare-root .compare-reader-panel>footer .compare-button{font-size:13px}
+}

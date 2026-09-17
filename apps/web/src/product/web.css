@@ -154,8 +154,32 @@ body{background:#f3f6f1}
 @media(max-width:600px){
   .web-zhihu-auth[data-state=authorized]>div:not(.web-auth-title):not(.web-zhihu-results){grid-template-columns:1fr 1fr}
   .web-zhihu-auth[data-state=authorized]>div:not(.web-auth-title):not(.web-zhihu-results)>button{grid-column:auto}
-  .web-zhihu-auth[data-state=authorized]>div:not(.web-auth-title):not(.web-zhihu-results)>button:last-child{grid-column:1/-1}
+ .web-zhihu-auth[data-state=authorized]>div:not(.web-auth-title):not(.web-zhihu-results)>button:last-child{grid-column:1/-1}
 }
+
+ /* Native runtime surface: a calm, readable operational view rather than raw
+   JSON or an intimidating admin console. */
+.web-runtime-operations{margin-top:18px;padding:16px;border:1px solid #d6e6dc;border-radius:17px;background:#f7fbf6}
+.web-runtime-operations>header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.web-panel-eyebrow{display:block;letter-spacing:.14em;color:#6b8e7d;font-size:10px;font-weight:750}
+.web-runtime-operations h3{margin:4px 0 0;font-size:19px}
+.web-runtime-operations-intro{margin:8px 0 10px!important;font-size:12px;line-height:1.6}
+.web-runtime-operations-status{margin:6px 0 12px!important;padding:8px 10px;border-radius:10px;background:#e8f3e8;color:#48705c!important;font-size:12px}
+.web-runtime-operations-section{margin-top:10px;padding:12px;border:1px solid #dfebe2;border-radius:13px;background:#ffffffc9}
+.web-runtime-operations-section>header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.web-runtime-operations-section h4{margin:0;font-size:14px;color:#214f3d}
+.web-runtime-operations-section>header>span{font-size:10px;color:#6d8279}
+.web-runtime-operations-section>p{margin:6px 0 9px;font-size:12px;color:#5b756a}
+.web-runtime-operations-section>small{display:block;margin-top:8px;color:#758980;font-size:10px;line-height:1.5}
+.web-runtime-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.web-runtime-actions button{min-height:34px;padding:6px 11px;font-size:11px}
+.web-runtime-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:start;padding:9px 0;border-top:1px solid #e7efe8}
+.web-runtime-row>div:first-child{min-width:0}.web-runtime-row strong,.web-runtime-row small{display:block}.web-runtime-row strong{font-size:12px;color:#2b5845}.web-runtime-row small{margin-top:2px;color:#718279;font-size:10px;line-height:1.45}.web-runtime-row>span{font-size:10px;color:#678276}.web-runtime-row>.web-runtime-actions{grid-column:1/-1}
+.web-runtime-empty{font-size:12px!important;color:#7a8a82!important}
+.web-runtime-compact-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.web-runtime-compact-grid>div{display:flex;flex-direction:column;gap:5px;padding:9px;border:1px solid #e0ebe3;border-radius:10px;background:#fbfdf9}.web-runtime-compact-grid b{font-size:12px;color:#2b5845}.web-runtime-compact-grid small{font-size:10px;color:#718279}.web-runtime-compact-grid button{align-self:flex-start;margin-top:3px;min-height:32px;padding:5px 9px;font-size:10px}
+.web-runtime-inline-input{width:100%;min-height:30px;padding:6px 8px;border:1px solid #d7e6dc;border-radius:8px;background:#fff;color:#2b5845;font:inherit;font-size:11px;box-sizing:border-box}
+ @media(max-width:600px){.web-runtime-compact-grid{grid-template-columns:1fr}.web-runtime-row{grid-template-columns:1fr}.web-runtime-row>.web-runtime-actions{grid-column:auto}.web-runtime-actions button{flex:1;min-width:105px}}
 /* Use the current Trace identity across app routes instead of the retired line mark. */
 .trace-react-shell .brand-tile,.trace-react-shell .web-brand>span,.trace-react-shell .chain-brand>span,.trace-react-shell .chain-small-brand>span,.trace-react-shell .compare-brand>span,.trace-react-shell .worksite-brand-mark{background:#f7faf7!important;border:1px solid #cfe0d8;color:var(--trace-green);box-shadow:0 6px 16px #174b3b18!important}
 .trace-react-shell .trace-app-icon{display:block;width:30px;height:30px;object-fit:contain}

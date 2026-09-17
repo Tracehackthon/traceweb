@@ -54,10 +54,14 @@ export async function disconnectZhihuAuthorization(): Promise<any> {
   return api('/api/zhihu/oauth/disconnect', {});
 }
 
-export async function readZhihuUserContent(kind: 'contents' | 'favorites' | 'followees', limit = 3): Promise<any> {
+export type ZhihuUserContentKind = 'contents' | 'favorites' | 'favorite_lists' | 'favorite_items' | 'followees';
+
+export async function readZhihuUserContent(kind: ZhihuUserContentKind, limit = 3, favoriteId?: string): Promise<any> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error('一次最多读取 10 条知乎内容。');
   const bridge = nativeBridge();
-  if (bridge?.requestCapability) return bridge.requestCapability({ operation: 'zhihu.user.read', kind, limit, offset: '0' });
-  return api('/api/zhihu/user/read', { kind, limit, offset: '0' });
+  const payload = { operation: 'zhihu.user.read', kind, limit, offset: '0', ...(favoriteId ? { favorite_id: favoriteId } : {}) };
+  if (bridge?.requestCapability) return bridge.requestCapability(payload);
+  return api('/api/zhihu/user/read', { kind, limit, offset: '0', ...(favoriteId ? { favorite_id: favoriteId } : {}) });
 }
 
 export async function agentCapabilities(): Promise<any> {
@@ -70,6 +74,58 @@ export async function runNativeAgent(input: { text: string; source: SearchSource
   const bridge = nativeBridge();
   if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌宠，再使用 Codex 或自定义 Agent。网页不会接触本机登录信息或密钥。');
   return bridge.requestCapability({ operation: 'agent.run', ...input });
+}
+
+export async function startNativeAgent(input: { text: string; source: SearchSource | 'none'; profileId?: string }): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌宠，再使用 Codex 或自定义 Agent。网页不会接触本机登录信息或密钥。');
+  return bridge.requestCapability({ operation: 'agent.run.start', ...input });
+}
+
+export async function readNativeAgentRun(runId: string): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('Trace 桌宠尚未连接。');
+  return bridge.requestCapability({ operation: 'agent.run.read', runId });
+}
+
+export async function readNativeAgentEvents(runId: string, after = 0): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('Trace 桌宠尚未连接。');
+  return bridge.requestCapability({ operation: 'agent.run.events', runId, after });
+}
+
+export async function cancelNativeAgent(runId: string): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('Trace 桌宠尚未连接。');
+  return bridge.requestCapability({ operation: 'agent.run.cancel', runId });
+}
+
+export async function adoptNativeAgent(runId: string, action: 'accept' | 'dismiss' | 'undo', expectedRevision?: number): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('Trace 桌宠尚未连接。');
+  return bridge.requestCapability({ operation: 'agent.run.adoption', runId, action, ...(expectedRevision === undefined ? {} : { expectedRevision }) });
+}
+
+export async function readDesktopRuntimePanel(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return null;
+  return bridge.requestCapability({ operation: 'host.panel.read' });
+}
+
+export async function runDesktopRuntimeAction(action: string, payload: Record<string, unknown> = {}): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
+  return bridge.requestCapability({ operation: 'host.panel.action', action, ...payload });
+}
+
+export async function sendProductCommand(input: {
+  commandId: string;
+  expectedRevision: number;
+  operations: unknown[];
+}): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
+  return bridge.requestCapability({ operation: 'product.command', protocolVersion: 1, ...input });
 }
 
 export type NativeWorkEnvironment = {

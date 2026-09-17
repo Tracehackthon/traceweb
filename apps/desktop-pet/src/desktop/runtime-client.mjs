@@ -14,6 +14,8 @@ export const DEFAULT_RUNTIME_ORIGIN = 'http://127.0.0.1:42731'
 export const DEFAULT_CLOUD_ORIGIN = 'https://trace.neutrom.store'
 const TERMINAL_AGENT_STATES = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
+const DESKTOP_HOST = 'codex'
+const DESKTOP_HOST_SESSION = 'trace-desktop'
 
 export function resolveCodexExecutable({ env = process.env, platform = process.platform } = {}) {
   const explicit = typeof env.TRACE_CODEX_BIN === 'string' ? env.TRACE_CODEX_BIN.trim() : ''
@@ -101,6 +103,28 @@ function safeWorkResult(workspace, workId) {
   }
 }
 
+function safePanelText(value, limit = 240) {
+  if (typeof value !== 'string') return ''
+  const text = value.trim()
+  // Product Workspace deliberately omits private turn bodies from its list
+  // projections. Keep this second boundary in the desktop bridge as well:
+  // operational panels must never turn an absolute path, prompt or token into
+  // product copy by accident.
+  if (!text || text.length > limit || /(?:[A-Za-z]:[\\/]|\/(?:Users|home|var|tmp|private|opt|srv)\/|(?:token|secret|access[_ -]?key|authorization)\s*[:=])/i.test(text)) return ''
+  return text
+}
+
+function safePanelItem(item, fields = []) {
+  const result = {}
+  for (const field of fields) {
+    const value = item?.[field]
+    if (typeof value === 'string') result[field] = safePanelText(value)
+    else if (typeof value === 'number' && Number.isFinite(value)) result[field] = value
+    else if (typeof value === 'boolean') result[field] = value
+  }
+  return result
+}
+
 export function validateRuntimeOrigin(value = DEFAULT_RUNTIME_ORIGIN) {
   const url = new URL(value)
   const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]'
@@ -126,6 +150,18 @@ export function createRuntimeCapabilityClient({
   if (cloudBase.protocol !== 'https:' || cloudBase.username || cloudBase.password || cloudBase.pathname !== '/' || cloudBase.search || cloudBase.hash) throw new Error('TRACE_CLOUD_ORIGIN must be an HTTPS origin')
   let projectContext
   let selectedProjectDir = configuredProjectDir
+  const repositoryPreflights = new Map()
+  const recoveryPreviews = new Map()
+  const publicationPreviews = new Map()
+  let lastPanelRows = null
+  const remember = (map, key, value) => {
+    map.set(key, {...value, createdAt: now()})
+    while (map.size > 16) map.delete(map.keys().next().value)
+    return key
+  }
+  const confirmationRequired = (request, message) => {
+    if (request.confirmation !== 'user-confirmed') throw new Error(message)
+  }
   const currentProject = () => {
     if (!projectContext) {
       const projectDir = findProjectDir(selectedProjectDir)
@@ -168,6 +204,39 @@ export function createRuntimeCapabilityClient({
     return value
   }
 
+  async function runtimeEventStream(runId, after = 0) {
+    const encoded = encodeURIComponent(requireId(runId, 'Agent 运行'))
+    if (!Number.isSafeInteger(after) || after < 0) throw new Error('Agent 事件游标不正确')
+    const url = new URL(`/api/agent/runs/${encoded}/events?after=${after}`, backendOrigin)
+    let response
+    try {
+      response = await fetchImpl(url, { method: 'GET', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(190_000), headers: { origin: backendOrigin, accept: 'text/event-stream' } })
+    } catch { throw new Error('Agent 实时进度连接没有建立，运行仍会在本机继续') }
+    if (!response.ok) throw new Error(`Agent 实时进度暂时不可用（${response.status}）`)
+    const reader = response.body?.getReader?.()
+    if (!reader) throw new Error('Agent 实时进度返回为空')
+    const decoder = new TextDecoder()
+    let buffer = '', events = []
+    const parse = (block) => {
+      const lines = block.split(/\r?\n/); let type = 'message', id = '', data = ''
+      for (const line of lines) {
+        if (line.startsWith('event:')) type = line.slice(6).trim().slice(0, 80)
+        else if (line.startsWith('id:')) id = line.slice(3).trim().slice(0, 40)
+        else if (line.startsWith('data:')) data += line.slice(5).trim()
+      }
+      if (!data || events.length >= 256) return
+      try { events.push({ type, id, data: JSON.parse(data) }) } catch { /* ignore malformed progress frame */ }
+    }
+    while (true) {
+      const chunk = await reader.read()
+      buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done })
+      let boundary
+      while ((boundary = buffer.indexOf('\n\n')) >= 0) { parse(buffer.slice(0, boundary)); buffer = buffer.slice(boundary + 2) }
+      if (chunk.done) break
+    }
+    return { runId, after, events }
+  }
+
   async function cloudRequest(pathname, body, timeoutMs = 35_000) {
     const url = new URL(pathname, cloudBase.origin)
     if (url.origin !== cloudBase.origin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Cloud path')
@@ -199,6 +268,251 @@ export function createRuntimeCapabilityClient({
     try { value = JSON.parse(text) } catch { throw new Error('Trace 云端能力暂时不可用，请稍后重试') }
     if (!response.ok) throw new Error(publicRuntimeError(value, response.status))
     return value
+  }
+
+  function hostSessionId(request) {
+    const value = request?.sessionId
+    if (value === undefined) return DESKTOP_HOST_SESSION
+    if (typeof value !== 'string' || !/^[a-zA-Z0-9._:-]{1,200}$/.test(value)) throw new Error('工作现场身份不完整')
+    return value
+  }
+
+  function hostCommandId(kind, request) {
+    return `desktop-${kind}-${randomId()}`
+  }
+
+  function listQuery(pathname, query = {}) {
+    const url = new URL(pathname, backendOrigin)
+    for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value))
+    return `${url.pathname}${url.search}`
+  }
+
+  function safePanelSession(item) {
+    return {
+      host: safePanelText(item?.host, 40) || DESKTOP_HOST,
+      sessionId: safePanelText(item?.session_id || item?.sessionId, 200),
+      status: safePanelText(item?.status, 40) || 'unknown',
+      project: item?.project_ref ? '已绑定当前项目' : '个人空间（未绑定项目）',
+      updatedAt: safePanelText(item?.last_event_at || item?.updated_at, 80),
+    }
+  }
+
+  function safePanelFinding(item) {
+    return {
+      kind: safePanelText(item?.finding_kind || item?.origin || 'captured', 80),
+      status: safePanelText(item?.status, 40),
+      turn: safePanelText(item?.turn_id, 160),
+      summary: safePanelText(item?.observation || item?.desired_behavior, 260) || '已记录一条工作发现',
+    }
+  }
+
+  function safePanelProposal(item) {
+    return {
+      id: safePanelText(item?.proposal_id, 200),
+      status: safePanelText(item?.status, 40),
+      target: safePanelText(item?.target_kind, 80) || '待判断',
+      scope: safePanelText(item?.scope, 120) || '未知范围',
+      rationale: safePanelText(item?.rationale, 260),
+      revision: Number.isSafeInteger(item?.revision) ? item.revision : 0,
+    }
+  }
+
+  function safePanelActivation(item) {
+    return {
+      id: safePanelText(item?.receipt_id, 200),
+      status: safePanelText(item?.status, 40),
+      count: Number.isFinite(item?.item_count) ? item.item_count : 0,
+      createdAt: safePanelText(item?.created_at, 80),
+    }
+  }
+
+  /**
+   * A deliberately small projection for the desktop "本机能力" surface.
+   * The renderer does not receive raw Product Workspace rows, private turn
+   * bodies, repository paths, hashes or provider credentials.
+   */
+  async function readRuntimePanel() {
+    const optional = (pathname) => runtimeRequest(pathname, undefined, 12_000, { items: [] }).catch(() => ({ items: [] }))
+    const [workspace, sessions, turns, findings, jobs, proposals, activations, worker, guard, policies, orchestrations, trials] = await Promise.all([
+      runtimeRequest('/api/product/workspace'),
+      runtimeRequest(listQuery('/api/product/host/sessions', { host: DESKTOP_HOST })),
+      runtimeRequest(listQuery('/api/product/host/turns', { host: DESKTOP_HOST, session_id: DESKTOP_HOST_SESSION })),
+      runtimeRequest(listQuery('/api/product/host/findings', { host: DESKTOP_HOST, session_id: DESKTOP_HOST_SESSION })),
+      runtimeRequest(listQuery('/api/product/host/sensemaking/jobs', { host: DESKTOP_HOST, session_id: DESKTOP_HOST_SESSION })),
+      runtimeRequest(listQuery('/api/product/host/routing/proposals', { host: DESKTOP_HOST, session_id: DESKTOP_HOST_SESSION })),
+      runtimeRequest(listQuery('/api/product/host/activation/history', { host: DESKTOP_HOST, session_id: DESKTOP_HOST_SESSION })),
+      runtimeRequest('/api/agent/sensemaking/health', undefined, 12_000, { status: 'unavailable', queue_depth: 0, failed_count: 0 }),
+      optional('/api/product/host/repository/recovery/status'),
+      optional('/api/product/host/publication-policies'),
+      optional(listQuery('/api/product/host/capability/orchestrations', { host: DESKTOP_HOST, session_id: DESKTOP_HOST_SESSION })),
+      optional('/api/product/host/capability/trials'),
+    ])
+    const array = (value) => Array.isArray(value?.items) ? value.items : []
+    const orchestrationRows = array(orchestrations)
+    const trialRows = array(trials)
+    const policyRows = array(policies)
+    lastPanelRows = { orchestrations: orchestrationRows, trials: trialRows, policies: policyRows }
+    return {
+      connected: true,
+      host: DESKTOP_HOST,
+      sessionId: DESKTOP_HOST_SESSION,
+      revision: Number.isSafeInteger(workspace?.revision) ? workspace.revision : 0,
+      sessions: array(sessions).slice(0, 24).map(safePanelSession),
+      turnCount: array(turns).length,
+      findings: array(findings).slice(0, 24).map(safePanelFinding),
+      jobs: array(jobs).slice(0, 24).map((item) => safePanelItem(item, ['status', 'execution_mode', 'error_code'])),
+      proposals: array(proposals).slice(0, 24).map(safePanelProposal),
+      activations: array(activations).slice(0, 24).map(safePanelActivation),
+      worker: {
+        status: safePanelText(worker?.status, 40) || 'unavailable',
+        mode: safePanelText(worker?.mode, 40),
+        queueDepth: Number.isFinite(worker?.queue_depth) ? worker.queue_depth : 0,
+        failedCount: Number.isFinite(worker?.failed_count) ? worker.failed_count : 0,
+      },
+      recovery: array(guard).slice(0, 24).map((item) => ({
+        state: safePanelText(item?.state, 40),
+        id: safePanelText(item?.journal_id, 200),
+        expectedBranch: item?.expected_branch ? '已记录目标分支' : '',
+      })),
+      policies: policyRows.slice(0, 12).map((item) => ({ status: safePanelText(item?.status, 40), scope: safePanelText(item?.scope, 80), id: safePanelText(item?.policy_id, 200), revision: Number.isSafeInteger(item?.revision) ? item.revision : 0 })),
+      orchestrations: orchestrationRows.slice(0, 12).map((item) => ({ status: safePanelText(item?.status, 40), id: safePanelText(item?.orchestration_id, 200), revision: Number.isSafeInteger(item?.revision) ? item.revision : 0, hasCandidate: Boolean(item?.candidate_dir), hasManifest: Boolean(item?.manifest_sha256), producerStatus: safePanelText(item?.candidate?.producer_status, 40) })),
+      trials: trialRows.slice(0, 12).map((item) => ({ status: safePanelText(item?.status, 40), id: safePanelText(item?.trial_id, 200), orchestrationId: safePanelText(item?.orchestration_id, 200), revision: Number.isSafeInteger(item?.revision) ? item.revision : 0, outcome: safePanelText(item?.outcome, 80) })),
+    }
+  }
+
+  function requireId(value, name = '身份') {
+    if (typeof value !== 'string' || !/^[a-zA-Z0-9._:-]{1,512}$/.test(value)) throw new Error(`${name}不完整`)
+    return value
+  }
+
+  async function runtimePanelAction(request) {
+    if (!request || typeof request !== 'object') throw new Error('本机能力动作不完整')
+    const action = request.action
+    const sessionId = hostSessionId(request)
+    const host = DESKTOP_HOST
+    const base = { protocolVersion: 1, commandId: hostCommandId(action, request), host, sessionId }
+    if (action === 'session.attach' || action === 'session.pause' || action === 'session.detach') {
+      if (action === 'session.attach') {
+        let projectRef
+        try { projectRef = currentProject().projectDir } catch { projectRef = undefined }
+        return runtimeRequest('/api/product/host/session/attach', { ...base, ...(projectRef ? { projectRef } : {}) })
+      }
+      return runtimeRequest(`/api/product/host/session/${action.slice('session.'.length)}`, base)
+    }
+    if (action === 'sensemaking.drain') {
+      const limit = request.limit === undefined ? 16 : request.limit
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('排空数量需要在 1—100 之间')
+      return runtimeRequest('/api/agent/sensemaking/drain', { protocolVersion: 1, limit })
+    }
+    if (action === 'routing.decide') {
+      return runtimeRequest('/api/product/host/routing/decide', { ...base, proposalId: requireId(request.proposalId, '路由提案'), action: ['trial', 'adopt', 'reject'].includes(request.decision) ? request.decision : 'reject', expectedRevision: Number.isSafeInteger(request.expectedRevision) ? request.expectedRevision : 0 })
+    }
+    if (action === 'activation.mark') {
+      const status = ['used', 'affected', 'dismissed', 'snoozed', 'released'].includes(request.status) ? request.status : 'dismissed'
+      return runtimeRequest('/api/product/host/activation/mark', { ...base, receiptId: requireId(request.receiptId, '回带记录'), status, expectedRevision: Number.isSafeInteger(request.expectedRevision) ? request.expectedRevision : 0 })
+    }
+    if (action === 'repository.preflight') {
+      const project = currentProject()
+      const proposalId = request.proposalId ? requireId(request.proposalId, '路由提案') : undefined
+      const result = await runtimeRequest('/api/product/host/repository/preflight', { ...base, repoRoot: project.projectDir, executionMode: 'local', taskIntent: typeof request.taskIntent === 'string' ? request.taskIntent.slice(0, 500) : '', ...(proposalId ? { proposalId } : {}) })
+      if (!result?.preflight_id || typeof result.state_hash !== 'string') throw new Error('仓库预检没有返回可验证回执')
+      const token = `preflight:${randomId()}`
+      remember(repositoryPreflights, token, { preflightId: result.preflight_id, proposalId: proposalId || null, expectedStateHash: result.state_hash, action: result.action })
+      return { protocolVersion: 1, status: 'preview', preflightId: token, canApply: Boolean(proposalId && result.action === 'create-branch'), action: safePanelText(result.action, 80), boundProposal: Boolean(proposalId) }
+    }
+    if (action === 'repository.apply') {
+      confirmationRequired(request, '执行仓库保护前需要确认这次预检回执')
+      const token = requireId(request.preflightId, '仓库预检回执')
+      const cached = repositoryPreflights.get(token)
+      if (!cached || now() - cached.createdAt > 10 * 60_000) throw new Error('仓库预检已过期，请重新做只读预检')
+      if (!cached.proposalId || cached.action !== 'create-branch') throw new Error('这条预检没有绑定可采用的 runtime-guard 提案')
+      const result = await runtimeRequest('/api/product/host/repository/apply', { ...base, preflightId: cached.preflightId, proposalId: cached.proposalId, expectedStateHash: cached.expectedStateHash, approval: `adopt:${cached.proposalId}` })
+      repositoryPreflights.delete(token)
+      return { protocolVersion: 1, status: safePanelText(result?.status, 40) || 'applied', applied: true }
+    }
+    if (action === 'repository.recovery.preview') {
+      const value = request.journalId || request.targetCommandId
+      if (!value) throw new Error('先选择一条待恢复记录')
+      const journalId = request.journalId ? requireId(request.journalId, '恢复记录') : undefined
+      const result = await runtimeRequest('/api/product/host/repository/recovery/preview', { ...base, ...(journalId ? { journalId } : { targetCommandId: requireId(request.targetCommandId, '命令记录') }) })
+      if (journalId) remember(recoveryPreviews, journalId, { action: result?.action })
+      return { protocolVersion: 1, action: safePanelText(result?.action, 80), previewed: true }
+    }
+    if (action === 'repository.recovery.reconcile') {
+      confirmationRequired(request, '完成恢复回执前需要确认预览结果')
+      const journalId = requireId(request.journalId, '恢复记录')
+      if (!recoveryPreviews.has(journalId)) throw new Error('请先预览这条恢复记录')
+      return runtimeRequest('/api/product/host/repository/recovery/reconcile', { ...base, journalId })
+    }
+    if (action === 'publication.policy.preview') {
+      const project = currentProject()
+      const body = { ...base, scope: ['personal', 'project', 'cross-project'].includes(request.scope) ? request.scope : 'project', targetRoot: project.projectDir, ...(Array.isArray(request.allowedCapabilityKinds) ? { allowedCapabilityKinds: request.allowedCapabilityKinds.slice(0, 16) } : {}), ...(request.validationRequirements && typeof request.validationRequirements === 'object' ? { validationRequirements: request.validationRequirements } : {}) }
+      const result = await runtimeRequest('/api/product/host/publication-policy/preview', body)
+      if (!result?.policy_id) throw new Error('发布策略预览没有返回可确认回执')
+      const token = `policy-preview:${randomId()}`
+      remember(publicationPreviews, token, { body, policyId: result.policy_id, scope: result.scope, targetRoot: result.target_root, allowedCapabilityKinds: result.allowed_capability_kinds, validationRequirements: result.validation_requirements, expiresAt: result.expires_at })
+      return { protocolVersion: 1, status: 'preview', previewId: token, scope: safePanelText(result.scope, 80), requiresConfirmation: true }
+    }
+    if (action === 'publication.policy.adopt') {
+      confirmationRequired(request, '采用发布策略前需要确认预览内容')
+      const previewId = requireId(request.previewId, '策略预览')
+      const cached = publicationPreviews.get(previewId)
+      if (!cached || now() - cached.createdAt > 10 * 60_000) throw new Error('策略预览已过期，请重新预览')
+      const result = await runtimeRequest('/api/product/host/publication-policy/adopt', { ...base, scope: cached.scope, targetRoot: cached.targetRoot, allowedCapabilityKinds: cached.allowedCapabilityKinds, validationRequirements: cached.validationRequirements, ...(cached.expiresAt ? { expiresAt: cached.expiresAt } : {}), approval: `adopt:${cached.policyId}` })
+      publicationPreviews.delete(previewId)
+      return { protocolVersion: 1, status: safePanelText(result?.status, 40) || 'active', adopted: true }
+    }
+    if (action === 'publication.policy.revoke') {
+      confirmationRequired(request, '撤回发布策略需要再次确认')
+      const policyId = requireId(request.policyId, '发布策略')
+      const policy = lastPanelRows?.policies?.find((item) => item.policy_id === policyId && item.status === 'active')
+      if (!policy) throw new Error('这条发布策略已不存在或不是 active 状态，请刷新现场')
+      return runtimeRequest('/api/product/host/publication-policy/revoke', { ...base, policyId, expectedRevision: Number.isSafeInteger(request.expectedRevision) ? request.expectedRevision : policy.revision, reason: typeof request.reason === 'string' ? request.reason.slice(0, 500) : '用户从 Trace 工作现场撤回' })
+    }
+    if (action === 'capability.trial.create') {
+      const orchestrationId = requireId(request.orchestrationId, '能力编排')
+      const orchestration = lastPanelRows?.orchestrations?.find((item) => item.orchestration_id === orchestrationId)
+      if (!orchestration || !['candidate', 'producer_required', 'staged', 'validated'].includes(orchestration.status)) throw new Error('当前能力候选还不能创建试用')
+      const hash = typeof request.capabilityHash === 'string' ? request.capabilityHash : orchestration.manifest_sha256
+      if (typeof hash !== 'string' || !/^[a-f0-9]{64}$/i.test(hash)) throw new Error('请先让 CapabilityPublisher 生成并暂存候选清单')
+      return runtimeRequest('/api/product/host/capability/trial/create', { ...base, orchestrationId, expectedRevision: Number.isSafeInteger(request.expectedRevision) ? request.expectedRevision : orchestration.revision, capabilityVersion: typeof request.capabilityVersion === 'string' ? request.capabilityVersion.slice(0, 120) : 'candidate', capabilityHash: hash, scenario: typeof request.scenario === 'string' && request.scenario.trim() ? request.scenario.slice(0, 500) : '验证这条能力在当前项目中的边界', task: typeof request.task === 'string' ? request.task.slice(0, 500) : '验证当前能力', expected: typeof request.expected === 'string' ? request.expected.slice(0, 500) : '按试用回执判断结果' })
+    }
+    if (action === 'capability.trial.complete') {
+      const trialId = requireId(request.trialId, '试用记录')
+      const trial = lastPanelRows?.trials?.find((item) => item.trial_id === trialId)
+      if (!trial || !['queued', 'running'].includes(trial.status)) throw new Error('当前试用记录还不能收尾')
+      return runtimeRequest('/api/product/host/capability/trial/complete', { ...base, trialId, expectedRevision: Number.isSafeInteger(request.expectedRevision) ? request.expectedRevision : trial.revision, outcome: ['support', 'limit', 'challenge', 'inconclusive'].includes(request.outcome) ? request.outcome : 'inconclusive', observed: typeof request.observed === 'string' ? request.observed.slice(0, 1000) : '已完成一次显式试用' })
+    }
+    if (['capability.stage', 'capability.validate', 'capability.publish', 'capability.rollback'].includes(action)) {
+      const orchestrationId = requireId(request.orchestrationId, '能力编排')
+      const orchestration = lastPanelRows?.orchestrations?.find((item) => item.orchestration_id === orchestrationId)
+      if (!orchestration) throw new Error('请先刷新工作现场并选择能力候选')
+      const body = { ...base, orchestrationId, expectedRevision: Number.isSafeInteger(request.expectedRevision) ? request.expectedRevision : orchestration.revision }
+      if (action === 'capability.stage') {
+        if (!orchestration.candidate_dir || !orchestration.manifest_sha256) throw new Error('候选内容尚未由 CapabilityPublisher 暂存')
+        Object.assign(body, { producerStatus: 'staged', candidateDir: orchestration.candidate_dir, manifestSha256: orchestration.manifest_sha256 })
+      }
+      if (action === 'capability.validate') {
+        confirmationRequired(request, '标记能力通过验证前需要确认验证证据')
+        if (!['staged', 'trial_queued'].includes(orchestration.status)) throw new Error('只有已暂存候选可以验证')
+        Object.assign(body, { validation: request.validation && typeof request.validation === 'object' ? request.validation : { schema: 'passed', replay: 'passed', behavior: 'passed', rollback: 'passed', source_hashes: 'passed' } })
+      }
+      if (action === 'capability.publish') {
+        confirmationRequired(request, '发布能力前需要确认 publisher 回执')
+        if (orchestration.status !== 'validated') throw new Error('只有全部验证通过的候选可以发布')
+        if (request.producerStatus !== 'published' || !request.publicationReceipt || typeof request.publicationReceipt !== 'object' || typeof request.rollbackReceipt !== 'string' || !request.rollbackReceipt.trim()) throw new Error('发布需要现有 CapabilityPublisher 的发布与回滚回执')
+        Object.assign(body, { producerStatus: 'published', approval: typeof request.policyId === 'string' ? 'user-confirmed-from-trace' : `publish:${orchestrationId}`, ...(request.policyId ? { policyId: requireId(request.policyId, '发布策略') } : {}), publicationReceipt: request.publicationReceipt, rollbackReceipt: request.rollbackReceipt.slice(0, 4000) })
+      }
+      if (action === 'capability.rollback') {
+        confirmationRequired(request, '回滚能力前需要再次确认')
+        if (orchestration.status !== 'published') throw new Error('只有已发布能力可以回滚')
+        if (typeof request.rollbackReceipt !== 'string' || !request.rollbackReceipt.trim()) throw new Error('回滚需要 publisher 提供回滚回执')
+        Object.assign(body, { producerStatus: 'rolled_back', rollbackReceipt: request.rollbackReceipt.slice(0, 4000) })
+      }
+      const endpoint = action.split('.').at(-1)
+      return runtimeRequest(`/api/product/host/capability/${endpoint}`, body)
+    }
+    throw new Error('暂不支持这个本机能力动作')
   }
 
   async function nativeWorkspaceRequest(pathname, method = 'GET', body) {
@@ -316,8 +630,24 @@ export function createRuntimeCapabilityClient({
       }
     }
     if (request.operation === 'workspace.request') return nativeWorkspaceRequest(request.pathname, request.method || 'GET', request.body)
+    if (request.operation === 'product.command') {
+      if (request.protocolVersion !== 1 || !Array.isArray(request.operations) || request.operations.length < 1 || request.operations.length > 256) throw new Error('产品命令不完整')
+      const commandId = requireId(request.commandId, '产品命令')
+      if (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new Error('产品命令需要当前工作区版本')
+      // Keep the desktop bridge as a thin, authenticated transport. Product
+      // Workspace remains the authority for operation schemas, CAS and
+      // idempotency; the renderer never sends a whole host snapshot here.
+      return runtimeRequest('/api/product/commands', {
+        protocolVersion: 1,
+        commandId,
+        expectedRevision: request.expectedRevision,
+        operations: request.operations,
+      })
+    }
     if (request.operation === 'workspace.summary') return readObservationSummary()
     if (request.operation === 'workspace.capture') return captureObservation(request.text, request.source)
+    if (request.operation === 'host.panel.read') return readRuntimePanel()
+    if (request.operation === 'host.panel.action') return runtimePanelAction(request)
     if (request.operation === 'setup.status') {
       const capabilities = await runtimeRequest('/api/agent/capabilities')
       const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
@@ -365,11 +695,48 @@ export function createRuntimeCapabilityClient({
     if (request.operation === 'zhihu.oauth.check') return cloudRequest('/api/zhihu/oauth/check', {})
     if (request.operation === 'zhihu.oauth.disconnect') return cloudRequest('/api/zhihu/oauth/disconnect', {})
     if (request.operation === 'zhihu.user.read') {
-      if (!['contents', 'favorites', 'followees'].includes(request.kind)) throw new Error('Invalid bounded Zhihu user request')
+      if (!['contents', 'favorites', 'favorite_lists', 'favorite_items', 'followees'].includes(request.kind)) throw new Error('Invalid bounded Zhihu user request')
       const limit = request.limit === undefined ? 3 : request.limit
       const offset = request.offset === undefined ? '0' : request.offset
-      if (!Number.isInteger(limit) || limit < 1 || limit > 20 || typeof offset !== 'string' || !/^\d{1,18}$/.test(offset)) throw new Error('Invalid bounded Zhihu user request')
-      return cloudRequest('/api/zhihu/user/read', { kind: request.kind, limit, offset })
+      if (!Number.isInteger(limit) || limit < 1 || limit > 10 || typeof offset !== 'string' || !/^\d{1,18}$/.test(offset)) throw new Error('Invalid bounded Zhihu user request')
+      const body = { kind: request.kind, limit, offset }
+      if (request.kind === 'favorite_items') {
+        if (typeof request.favorite_id !== 'string' || !/^[a-zA-Z0-9._:-]{1,200}$/.test(request.favorite_id)) throw new Error('请先选择一个知乎收藏夹')
+        body.favorite_id = request.favorite_id
+      }
+      return cloudRequest('/api/zhihu/user/read', body)
+    }
+    if (request.operation === 'agent.run.start') {
+      if (typeof request.text !== 'string' || !request.text.trim() || request.text.length > 16_000 || !['none', 'zhihu', 'global'].includes(request.source)) throw new Error('Invalid bounded Agent request')
+      const capabilities = await runtimeRequest('/api/agent/capabilities')
+      if (!capabilities.enabled) throw new Error('Trace Agent Runtime is not enabled')
+      const profileId = typeof request.profileId === 'string' && capabilities.profiles?.some((profile) => profile.profileId === request.profileId) ? request.profileId : capabilities.defaultProfileId
+      const current = await runtimeRequest('/api/product/workspace')
+      const matterId = `pet-${randomId()}`
+      const created = await runtimeRequest('/api/product/commands', { protocolVersion: 1, commandId: `pet-command-${randomId()}`, expectedRevision: current.revision, operations: [{ type: 'capture.create', matterId, text: request.text.trim() }] })
+      const session = created.host?.chain?.sessions?.[matterId]
+      if (!session) throw new Error('Trace Runtime did not return the captured matter')
+      const sources = await remoteSourceContext(request.source, request.text)
+      const submitted = await runtimeRequest('/api/agent/runs', { protocolVersion: 1, requestId: `pet-run-${randomId()}`, expectedRevision: created.revision, matterId, contextMode: session.contextMode, contextEpoch: session.contextEpoch, purpose: 'discuss', input: `请帮助我分清这段原话里的条件、证据与仍不确定之处。结果只作为候选。${sources ? `\n\n${sources.prompt}` : ''}`, ...(profileId ? { profileId } : {}) })
+      if (!submitted.run?.runId) throw new Error('Trace Runtime did not return a run identity')
+      return { ...submitted.run, ...(sources ? { sources: { source: sources.source, items: sources.items } } : {}) }
+    }
+    if (request.operation === 'agent.run.read') {
+      const runId = requireId(request.runId, 'Agent 运行')
+      return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}`, undefined, 10_000)
+    }
+    if (request.operation === 'agent.run.events') return runtimeEventStream(request.runId, request.after === undefined ? 0 : request.after)
+    if (request.operation === 'agent.run.cancel') {
+      const runId = requireId(request.runId, 'Agent 运行')
+      return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/cancel`, {})
+    }
+    if (request.operation === 'agent.run.adoption') {
+      const runId = requireId(request.runId, 'Agent 运行')
+      const action = ['accept', 'dismiss', 'undo'].includes(request.action) ? request.action : null
+      if (!action) throw new Error('Agent 结果动作不正确')
+      if (action === 'dismiss') return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/adoption`, { action })
+      if (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new Error('Agent 结果需要当前工作区版本')
+      return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/adoption`, { action, commandId: `desktop-agent-${action}-${randomId()}`, expectedRevision: request.expectedRevision })
     }
     if (request.operation === 'agent.run') {
       if (typeof request.text !== 'string' || !request.text.trim() || request.text.length > 16_000 || !['none', 'zhihu', 'global'].includes(request.source)) throw new Error('Invalid bounded Agent request')

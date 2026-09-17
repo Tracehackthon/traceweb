@@ -1,5 +1,6 @@
 // Runtime derivative of artifacts/trace-compare-v1-20260915/ui; original layout retained.
 import {registerFont} from './resource-cache.mjs';
+import {createCanvasController} from './canvas-controller.mjs';
 /** Trace compare UI. Native DOM; all business decisions belong to the supplied view/host. */
 const GLASS_PATH = 'M 91 14 C 280 -2 705 3 859 17 C 961 28 999 68 992 153 C 986 247 941 286 834 291 C 624 305 263 299 114 287 C 21 279 0 227 9 139 C 14 63 31 26 91 14 Z';
 // Reused and adapted from desktop/src/home-icons.js, local Trace-native icons.
@@ -34,12 +35,13 @@ const templates = {
    <div class="compare-search-bottom"><div class="compare-scopes-wrap">${button('scopes','查找范围','compare-scopes-button','down')}<div class="compare-scopes-popover" hidden><p>完整演示只使用已经保存的来源，不会再次请求外部平台。</p><div data-options="scopes"></div></div></div>${button('import','已有材料，直接带入','','clip')}<button type="submit" class="compare-button compare-primary" data-search-submit>开始找</button></div>
    <div class="compare-search-help"><p>${icon('info')}假设情形会单独标明，不会当作实际案例。<small>完整演示不会发起新的联网搜索。</small></p>${button('return','先放着')}</div>
   </form>`,
- candidates:`<section class="compare-heading"><h1 tabindex="-1" data-text="candidatesHeading">找到三处值得看看</h1><p>先看看条件，再决定有没有关系。</p></section>
+  candidates:`<section class="compare-heading"><h1 tabindex="-1" data-text="candidatesHeading">找到三处值得看看</h1><p>先看看条件，再决定有没有关系。</p></section>
   <div class="compare-query-strip">${icon('search')}<strong data-text="shortQuestion"></strong>${button('adjust','调整寻找方向','compare-text-button','next')}</div>
   <svg class="compare-threads compare-candidates-thread" viewBox="0 0 1672 941" aria-hidden="true"><path d="M541 453 C605 449 608 516 653 518"/><path d="M1054 524 C1100 523 1105 480 1165 480" class="compare-amber-thread"/><circle cx="541" cy="453" r="9"/><circle cx="653" cy="518" r="6"/><circle cx="1054" cy="524" r="6" class="compare-amber-node"/><circle cx="1165" cy="480" r="8" class="compare-amber-node"/></svg>
   <img class="compare-bird compare-candidates-bird" data-bird="perch" alt="" aria-hidden="true"><section class="compare-candidate-list" aria-label="待确认候选"></section>
   <section class="compare-empty compare-paper" hidden><h2>没有找到贴切的候选</h2><p>调整条件，或带入一段你已有的材料。</p>${button('adjust','调整寻找方向','compare-primary')}</section>
-  <div class="compare-candidates-footer"><div class="compare-adjust-strip">${icon('message')}<label class="compare-sr" for="compare-adjust">调整寻找条件</label><input id="compare-adjust" data-field="adjust" placeholder="这些都不贴切？说说条件差在哪里……">${button('adjust-with-text','调整后再找','compare-text-button','next')}</div>${button('import','带入自己的材料','compare-link-button','clip')}</div>`,
+  <div class="compare-candidates-footer"><div class="compare-adjust-strip">${icon('message')}<label class="compare-sr" for="compare-adjust">调整寻找条件</label><input id="compare-adjust" data-field="adjust" placeholder="这些都不贴切？说说条件差在哪里……">${button('adjust-with-text','调整后再找','compare-text-button','next')}</div>${button('import','带入自己的材料','compare-link-button','clip')}</div>
+  <aside class="compare-reader-panel" data-reader-panel hidden aria-labelledby="compare-reader-title"><header><div><span class="compare-reader-kicker">材料阅读</span><h2 id="compare-reader-title" data-reader-title></h2><p data-reader-meta></p></div><button type="button" class="compare-icon-button" data-action="close-reader" aria-label="关闭材料阅读">${icon('close')}</button></header><div class="compare-reader-scroll" data-reader-scroll><section><h3>这份材料实际说了什么</h3><p class="compare-reader-excerpt" data-reader-excerpt></p></section><section><h3>完整上下文</h3><p class="compare-reader-context" data-reader-context></p></section><section><h3>关系提示</h3><p class="compare-reader-relation" data-reader-relation></p></section></div><footer><button type="button" class="compare-button compare-reader-source" data-action="reader-source" hidden>打开知乎原文</button><button type="button" class="compare-button compare-primary" data-action="commit-candidate">用这份材料作对照${icon('next')}</button></footer></aside>`,
  compare:`<section class="compare-heading compare-heading-small"><h1 tabindex="-1">放在一起看</h1><p>把你的疑问，和一份相关的材料放在一起，看看它们哪里相同，哪里不同。</p></section>
   <button type="button" class="compare-back-candidates compare-button compare-text-button" data-action="back-candidates">${icon('back')}<span data-text="candidateIndex">返回候选</span></button>
   <svg class="compare-threads compare-reading-thread" viewBox="0 0 1672 941" aria-hidden="true"><path d="M742 333 C824 286 855 355 904 392"/><circle cx="742" cy="333" r="8"/><circle cx="904" cy="392" r="7" class="compare-amber-node"/></svg>
@@ -75,6 +77,10 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
   let glass = [];
   let animation = null;
   let adjustDraft = '';
+  let previewCandidateId = null;
+  let candidateCamera = null;
+  let canvas = null;
+  let canvasScreen = '';
   const composing = new WeakSet();
   root.classList.add('compare-root');
   root.innerHTML = `<div class="compare-scene"><header class="compare-header"><div class="compare-brand"><span class="brand-tile">${mark}</span><strong>Trace</strong></div><nav aria-label="当前位置"><span data-shell="first"></span><i>/</i><strong data-shell="last">找个对照</strong></nav><button type="button" class="compare-button compare-top-return" data-action="return">${icon('back')}<span>返回原来的事情</span></button><span class="compare-demo">完整演示</span></header><main class="compare-main"></main><button type="button" class="compare-profile" data-action="profile" aria-label="个人设置">${icon('user')}</button><div class="compare-notice" role="status" aria-live="polite" hidden><span></span><button class="compare-button" type="button" aria-label="关闭提示" data-action="clear-notice">${icon('close')}</button></div></div><dialog class="compare-dialog" aria-labelledby="compare-dialog-title"><div class="compare-dialog-heading"><h2 id="compare-dialog-title"></h2><button type="button" class="compare-button compare-icon-button" data-action="close-modal" aria-label="关闭">${icon('close')}</button></div><div class="compare-dialog-content"></div></dialog>`;
@@ -114,6 +120,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     root.classList.toggle('compare-compact',compact);
     if(!compact)scene.style.setProperty('--compare-scale',String(Math.min(rect.width/1672,rect.height/941)));
     glass.forEach(g=>g.refresh?.());
+    canvas?.refresh?.();
   }
   const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
   observer?.observe(root);
@@ -121,6 +128,78 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     glass.forEach(g=>g.destroy());glass=[];
     if(typeof services.mountSceneGlass!=='function')return;
     all('[data-glass]').forEach(host=>{try{glass.push(services.mountSceneGlass({host,scene:root,backgroundUrl:assets.background,path:GLASS_PATH,width:host.clientWidth,height:host.clientHeight,tone:'cool'}));}catch{host.dataset.material='fallback';}});
+  }
+  function disposeCanvas() {
+    canvas?.destroy?.(); canvas=null; canvasScreen=''; candidateCamera=null;
+    root.querySelector('.compare-canvas-viewport')?.remove();
+  }
+  function setupCanvas(nextScreen) {
+    disposeCanvas();
+    if(nextScreen!=='candidates') return;
+    const viewport=document.createElement('div'); viewport.className='compare-canvas-viewport';
+    viewport.setAttribute('data-canvas-viewport',''); viewport.setAttribute('aria-label','可缩放的对照候选画布');
+    viewport.setAttribute('role','application'); viewport.tabIndex=0;
+    const world=document.createElement('div'); world.className='compare-canvas-world'; world.setAttribute('data-canvas-world','');
+    const movable=['.compare-query-strip','.compare-candidates-thread','.compare-candidates-bird','.compare-candidate-list','.compare-empty','.compare-candidates-footer'];
+    movable.map(selector=>main.querySelector(selector)).filter(Boolean).forEach(node=>world.append(node));
+    const controls=document.createElement('div'); controls.className='trace-canvas-controls compare-canvas-controls'; controls.setAttribute('data-canvas-controls',''); controls.setAttribute('aria-label','画布缩放控制');
+    controls.innerHTML='<button type="button" data-canvas-action="zoom-out" aria-label="缩小画布" title="缩小">−</button><output data-canvas-scale aria-live="polite">100%</output><button type="button" data-canvas-action="zoom-in" aria-label="放大画布" title="放大">＋</button><button type="button" data-canvas-action="fit" aria-label="适应全景">适应全景</button><button type="button" data-canvas-action="reset" aria-label="复位画布">复位</button>';
+    viewport.append(world,controls);
+    main.append(viewport);
+    canvas=createCanvasController({viewport,world,controls,initial:{x:0,y:0,scale:1},onChange:({scale})=>{const percent=Math.round(scale*100);viewport.setAttribute('aria-valuenow',String(percent));viewport.setAttribute('aria-valuetext',`${percent}%`);}});
+    viewport.setAttribute('aria-valuemin','55');viewport.setAttribute('aria-valuemax','180');viewport.setAttribute('aria-valuenow','100');
+    canvasScreen=nextScreen;
+  }
+  function restoreCandidateCamera() {
+    if(canvas && candidateCamera) { const state=candidateCamera; candidateCamera=null; requestAnimationFrame(()=>canvas.set(state,{reason:'reader-close'})); }
+  }
+  function readerItem() { return current.candidates?.find(item=>item.id===previewCandidateId) || null; }
+  function renderReader(item) {
+    const panel=$('[data-reader-panel]'); if(!panel)return;
+    if(!item) { panel.hidden=true; panel.removeAttribute('data-open'); return; }
+    panel.hidden=false; panel.dataset.open='true';
+    $('[data-reader-title]').textContent=asText(item.title);
+    $('[data-reader-meta]').textContent=sourceBadge(item);
+    $('[data-reader-excerpt]').textContent=asText(item.excerpt || item.summary || item.preview);
+    $('[data-reader-context]').textContent=asText(item.context) || asText(item.excerpt || item.summary || item.preview);
+    $('[data-reader-relation]').textContent=asText(item.relationship?.summary || item.relationship?.reason) || `可能${relLabel(item.relationship?.type)}：${relationTarget(item)}`;
+    const sourceButton=$('[data-action="reader-source"]'); const url=safeSourceUrl(item.url);
+    sourceButton.hidden=!url; if(url) { sourceButton.onclick=()=>{ window.open(url,'_blank','noopener,noreferrer'); }; }
+  }
+  function revealCandidate(id) {
+    if(!canvas || root.classList.contains('compare-compact'))return;
+    const button=all('[data-action="preview-candidate"]').find(node=>node.dataset.id===id);
+    const card=button?.closest('.compare-candidate'),list=card?.closest('.compare-candidate-list');
+    if(!card||!list)return;
+    const camera=canvas.snapshot(),scale=camera.scale;
+    const safe={left:34,right:1672-520-64,top:300,bottom:941-72};
+    const box={left:list.offsetLeft+card.offsetLeft,top:list.offsetTop+card.offsetTop,width:card.offsetWidth,height:card.offsetHeight};
+    let x=camera.x,y=camera.y;
+    const left=x+box.left*scale,right=x+(box.left+box.width)*scale,top=y+box.top*scale,bottom=y+(box.top+box.height)*scale;
+    if(right>safe.right)x-=right-safe.right;
+    if(left<safe.left)x+=safe.left-left;
+    if(bottom>safe.bottom)y-=bottom-safe.bottom;
+    if(top<safe.top)y+=safe.top-top;
+    if(x===camera.x&&y===camera.y)return;
+    const world=$('[data-canvas-world]');world?.classList.add('is-camera-settling');
+    canvas.set({x,y},{reason:'reader-reveal'});
+    window.setTimeout(()=>world?.classList.remove('is-camera-settling'),400);
+  }
+  function openReader(id) {
+    const item=current.candidates?.find(candidate=>candidate.id===id); if(!item)return;
+    if(!previewCandidateId) candidateCamera=canvas?.snapshot?.() || null;
+    previewCandidateId=id; renderReader(item); requestAnimationFrame(()=>revealCandidate(id)); root.querySelector('[data-action="commit-candidate"]')?.focus({preventScroll:true});
+  }
+  function closeReader() {
+    if(!previewCandidateId)return;
+    const focusTarget=current.candidates?.find(item=>item.id===previewCandidateId);
+    previewCandidateId=null; renderReader(null); restoreCandidateCamera();
+    if(focusTarget) all('[data-id]').find(node=>node.dataset.id===focusTarget.id)?.focus({preventScroll:true});
+  }
+  function commitReaderCandidate() {
+    const item=readerItem(); if(!item)return;
+    const id=item.id; previewCandidateId=null; renderReader(null); candidateCamera=null;
+    emit({type:'OPEN_CANDIDATE',id});
   }
   function animateScreen() {
     animation?.cancel?.();
@@ -136,7 +215,8 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     list.dataset.signature=signature;list.replaceChildren();
     items.forEach((item,index)=>{
       const article=document.createElement('article');article.className=`compare-candidate compare-paper ${index===0?'compare-candidate-emphasis':''}`;
-      article.innerHTML=`${index===0?'<div class="compare-glass" data-glass></div>':''}<div class="compare-candidate-head"><span class="compare-round-icon ${index===2?'compare-warm-icon':''}">${icon(index===2?'folder':'file')}</span><div><h2></h2><p class="compare-source-badge"></p></div></div><p class="compare-candidate-excerpt"></p><p class="compare-candidate-relation"><i></i><span></span></p><button type="button" class="compare-button ${index===0?'compare-primary':''}" data-action="open-candidate"><span>${index===0?'放在一起看':'看看这一处'}</span>${icon('next')}</button><span class="compare-decision" hidden></span>`;
+      article.dataset.canvasInteractive='true'; article.dataset.canvasIndex=String(index);
+      article.innerHTML=`${index===0?'<div class="compare-glass" data-glass></div>':''}<div class="compare-candidate-head"><span class="compare-round-icon ${index===2?'compare-warm-icon':''}">${icon(index===2?'folder':'file')}</span><div><h2></h2><p class="compare-source-badge"></p></div></div><p class="compare-candidate-excerpt"></p><p class="compare-candidate-relation"><i></i><span></span></p><button type="button" class="compare-button ${index===0?'compare-primary':''}" data-action="preview-candidate"><span>${index===0?'放在一起看':'看看这一处'}</span>${icon('next')}</button><span class="compare-decision" hidden></span>`;
       article.querySelector('h2').textContent=item.title;
       article.querySelector('.compare-source-badge').textContent=sourceBadge(item);
       article.querySelector('.compare-candidate-excerpt').textContent=item.summary || item.preview || item.excerpt;
@@ -210,7 +290,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     const nextScreen=templates[current?.screen]?current.screen:'search';
     const changed=screen!==nextScreen;
     const changedCandidate=selectedId!==current.selectedId;
-    if(changed){closeModal();glass.forEach(g=>g.destroy());glass=[];screen=nextScreen;main.innerHTML=templates[screen];root.dataset.screen=screen;setBirds();setupGlass();animateScreen();}
+    if(changed){closeModal();previewCandidateId=null;candidateCamera=null;disposeCanvas();glass.forEach(g=>g.destroy());glass=[];screen=nextScreen;main.innerHTML=templates[screen];root.dataset.screen=screen;setBirds();setupGlass();setupCanvas(screen);animateScreen();}
     selectedId=current.selectedId;
     const item=candidate();
     $('[data-shell="first"]').textContent=screen==='returned'?'在意的事':asText(current.matter?.title);
@@ -240,7 +320,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     }
     if(screen==='candidates'){
       text('candidatesHeading',(current.candidates?.length===3)?'找到三处值得看看':current.candidates?.length?`找到 ${current.candidates.length} 处值得看看`:'再换个角度找找');
-      field('adjust',adjustDraft);renderCandidates();
+      field('adjust',adjustDraft);renderCandidates();renderReader(readerItem());
     }
     if(screen==='compare'){
       text('candidateIndex',`返回候选 · ${Math.max(0,current.candidates?.findIndex(c=>c.id===current.selectedId)??0)+1} / ${current.candidates?.length||0}`);
@@ -300,9 +380,13 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     if(action==='close-modal'){closeModal(true);return;}
     if(action==='cancel-revision'){closeModal(true);return;}
     if(action==='changes'){openChanges();return;}
+    if(action==='preview-candidate'){openReader(target.dataset.id);return;}
+    if(action==='close-reader'){closeReader();return;}
+    if(action==='commit-candidate'){commitReaderCandidate();return;}
+    if(action==='reader-source'){return;}
     if(action==='adjust-with-text'){if(adjustDraft.trim())emit({type:'QUERY_PATCH',patch:{instructions:adjustDraft}});emit({type:'ADJUST_SEARCH'});return;}
     const mapped={adjust:'ADJUST_SEARCH',another:'ADJUST_SEARCH','back-candidates':'BACK_TO_CANDIDATES',revision:'OPEN_REVISION','confirm-revision':'CONFIRM_REVISION',reject:'REJECT',undo:'UNDO_REVISION','clear-notice':'CLEAR_NOTICE'};
-    if(action==='open-candidate')emit({type:'OPEN_CANDIDATE',id:target.dataset.id});else if(mapped[action])emit({type:mapped[action]});
+    if(mapped[action])emit({type:mapped[action]});
   }
   function input(event) {
     const el=event.target;if(composing.has(el))return;
@@ -325,9 +409,15 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
   }
   function compositionStart(event){composing.add(event.target);}
   function compositionEnd(event){composing.delete(event.target);input(event);}
-  function keydown(event){if(event.isComposing)return;if(event.key==='Escape'&&!dialog.open&&scopeOpen){scopeOpen=false;$('.compare-scopes-popover').hidden=true;$('.compare-scopes-button').focus();}}
+  function keydown(event){
+    if(event.isComposing)return;
+    if(event.key==='Escape'&&!dialog.open){
+      if(previewCandidateId){event.preventDefault();closeReader();return;}
+      if(scopeOpen){scopeOpen=false;$('.compare-scopes-popover').hidden=true;$('.compare-scopes-button').focus();}
+    }
+  }
   function cancel(event){event.preventDefault();closeModal(true);}
   root.addEventListener('click',click);root.addEventListener('input',input);root.addEventListener('change',change);root.addEventListener('submit',submit);root.addEventListener('compositionstart',compositionStart);root.addEventListener('compositionend',compositionEnd);root.addEventListener('keydown',keydown);dialog.addEventListener('cancel',cancel);
   update(view);resize();
-  return {update,destroy(){if(dead)return;dead=true;observer?.disconnect();animation?.cancel?.();glass.forEach(g=>g.destroy());root.removeEventListener('click',click);root.removeEventListener('input',input);root.removeEventListener('change',change);root.removeEventListener('submit',submit);root.removeEventListener('compositionstart',compositionStart);root.removeEventListener('compositionend',compositionEnd);root.removeEventListener('keydown',keydown);dialog.removeEventListener('cancel',cancel);if(dialog.open)dialog.close();root.replaceChildren();root.classList.remove('compare-root','compare-compact');root.style.removeProperty('background-image');delete root.dataset.screen;delete root.dataset.environment;delete root.dataset.fontFallback;}};
+  return {update,destroy(){if(dead)return;dead=true;observer?.disconnect();animation?.cancel?.();disposeCanvas();glass.forEach(g=>g.destroy());root.removeEventListener('click',click);root.removeEventListener('input',input);root.removeEventListener('change',change);root.removeEventListener('submit',submit);root.removeEventListener('compositionstart',compositionStart);root.removeEventListener('compositionend',compositionEnd);root.removeEventListener('keydown',keydown);dialog.removeEventListener('cancel',cancel);if(dialog.open)dialog.close();root.replaceChildren();root.classList.remove('compare-root','compare-compact');root.style.removeProperty('background-image');delete root.dataset.screen;delete root.dataset.environment;delete root.dataset.fontFallback;}};
 }
