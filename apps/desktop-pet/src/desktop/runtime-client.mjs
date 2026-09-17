@@ -76,6 +76,11 @@ const normalizePathKey = (value, platform = process.platform) => {
   const resolved = path.resolve(value)
   return platform === 'win32' ? resolved.toLowerCase() : resolved
 }
+const canonicalPathKey = value => {
+  let canonical = path.resolve(value)
+  try { canonical = fs.realpathSync.native(canonical) } catch { /* a stale stored path still gets case-normalized below */ }
+  return normalizePathKey(canonical)
+}
 
 function publicDiagnostic(code, message, action = 'choose-project') {
   return { code, message, action }
@@ -175,10 +180,21 @@ function gitIdentity(projectDir) {
     if (common) commonDir = path.resolve(gitDir, common)
   } catch { /* a normal repository has no commondir file */ }
   try { commonDir = fs.realpathSync.native(commonDir) } catch { commonDir = path.resolve(commonDir) }
-  // Branch selection is part of a confirmed worktree binding, but its moving
-  // commit is not. Including the resolved ref SHA here would turn every normal
-  // commit on the same branch into an identity drift and force re-confirmation.
-  const branchRef = headContent.match(/^ref:\s*(refs\/[A-Za-z0-9._/-]+)$/)?.[1] || 'detached'
+  // HEAD syntax alone is not a repository proof: a copied descriptor beside
+  // a hand-written `.git/HEAD` must stay a candidate.  A real Git repository
+  // (including a linked worktree) has its config and object database in the
+  // common git directory.  Requiring those durable markers also prevents a
+  // deleted repository from remaining executable after its HEAD file survives.
+  try {
+    const configStat = fs.statSync(path.join(commonDir, 'config'))
+    const objectsStat = fs.statSync(path.join(commonDir, 'objects'))
+    if (!configStat.isFile() || !objectsStat.isDirectory()) return null
+  } catch { return null }
+  // Named branch selection is part of a confirmed worktree binding, but its
+  // moving commit is not. A detached checkout has no moving branch name, so
+  // retain its commit identity and stop when the detached checkout changes.
+  const branchRef = headContent.match(/^ref:\s*(refs\/[A-Za-z0-9._/-]+)$/)?.[1]
+    || `detached:${headContent.toLowerCase()}`
   return { gitKind: stat.isFile() ? 'worktree' : 'repository', gitDir, commonDir, pointer, branchRef, gitEntryIdentity, gitDirIdentity }
 }
 
@@ -293,7 +309,7 @@ export function inspectDesktopProject({ projectDir, source = 'startup-cwd' } = {
 
 function sameProjectIdentity(left, right) {
   return Boolean(left && right && left.projectId === right.projectId && left.fingerprint === right.fingerprint
-    && normalizePathKey(left.canonicalPath) === normalizePathKey(right.canonicalPath))
+    && canonicalPathKey(left.canonicalPath) === canonicalPathKey(right.canonicalPath))
 }
 
 function publicProjectBinding(binding) {
@@ -714,7 +730,7 @@ export function createRuntimeCapabilityClient({
     if (confirmedIdentity) {
       if (observed.identity && sameProjectIdentity(observed.identity, confirmedIdentity)) {
         observed.status = PROJECT_BINDING_STATES.CONFIRMED
-        projectContext = { projectDir: observed.internalPath, projectName: observed.projectName, identity: observed.identity }
+        projectContext = { projectDir: observed.identity.canonicalPath, projectName: observed.projectName, identity: observed.identity }
         projectBinding = observed
       } else {
         // Keep the old identity for comparison but expose the new observation
@@ -729,7 +745,7 @@ export function createRuntimeCapabilityClient({
         }
       }
     } else {
-      projectContext = observed.identity ? { projectDir: observed.internalPath, projectName: observed.projectName, identity: observed.identity } : undefined
+      projectContext = observed.identity ? { projectDir: observed.identity.canonicalPath, projectName: observed.projectName, identity: observed.identity } : undefined
       if (userConfirmedProject && observed.identity) observed.status = PROJECT_BINDING_STATES.CONFIRMED
       projectBinding = observed
       if (observed.status === PROJECT_BINDING_STATES.CONFIRMED) confirmedIdentity = observed.identity
@@ -785,18 +801,23 @@ export function createRuntimeCapabilityClient({
     confirmedIdentity = binding.identity
     binding.status = PROJECT_BINDING_STATES.CONFIRMED
     projectBinding = binding
-    projectContext = { projectDir: binding.internalPath, projectName: binding.projectName, identity: binding.identity }
+    projectContext = { projectDir: binding.identity.canonicalPath, projectName: binding.projectName, identity: binding.identity }
     return { ...publicProjectBinding(binding), connected: true, projectName: binding.projectName, agentLabel: 'Codex', locationLabel: '已确认项目' }
   }
 
   function confirmProjectBinding() {
     const binding = refreshProjectBinding()
+    // An existing confirmed identity that no longer matches the observation
+    // is a drift state, not a fresh candidate.  Re-confirming this object
+    // would silently bless a descriptor/repository replacement without the
+    // explicit project-picker step required for a new binding.
+    if (binding.status === PROJECT_BINDING_STATES.CONFLICT_OR_DRIFT) throw projectBindingError(binding, true)
     if (!binding.identity) throw projectBindingError(binding, true)
     userConfirmedProject = true
     confirmedIdentity = binding.identity
     binding.status = PROJECT_BINDING_STATES.CONFIRMED
     projectBinding = binding
-    projectContext = { projectDir: binding.internalPath, projectName: binding.projectName, identity: binding.identity }
+    projectContext = { projectDir: binding.identity.canonicalPath, projectName: binding.projectName, identity: binding.identity }
     return { ...publicProjectBinding(binding), connected: true, projectName: binding.projectName, agentLabel: 'Codex', locationLabel: '已确认项目' }
   }
 
@@ -842,7 +863,7 @@ export function createRuntimeCapabilityClient({
     const canonicalPath = evidence.canonicalPath ?? evidence.canonical_path
     if (typeof projectId !== 'string' || projectId !== expectedIdentity.projectId) return false
     if (fingerprint !== undefined && fingerprint !== null && (typeof fingerprint !== 'string' || fingerprint !== expectedIdentity.fingerprint)) return false
-    if (canonicalPath !== undefined && canonicalPath !== null && (typeof canonicalPath !== 'string' || !path.isAbsolute(canonicalPath) || normalizePathKey(canonicalPath) !== normalizePathKey(expectedIdentity.canonicalPath))) return false
+    if (canonicalPath !== undefined && canonicalPath !== null && (typeof canonicalPath !== 'string' || !path.isAbsolute(canonicalPath) || canonicalPathKey(canonicalPath) !== canonicalPathKey(expectedIdentity.canonicalPath))) return false
     return typeof fingerprint === 'string' || typeof canonicalPath === 'string'
   }
 
@@ -858,7 +879,7 @@ export function createRuntimeCapabilityClient({
     if (canonicalPath !== undefined && canonicalPath !== null && typeof canonicalPath !== 'string') throw new Error(`${label}返回了不可验证的项目身份，已停止旧项目操作`)
     if (typeof projectId === 'string' && projectId !== expectedIdentity.projectId) throw new Error(`${label}属于另一个 Trace 项目，已停止旧项目操作`)
     if (typeof fingerprint === 'string' && fingerprint !== expectedIdentity.fingerprint) throw new Error(`${label}属于另一个仓库或 worktree，已停止旧项目操作`)
-    if (typeof canonicalPath === 'string' && (!path.isAbsolute(canonicalPath) || normalizePathKey(canonicalPath) !== normalizePathKey(expectedIdentity.canonicalPath))) throw new Error(`${label}属于另一个仓库或 worktree，已停止旧项目操作`)
+    if (typeof canonicalPath === 'string' && (!path.isAbsolute(canonicalPath) || canonicalPathKey(canonicalPath) !== canonicalPathKey(expectedIdentity.canonicalPath))) throw new Error(`${label}属于另一个仓库或 worktree，已停止旧项目操作`)
   }
 
   function rememberExecution(workId, value) {
@@ -876,6 +897,7 @@ export function createRuntimeCapabilityClient({
       response = await fetchImpl(url, {
         method: body === undefined ? 'GET' : 'POST',
         redirect: 'error',
+        cache: 'no-store',
         signal: AbortSignal.timeout(timeoutMs),
         headers: {
           origin: backendOrigin,
@@ -899,6 +921,9 @@ export function createRuntimeCapabilityClient({
   async function runtimeEventStream(runId, after = 0) {
     const encoded = encodeURIComponent(requireId(runId, 'Agent 运行'))
     if (!Number.isSafeInteger(after) || after < 0) throw new Error('Agent 事件游标不正确')
+    // SSE is a long-lived capability call too.  Do not let a stale stream
+    // keep talking to a port that has been reused by another service.
+    await ensureRuntimeIdentity()
     const url = new URL(`/api/agent/runs/${encoded}/events?after=${after}`, backendOrigin)
     let response
     try {
@@ -979,12 +1004,29 @@ export function createRuntimeCapabilityClient({
     return `${url.pathname}${url.search}`
   }
 
-  function safePanelSession(item) {
+  function safePanelSession(item, binding) {
+    const projectRef = typeof item?.project_ref === 'string' ? item.project_ref : ''
+    let project = '个人空间（未绑定项目）'
+    const hasProjectRef = item?.project_ref !== undefined && item?.project_ref !== null && item?.project_ref !== ''
+    if (hasProjectRef) {
+      let current = false
+      try {
+        current = binding?.status === PROJECT_BINDING_STATES.CONFIRMED
+          && typeof projectContext?.projectDir === 'string'
+          && path.isAbsolute(projectRef)
+          && canonicalPathKey(projectRef) === canonicalPathKey(projectContext.projectDir)
+      } catch { /* an untrusted row must never break the whole panel */ }
+      project = current ? '已绑定当前项目' : '已绑定指定项目（当前身份另行核对）'
+    }
     return {
       host: safePanelText(item?.host, 40) || DESKTOP_HOST,
       sessionId: safePanelText(item?.session_id || item?.sessionId, 200),
       status: safePanelText(item?.status, 40) || 'unknown',
-      project: item?.project_ref ? '已绑定当前项目' : '个人空间（未绑定项目）',
+      // The list endpoint only gives us a project path.  It does not prove
+      // that the row belongs to the currently selected/confirmed binding, so
+      // only a canonical match against a confirmed binding gets the current
+      // project label.
+      project,
       updatedAt: safePanelText(item?.last_event_at || item?.updated_at, 80),
     }
   }
@@ -1024,6 +1066,9 @@ export function createRuntimeCapabilityClient({
    * bodies, repository paths, hashes or provider credentials.
    */
   async function readRuntimePanel() {
+    // Resolve this once before the parallel reads so session labels can only
+    // claim the current project when the local binding is confirmed.
+    const binding = projectBindingPublic()
     const optional = (pathname) => runtimeRequest(pathname, undefined, 12_000, { items: [] }).catch(() => ({ items: [] }))
     const [workspace, sessions, turns, findings, jobs, proposals, activations, worker, guard, policies, orchestrations, trials] = await Promise.all([
       runtimeRequest('/api/product/workspace'),
@@ -1049,9 +1094,9 @@ export function createRuntimeCapabilityClient({
       host: DESKTOP_HOST,
       sessionId: DESKTOP_HOST_SESSION,
       sessionKind: 'synthetic-bridge',
-      projectBinding: projectBindingPublic(),
+      projectBinding: binding,
       revision: Number.isSafeInteger(workspace?.revision) ? workspace.revision : 0,
-      sessions: array(sessions).slice(0, 24).map(safePanelSession),
+      sessions: array(sessions).slice(0, 24).map((item) => safePanelSession(item, binding)),
       turnCount: array(turns).length,
       findings: array(findings).slice(0, 24).map(safePanelFinding),
       jobs: array(jobs).slice(0, 24).map((item) => safePanelItem(item, ['status', 'execution_mode', 'error_code'])),
@@ -1156,6 +1201,8 @@ export function createRuntimeCapabilityClient({
       const body = { ...base, scope: ['personal', 'project', 'cross-project'].includes(request.scope) ? request.scope : 'project', targetRoot: boundProject.projectDir, ...(Array.isArray(request.allowedCapabilityKinds) ? { allowedCapabilityKinds: request.allowedCapabilityKinds.slice(0, 16) } : {}), ...(request.validationRequirements && typeof request.validationRequirements === 'object' ? { validationRequirements: request.validationRequirements } : {}) }
       const result = await runtimeRequest('/api/product/host/publication-policy/preview', body)
       if (!result?.policy_id) throw new Error('发布策略预览没有返回可确认回执')
+      if (result.scope !== body.scope) throw new Error('发布策略预览返回了不同的发布范围，已停止旧项目操作')
+      if (typeof result.target_root !== 'string' || !path.isAbsolute(result.target_root) || canonicalPathKey(result.target_root) !== canonicalPathKey(boundProject.projectDir)) throw new Error('发布策略预览返回了另一个仓库或 worktree，已停止旧项目操作')
       const token = `policy-preview:${randomId()}`
       remember(publicationPreviews, token, { body, identity: boundProject.identity, policyId: result.policy_id, scope: result.scope, targetRoot: result.target_root, allowedCapabilityKinds: result.allowed_capability_kinds, validationRequirements: result.validation_requirements, expiresAt: result.expires_at })
       return { protocolVersion: 1, status: 'preview', previewId: token, scope: safePanelText(result.scope, 80), requiresConfirmation: true }
@@ -1236,12 +1283,17 @@ export function createRuntimeCapabilityClient({
       || !['GET', 'PUT'].includes(method)
       || method === 'PUT' && pathname !== '/api/web/workspace'
       || method === 'PUT' && typeof body !== 'string') throw new Error('不支持这个桌面工作区操作')
+    // The workspace bridge intentionally bypasses runtimeRequest because it
+    // returns a raw response to the renderer, but it must still perform the
+    // same product-service identity handshake as JSON capability calls.
+    await ensureRuntimeIdentity()
     const url = new URL(pathname, backendOrigin)
     let response
     try {
       response = await fetchImpl(url, {
         method,
         redirect: 'error',
+        cache: 'no-store',
         signal: AbortSignal.timeout(35_000),
         headers: {
           origin: backendOrigin,
@@ -1397,6 +1449,11 @@ export function createRuntimeCapabilityClient({
       return { ready: checked.authenticated === true, authenticated: checked.authenticated === true, version: checked.version || null, label: resolution.profile.label || 'Codex', profileId: resolution.profile.profileId, profileStatus: 'resolved', resolutionReason: resolution.reason }
     }
     if (request.operation === 'setup.codex.connect') {
+      // Installing the Codex bridge mutates the host configuration and is a
+      // capability entrypoint even though it does not use runtimeRequest.
+      // Refuse to modify Codex while the loopback port is unverified or has
+      // been reused by another Trace installation.
+      await ensureRuntimeIdentity()
       const runtimeRoot = process.env.TRACE_RUNTIME_ROOT
       const installer = runtimeRoot && path.join(runtimeRoot, 'native', 'install-codex-plugin.mjs')
       if (!installer || !path.isAbsolute(installer) || !fs.existsSync(installer)) throw new Error('当前安装没有找到 Codex 连接组件')
@@ -1528,7 +1585,28 @@ export function createRuntimeCapabilityClient({
     }
     if (request.operation === 'work.read') {
       const workId = boundedText(request.workId, '工作', 512)
+      // Reading a native work can feed its result back into the browser
+      // workspace (see returnToNativeWork), so it is project-bound even though
+      // it does not itself execute Codex.  Do not import a result while the
+      // selected project is only a candidate or has drifted.
+      const project = requireConfirmedProject()
       const workspace = await runtimeRequest('/api/product/workspace')
+      const existingWork = workspace.host?.worksite?.works?.[workId]
+      const existingSession = workspace.host?.worksite?.sessions?.[workId]
+      if (existingWork && existingSession) {
+        if (typeof existingWork.agent !== 'string' || existingWork.agent.trim().toLocaleLowerCase() !== 'codex') throw new Error('这项工作不是 Codex 工作，未读取外部结果')
+        const expectedIdentity = project.identity
+        verifyStoredProjectIdentity(existingWork.connection, expectedIdentity, '这项工作')
+        verifyStoredProjectIdentity(existingSession.codexDelivery, expectedIdentity, 'Codex 带入回执')
+        const storedPath = existingWork.connection?.projectDir ?? existingWork.connection?.project_dir
+          ?? existingSession.codexDelivery?.projectDir ?? existingSession.codexDelivery?.project_dir
+        if (storedPath !== undefined && storedPath !== null && typeof storedPath !== 'string') throw new Error('这项工作返回了不可验证的项目身份，已停止旧项目操作')
+        if (storedPath && (!path.isAbsolute(storedPath) || canonicalPathKey(storedPath) !== canonicalPathKey(project.projectDir))) throw new Error('这项工作已经绑定另一个仓库或 worktree，已停止旧项目操作')
+        const remembered = rememberedWorkBinding(workId)
+        if (remembered && !projectIdentityMatchesEvidence(remembered, expectedIdentity)) throw new Error('这项工作已经绑定另一个项目，已停止旧项目操作')
+        if (!remembered && !storedPath && typeof existingWork.agent === 'string' && existingWork.agent.trim().toLocaleLowerCase() === 'codex') throw new Error('这项历史工作没有可验证的项目身份，未使用 basename 猜测')
+      }
+      ensureBindingUnchanged(project.identity)
       const visible = safeWorkResult(workspace, workId)
       const execution = executionBindings.get(workId) || { workId, hostSessionId: `${DESKTOP_HOST_SESSION}:${workId}` }
       return visible ? { ...visible, projectBinding: projectBindingPublic(), execution: safeExecutionIdentity(execution) } : null
@@ -1578,7 +1656,7 @@ export function createRuntimeCapabilityClient({
         verifyStoredProjectIdentity(workspace.host?.worksite?.sessions?.[workId]?.codexDelivery, projectIdentityAtStart, 'Codex 带入回执')
         if (remembered && !projectIdentityMatchesEvidence(remembered, projectIdentityAtStart)) throw new Error('这项工作已经绑定另一个项目，已停止旧项目操作；请重新创建工作')
         if (storedPath !== undefined && storedPath !== null && typeof storedPath !== 'string') throw new Error('这项工作返回了不可验证的项目身份，已停止旧项目操作')
-        if (storedPath && (!path.isAbsolute(storedPath) || normalizePathKey(storedPath) !== normalizePathKey(projectDir))) throw new Error('这项工作已经绑定另一个仓库或 worktree，已停止旧项目操作；请重新选择项目')
+        if (storedPath && (!path.isAbsolute(storedPath) || canonicalPathKey(storedPath) !== canonicalPathKey(projectDir))) throw new Error('这项工作已经绑定另一个仓库或 worktree，已停止旧项目操作；请重新选择项目')
         if (!remembered && !storedPath) throw new Error('这项历史工作没有可验证的项目身份，未使用 basename 猜测；请在当前项目重新创建工作')
         if (!remembered) rememberWorkBinding(workId, projectIdentityAtStart)
       }
@@ -1607,7 +1685,7 @@ export function createRuntimeCapabilityClient({
       const deliveryProjectDir = delivery.projectDir ?? delivery.project_dir
       verifyStoredProjectIdentity(delivery, projectIdentityAtStart, 'Codex 带入回执')
       if (deliveryProjectDir !== undefined && deliveryProjectDir !== null && typeof deliveryProjectDir !== 'string') throw new Error('Codex 带入回执返回了不可验证的项目身份，已停止旧项目操作')
-      if (deliveryProjectDir && (!path.isAbsolute(deliveryProjectDir) || normalizePathKey(deliveryProjectDir) !== normalizePathKey(projectDir))) throw new Error('Codex 带入回执属于另一个仓库或 worktree，已停止旧项目操作')
+      if (deliveryProjectDir && (!path.isAbsolute(deliveryProjectDir) || canonicalPathKey(deliveryProjectDir) !== canonicalPathKey(projectDir))) throw new Error('Codex 带入回执属于另一个仓库或 worktree，已停止旧项目操作')
 
       workspace = await runtimeRequest('/api/product/workspace')
       ensureBindingUnchanged(projectIdentityAtStart)

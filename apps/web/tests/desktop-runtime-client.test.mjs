@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
@@ -34,8 +34,9 @@ const RUNTIME_IDENTITY = Object.freeze({
 const identityFetch = async () => response(RUNTIME_IDENTITY)
 
 async function makeTraceProject(projectDir, { projectId = 'project-fixture', instanceId = `instance-${projectId}` } = {}) {
-  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  await mkdir(path.join(projectDir, '.git', 'objects'), { recursive: true })
   await writeFile(path.join(projectDir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
+  await writeFile(path.join(projectDir, '.git', 'config'), '[core]\n\trepositoryformatversion = 0\n')
   await mkdir(path.join(projectDir, '.trace'), { recursive: true })
   await writeFile(path.join(projectDir, '.trace', 'project.json'), JSON.stringify({
     protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: projectId,
@@ -198,6 +199,50 @@ test('desktop project identity distinguishes repositories with the same basename
   assert.equal(switched.projectId, 'right-project')
 })
 
+test('desktop does not treat a hand-written Git HEAD marker as a verified repository', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-fake-git-'))
+  const projectDir = path.join(root, 'project')
+  await makeTraceProject(projectDir, { projectId: 'fake-git-project' })
+  await rm(path.join(projectDir, '.git', 'config'))
+  await rm(path.join(projectDir, '.git', 'objects'), { recursive: true })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const binding = inspectDesktopProject({ projectDir, source: 'user-selection' })
+  assert.equal(binding.status, PROJECT_BINDING_STATES.CANDIDATE)
+  assert.equal(binding.repositoryVerified, false)
+  assert.match(binding.diagnostic?.code || '', /repository-missing/)
+})
+
+test('desktop project binding canonicalizes symlinked project paths for native actions', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-symlink-identity-'))
+  const projectDir = path.join(root, 'real-project')
+  const aliasDir = path.join(root, 'project-alias')
+  await makeTraceProject(projectDir, { projectId: 'symlink-project' })
+  try {
+    await symlink(projectDir, aliasDir, 'junction')
+  } catch (error) {
+    t.skip('directory junctions are unavailable in this environment: ' + (error instanceof Error ? error.message : String(error)))
+    return
+  }
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const canonicalPath = await realpath(projectDir)
+  const calls = []
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: identityFetch,
+    origin: 'http://127.0.0.1:4444',
+    projectDir: aliasDir,
+    fetchImpl: async (url, init) => {
+      calls.push({ pathname: url.pathname, body: init.body ? JSON.parse(init.body) : undefined })
+      return response({ status: 'attached' })
+    },
+  })
+  const environment = await client.request({ operation: 'work.environment' })
+  assert.equal(environment.connected, true)
+  const attached = await client.request({ operation: 'host.panel.action', action: 'session.attach' })
+  assert.equal(attached.status, 'attached')
+  assert.equal(calls[0].pathname, '/api/product/host/session/attach')
+  assert.equal(calls[0].body.projectRef, canonicalPath)
+})
+
 test('desktop binding survives commits on the confirmed branch but stops on branch drift', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'trace-project-branch-identity-'))
   const projectDir = path.join(root, 'project')
@@ -215,6 +260,82 @@ test('desktop binding survives commits on the confirmed branch but stops on bran
   const drifted = await client.request({ operation: 'work.environment' })
   assert.equal(drifted.connected, false)
   assert.equal(drifted.projectBinding.status, PROJECT_BINDING_STATES.CONFLICT_OR_DRIFT)
+})
+
+test('desktop binding treats a detached-head checkout change as repository drift', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-detached-head-identity-'))
+  const projectDir = path.join(root, 'project')
+  await makeTraceProject(projectDir, { projectId: 'detached-project' })
+  await writeFile(path.join(projectDir, '.git', 'HEAD'), '1'.repeat(40) + '\n')
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: identityFetch,
+    origin: 'http://127.0.0.1:4449',
+    projectDir,
+    fetchImpl: async () => response({ revision: 0, host: null }),
+  })
+  assert.equal((await client.request({ operation: 'work.environment' })).connected, true)
+  await writeFile(path.join(projectDir, '.git', 'HEAD'), '2'.repeat(40) + '\n')
+  const drifted = await client.request({ operation: 'work.environment' })
+  assert.equal(drifted.connected, false)
+  assert.equal(drifted.projectBinding.status, PROJECT_BINDING_STATES.CONFLICT_OR_DRIFT)
+})
+
+test('desktop project confirmation cannot bless an already confirmed drift without reselection', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-confirm-drift-'))
+  const projectDir = path.join(root, 'project')
+  await makeTraceProject(projectDir, { projectId: 'confirm-drift-project', instanceId: 'confirm-drift-instance-1' })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const descriptorFile = path.join(projectDir, '.trace', 'project.json')
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: identityFetch,
+    origin: 'http://127.0.0.1:4451',
+    projectDir,
+    fetchImpl: async () => response({ revision: 0, host: null }),
+  })
+  await client.request({ operation: 'work.project.confirm' })
+  await writeFile(descriptorFile, JSON.stringify({
+    protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: 'confirm-drift-project',
+    instance_id: 'confirm-drift-instance-2', template_id: 'fixture', template_version: '0.1.0',
+    source_mode: 'local', source_scope: 'project', state_file: '.trace/state/trace.sqlite',
+    source_root: '.trace/source', created_at: '2026-09-17T00:00:00.000Z',
+  }))
+  assert.equal((await client.request({ operation: 'work.environment' })).projectBinding.status, PROJECT_BINDING_STATES.CONFLICT_OR_DRIFT)
+  await assert.rejects(client.request({ operation: 'work.project.confirm' }), /项目或仓库 worktree 已变化|漂移/)
+  assert.equal((await client.request({ operation: 'work.environment' })).projectBinding.status, PROJECT_BINDING_STATES.CONFLICT_OR_DRIFT)
+})
+
+test('desktop native work reads stop instead of importing a result after project drift', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-read-drift-'))
+  const projectDir = path.join(root, 'project')
+  await makeTraceProject(projectDir, { projectId: 'read-drift-project' })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const descriptorFile = path.join(projectDir, '.trace', 'project.json')
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: identityFetch,
+    origin: 'http://127.0.0.1:4450',
+    projectDir,
+    fetchImpl: async (url) => url.pathname === '/api/product/workspace' ? response({
+      revision: 1,
+      host: {
+        worksite: {
+          works: { 'work-read-drift': { id: 'work-read-drift', agent: 'Codex', project: 'project' } },
+          sessions: { 'work-read-drift': { codexReturns: [{ result: { fact: '旧结果' } }] } },
+        },
+      },
+    }) : response({ items: [] }),
+  })
+  assert.equal((await client.request({ operation: 'work.environment' })).connected, true)
+  await writeFile(descriptorFile, JSON.stringify({
+    protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: 'read-drift-project',
+    instance_id: 'read-drift-instance-2', template_id: 'fixture', template_version: '0.1.0',
+    source_mode: 'local', source_scope: 'project', state_file: '.trace/state/trace.sqlite',
+    source_root: '.trace/source', created_at: '2026-09-17T00:00:00.000Z',
+  }))
+  await assert.rejects(
+    client.request({ operation: 'work.read', workId: 'work-read-drift' }),
+    /项目或仓库 worktree 已变化|漂移/,
+  )
 })
 
 test('desktop does not bind a legacy work by its display basename alone', async (t) => {
@@ -341,6 +462,20 @@ test('desktop setup hides transport and non-JSON runtime errors from the product
   })
 })
 
+test('desktop Codex bridge installation fails closed when the runtime identity is not verified', async () => {
+  let handshakes = 0
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4415',
+    identityFetchImpl: async () => response({ ...RUNTIME_IDENTITY, workspace_id: handshakes++ === 0 ? 'workspace-test' : 'workspace-reused-port' }),
+    fetchImpl: async () => response({ status: 'unexpected' }),
+  })
+  await client.request({ operation: 'capabilities' })
+  await assert.rejects(
+    client.request({ operation: 'setup.codex.connect' }),
+    /另一个安装或工作区/,
+  )
+})
+
 test('desktop Zhihu status hides redirect and transport implementation errors', async () => {
   const client = createRuntimeCapabilityClient({ identityFetchImpl: identityFetch,
     cloudFetchImpl: async () => { throw new TypeError("Attempted to redirect, but redirect policy was 'error'") },
@@ -415,6 +550,84 @@ test('desktop workspace bridge proxies only bounded local storage routes with it
   assert.deepEqual(JSON.parse(read.body).storage, { kind: 'sqlite', label: 'Trace 桌面端本机空间' })
   assert.equal(read.body.includes('AppData'), false)
   await assert.rejects(client.request({ operation: 'workspace.request', pathname: '/api/product/workspace', method: 'GET' }), /不支持/)
+})
+
+test('desktop workspace bridge re-handshakes before every raw response request', async () => {
+  let handshakes = 0
+  let rawRequests = 0
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: async () => response({ ...RUNTIME_IDENTITY, workspace_id: handshakes++ === 0 ? 'workspace-test' : 'workspace-reused-port' }),
+    origin: 'http://127.0.0.1:4432',
+    fetchImpl: async () => { rawRequests += 1; return response({ revision: 1, host: null }) },
+  })
+  await client.request({ operation: 'workspace.request', pathname: '/api/web/workspace', method: 'GET' })
+  await assert.rejects(
+    client.request({ operation: 'workspace.request', pathname: '/api/web/workspace', method: 'GET' }),
+    /另一个安装或工作区/,
+  )
+  assert.equal(handshakes, 2)
+  assert.equal(rawRequests, 1, 'a mismatched raw workspace request must not reach the backend')
+})
+
+test('desktop Agent event streams re-handshake before connecting to a reused port', async () => {
+  let handshakes = 0
+  let eventRequests = 0
+  const encoder = new TextEncoder()
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: async () => response({ ...RUNTIME_IDENTITY, workspace_id: handshakes++ === 0 ? 'workspace-test' : 'workspace-reused-port' }),
+    origin: 'http://127.0.0.1:4433',
+    fetchImpl: async (url) => {
+      assert.equal(url.pathname, '/api/agent/runs/run-1/events')
+      eventRequests += 1
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('event: progress\ndata: {"step":1}\n\n'))
+          controller.close()
+        },
+      }), { headers: { 'content-type': 'text/event-stream' } })
+    },
+  })
+  const stream = await client.request({ operation: 'agent.run.events', runId: 'run-1' })
+  assert.deepEqual(stream.events, [{ type: 'progress', id: '', data: { step: 1 } }])
+  await assert.rejects(
+    client.request({ operation: 'agent.run.events', runId: 'run-1' }),
+    /另一个安装或工作区/,
+  )
+  assert.equal(handshakes, 2)
+  assert.equal(eventRequests, 1, 'a mismatched SSE request must not reach the backend')
+})
+
+test('desktop runtime panel does not mislabel every session project as the current binding', async () => {
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: identityFetch,
+    origin: 'http://127.0.0.1:4434',
+    fetchImpl: async (url) => {
+      if (url.pathname === '/api/product/host/sessions') return response({ items: [{ host: 'codex', session_id: 'session-other', status: 'attached', project_ref: 'C:\\other\\repo' }] })
+      if (url.pathname === '/api/product/workspace') return response({ revision: 0, host: null })
+      return response({ items: [] })
+    },
+  })
+  const panel = await client.request({ operation: 'host.panel.read' })
+  assert.equal(panel.sessions[0].project, '已绑定指定项目（当前身份另行核对）')
+})
+
+test('desktop runtime panel labels a session as current only after canonical path match', async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trace-project-panel-identity-'))
+  const projectDir = path.join(root, 'project')
+  await makeTraceProject(projectDir, { projectId: 'panel-project' })
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const client = createRuntimeCapabilityClient({
+    identityFetchImpl: identityFetch,
+    origin: 'http://127.0.0.1:4452',
+    projectDir,
+    fetchImpl: async (url) => {
+      if (url.pathname === '/api/product/host/sessions') return response({ items: [{ host: 'codex', session_id: 'session-current', status: 'attached', project_ref: projectDir }] })
+      if (url.pathname === '/api/product/workspace') return response({ revision: 0, host: null })
+      return response({ items: [] })
+    },
+  })
+  const panel = await client.request({ operation: 'host.panel.read' })
+  assert.equal(panel.sessions[0].project, '已绑定当前项目')
 })
 
 test('desktop pet reads and writes the same authoritative workspace as the product window', async () => {

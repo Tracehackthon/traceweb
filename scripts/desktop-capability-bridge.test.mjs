@@ -35,7 +35,7 @@ test('desktop bridge exposes a safe worksite projection and bounded controls', a
     if (parsed.pathname === '/api/product/host/capability/trials') return json({ items: [{ status: 'queued', trial_id: 'trial-1', orchestration_id: 'orch-1', revision: 0, outcome: null }] })
     if (parsed.pathname === '/api/product/host/repository/preflight') return json({ protocolVersion: 1, preflight_id: 'backend-preflight-1', state_hash: 'state-hash-1', action: 'create-branch' })
     if (parsed.pathname === '/api/product/host/repository/apply') return json({ protocolVersion: 1, status: 'applied' })
-    if (parsed.pathname === '/api/product/host/publication-policy/preview') return json({ protocolVersion: 1, policy_id: 'policy-preview-1', scope: 'project', target_root: 'C:\\private\\project', allowed_capability_kinds: ['skill'], validation_requirements: { schema: 'passed' } })
+    if (parsed.pathname === '/api/product/host/publication-policy/preview') return json({ protocolVersion: 1, policy_id: 'policy-preview-1', scope: 'project', target_root: projectDir, allowed_capability_kinds: ['skill'], validation_requirements: { schema: 'passed' } })
     if (parsed.pathname === '/api/product/host/publication-policy/adopt') return json({ protocolVersion: 1, status: 'active' })
     if (parsed.pathname === '/api/product/host/capability/trial/create') return json({ protocolVersion: 1, status: 'trial_queued' })
     if (parsed.pathname === '/api/product/host/session/attach') return json({ status: 'attached' })
@@ -47,8 +47,9 @@ test('desktop bridge exposes a safe worksite projection and bounded controls', a
   }
   const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-panel-'))
   const projectDir = path.join(fixtureRoot, 'project')
-  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  await mkdir(path.join(projectDir, '.git', 'objects'), { recursive: true })
   await writeFile(path.join(projectDir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
+  await writeFile(path.join(projectDir, '.git', 'config'), '[core]\n\trepositoryformatversion = 0\n')
   await mkdir(path.join(projectDir, '.trace'), { recursive: true })
   await writeFile(path.join(projectDir, '.trace', 'project.json'), JSON.stringify({
     protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: 'panel-project',
@@ -60,7 +61,7 @@ test('desktop bridge exposes a safe worksite projection and bounded controls', a
     const client = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:42731', cloudOrigin: 'https://trace.neutrom.store', projectDir, fetchImpl, identityFetchImpl: identityFetch, cloudFetchImpl: fetchImpl })
   const panel = await client.request({ operation: 'host.panel.read' })
   assert.equal(panel.connected, true)
-  assert.equal(panel.sessions[0].project, '已绑定当前项目')
+  assert.equal(panel.sessions[0].project, '已绑定指定项目（当前身份另行核对）')
   assert.equal(panel.findings[0].summary, '持续记录一个工作信号')
   assert.equal(panel.recovery[0].expectedBranch, '已记录目标分支')
   assert.equal(panel.policies[0].id, 'policy-1')
