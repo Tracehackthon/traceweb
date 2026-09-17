@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { createRuntimeCapabilityClient } from '../apps/desktop-pet/src/desktop/runtime-client.mjs'
 
 function json(value, status = 200, headers = {}) {
@@ -35,7 +38,19 @@ test('desktop bridge exposes a safe worksite projection and bounded controls', a
     if (parsed.pathname === '/api/zhihu/user/read') return json({ resource: calls.at(-1)?.body?.kind, items: [] })
     throw new Error(`unexpected request: ${parsed.pathname}`)
   }
-  const client = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:42731', cloudOrigin: 'https://trace.neutrom.store', projectDir: process.cwd(), fetchImpl, cloudFetchImpl: fetchImpl })
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-panel-'))
+  const projectDir = path.join(fixtureRoot, 'project')
+  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  await writeFile(path.join(projectDir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
+  await mkdir(path.join(projectDir, '.trace'), { recursive: true })
+  await writeFile(path.join(projectDir, '.trace', 'project.json'), JSON.stringify({
+    protocol_id: 'trace.project-instance', protocol_version: '0.2.0', project_id: 'panel-project',
+    instance_id: 'panel-instance', template_id: 'fixture', template_version: '0.1.0', source_mode: 'local',
+    source_scope: 'project', state_file: '.trace/state/trace.sqlite', source_root: '.trace/source',
+    created_at: '2026-09-17T00:00:00.000Z',
+  }))
+  try {
+    const client = createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:42731', cloudOrigin: 'https://trace.neutrom.store', projectDir, fetchImpl, cloudFetchImpl: fetchImpl })
   const panel = await client.request({ operation: 'host.panel.read' })
   assert.equal(panel.connected, true)
   assert.equal(panel.sessions[0].project, '已绑定当前项目')
@@ -57,11 +72,14 @@ test('desktop bridge exposes a safe worksite projection and bounded controls', a
   await client.request({ operation: 'agent.run.adoption', runId: 'run-1', action: 'dismiss' })
   const user = await client.request({ operation: 'zhihu.user.read', kind: 'favorite_items', favorite_id: 'favorite-1', limit: 10, offset: '0' })
   assert.equal(user.resource, 'favorite_items')
-  assert.equal(calls.find((item) => item.path === '/api/product/host/session/attach').body.projectRef, process.cwd())
+  assert.equal(calls.find((item) => item.path === '/api/product/host/session/attach').body.projectRef, projectDir)
   assert.equal(calls.find((item) => item.path === '/api/zhihu/user/read').body.limit, 10)
   const applyCall = calls.find((item) => item.path === '/api/product/host/repository/apply')
   assert.equal(applyCall.body.preflightId, 'backend-preflight-1')
   assert.equal(applyCall.body.expectedStateHash, 'state-hash-1')
   assert.equal(calls.find((item) => item.path === '/api/product/host/publication-policy/adopt').body.approval, 'adopt:policy-preview-1')
-  await assert.rejects(() => client.request({ operation: 'zhihu.user.read', kind: 'favorites', limit: 11, offset: '0' }), /bounded|最多|Invalid/)
+    await assert.rejects(() => client.request({ operation: 'zhihu.user.read', kind: 'favorites', limit: 11, offset: '0' }), /bounded|最多|Invalid/)
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true })
+  }
 })

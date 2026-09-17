@@ -63,7 +63,10 @@ export function TracePanel({
   ].filter(Boolean).join(' · ')
 
   useEffect(() => {
-    if (!profileId && (agent?.defaultProfileId || profiles[0]?.profileId)) setProfileId(agent?.defaultProfileId || profiles[0].profileId)
+    if (profileId) return
+    const configured = profiles.find((profile: any) => profile.profileId === agent?.defaultProfileId)?.profileId
+    const unique = profiles.length === 1 ? profiles[0]?.profileId : ''
+    if (configured || unique) setProfileId(configured || unique)
   }, [agent?.defaultProfileId, profiles.length, profileId])
 
   useEffect(() => {
@@ -200,8 +203,8 @@ export function TracePanel({
         {discussionNotice && <p className="trace-inline-notice">{discussionNotice}</p>}
         <section className="trace-runtime-tools" aria-label="知乎与 Agent 能力">
           <div className="trace-runtime-heading"><div><span className="trace-eyebrow">LIVE CAPABILITIES</span><strong>让来源和 Agent 参与</strong></div><span className={capabilities?.connected ? 'trace-runtime-online' : 'trace-runtime-offline'}>{capabilities?.loading ? '检查中' : capabilities?.connected ? 'Runtime 已连接' : '未连接'}</span></div>
-          <div className="trace-runtime-controls"><select aria-label="搜索范围" value={sourceMode} disabled={Boolean(capabilityBusy)} onChange={(event) => setSourceMode(event.target.value as 'zhihu' | 'global')}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select>{profiles.length > 0 && <select aria-label="Agent 执行器" value={profileId} disabled={Boolean(capabilityBusy)} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option key={profile.profileId} value={profile.profileId}>{profile.label || profile.profileId}</option>)}</select>}</div>
-          <div className="trace-action-row"><button className="trace-button trace-button-secondary" type="button" disabled={!capabilities?.search?.enabled || Boolean(capabilityBusy)} onClick={() => void search()}>{capabilityBusy === 'search' ? '正在搜索…' : '查找来源'}</button><button className="trace-button trace-button-primary" type="button" disabled={!agent?.enabled || Boolean(capabilityBusy)} onClick={() => void runAgent()}>{capabilityBusy === 'agent' ? 'Agent 处理中…' : '交给 Agent'}</button></div>
+          <div className="trace-runtime-controls"><select aria-label="搜索范围" value={sourceMode} disabled={Boolean(capabilityBusy)} onChange={(event) => setSourceMode(event.target.value as 'zhihu' | 'global')}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select>{profiles.length > 0 && <select aria-label="Agent 执行器" value={profileId} disabled={Boolean(capabilityBusy)} onChange={(event) => setProfileId(event.target.value)}>{!profileId && <option value="">请选择 Agent 执行器</option>}{profiles.map((profile: any) => <option key={profile.profileId} value={profile.profileId}>{profile.label || profile.profileId}</option>)}</select>}</div>
+          <div className="trace-action-row"><button className="trace-button trace-button-secondary" type="button" disabled={!capabilities?.search?.enabled || Boolean(capabilityBusy)} onClick={() => void search()}>{capabilityBusy === 'search' ? '正在搜索…' : '查找来源'}</button><button className="trace-button trace-button-primary" type="button" disabled={!agent?.enabled || !profileId || Boolean(capabilityBusy)} onClick={() => void runAgent()}>{capabilityBusy === 'agent' ? 'Agent 处理中…' : '交给 Agent'}</button></div>
           {!capabilities?.connected && <small>{capabilities?.error?.message || '启动 trace-runtime，并设置 TRACE_ZHIHU_ENABLED=1 与 TRACE_AGENT_ENABLED=1。'}</small>}
           {capabilities?.connected && !capabilities?.search?.enabled && <small>{capabilities?.search?.error?.message || '本机 Runtime 尚未启用知乎公开搜索。'}</small>}
           {capabilities?.connected && !agent?.enabled && <small>{agent?.error?.message || '本机 Runtime 尚未启用 Agent 执行器。'}</small>}
