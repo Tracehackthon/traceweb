@@ -248,8 +248,11 @@ export function createRuntimeCapabilityClient({
   function rememberCodexThreadId(workId, run) {
     const threadId = safeThreadId(run?.runtime?.threadId || run?.threadId)
     if (!threadId) return null
+    const previous = codexThreadIds.get(workId)
     codexThreadIds.set(workId, threadId)
-    try { setCodexThreadId?.(workId, threadId) } catch { /* Local resume state is best effort. */ }
+    if (threadId !== previous) {
+      try { setCodexThreadId?.(workId, threadId) } catch { /* Local resume state is best effort. */ }
+    }
     return threadId
   }
 

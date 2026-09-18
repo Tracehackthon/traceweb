@@ -353,6 +353,7 @@ test('desktop runtime client keeps Zhihu OAuth and user reads behind bounded nat
 
 test('desktop bridge auto-binds the current project and returns a Codex work result without exposing paths', async (t) => {
   const calls = []
+  const savedThreads = []
   const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-test-'))
   const projectDir = path.join(fixtureRoot, 'traceweb')
   await mkdir(path.join(projectDir, '.git'), { recursive: true })
@@ -375,6 +376,7 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
     origin: 'http://127.0.0.1:4420',
     projectDir,
     getCodexThreadId: (workId) => workId === 'work-1' ? 'persisted-codex-thread' : null,
+    setCodexThreadId: (workId, threadId) => savedThreads.push({ workId, threadId }),
     wait: async () => {},
     now: () => 0,
     fetchImpl: async (url, init) => {
@@ -409,5 +411,6 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
   assert.equal(calls[1].body.operations[1].destination.project, 'traceweb')
   assert.equal(calls[2].body.projectDir, projectDir)
   assert.equal(calls[5].body.threadId, 'persisted-codex-thread')
+  assert.deepEqual(savedThreads, [])
   assert.deepEqual(calls[6].body.result.artifacts, [])
 })
