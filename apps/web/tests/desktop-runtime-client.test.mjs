@@ -7,6 +7,7 @@ import {
   DEFAULT_CLOUD_ORIGIN,
   DEFAULT_RUNTIME_ORIGIN,
   createRuntimeCapabilityClient,
+  resolveProjectDir,
   resolveCodexExecutable,
   validateRuntimeOrigin,
 } from '../../desktop-pet/src/desktop/runtime-client.mjs'
@@ -46,6 +47,26 @@ test('desktop discovers the Codex App executable outside a stale Explorer PATH',
   t.after(() => rm(root, { recursive: true, force: true }))
   assert.equal(resolveCodexExecutable({ env: { LOCALAPPDATA: root, PATH: '' }, platform: 'win32' }), executable)
   assert.equal(resolveCodexExecutable({ env: { TRACE_CODEX_BIN: 'C:\\explicit\\codex.exe', LOCALAPPDATA: root }, platform: 'win32' }), 'C:\\explicit\\codex.exe')
+})
+
+test('an explicitly selected non-Git folder remains a usable Codex working project', async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-plain-project-'))
+  const projectDir = path.join(fixtureRoot, 'notes-and-prototype')
+  await mkdir(projectDir, { recursive: true })
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+
+  assert.equal(resolveProjectDir(projectDir, { allowPlainDirectory: true }), projectDir)
+
+  const client = createRuntimeCapabilityClient({
+    fetchImpl: async (url) => url.pathname === '/api/agent/capabilities'
+      ? response({ enabled: true, profiles: [{ profileId: 'local-codex', kind: 'codex' }] })
+      : response({ error: { message: 'not found' } }, 404),
+  })
+  const selected = client.setProjectDir(projectDir)
+  assert.deepEqual(selected, { connected: true, projectName: 'notes-and-prototype', repository: false, agentLabel: 'Codex', locationLabel: '已选择工作文件夹' })
+  const setup = await client.request({ operation: 'setup.status' })
+  assert.deepEqual(setup.project, { connected: true, name: 'notes-and-prototype', repository: false })
+  assert.equal(JSON.stringify(setup).includes(projectDir), false)
 })
 
 test('desktop runtime client discovers search and Agent independently', async () => {

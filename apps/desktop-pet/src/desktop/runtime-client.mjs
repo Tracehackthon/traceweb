@@ -54,16 +54,21 @@ export function resolveCodexExecutable({ env = process.env, platform = process.p
   return existing[0]
 }
 
-function findProjectDir(start = process.env.TRACE_PROJECT_DIR || process.cwd()) {
+export function resolveProjectDir(start = process.env.TRACE_PROJECT_DIR || process.cwd(), { allowPlainDirectory = false } = {}) {
   let current = path.resolve(start)
   if (!fs.existsSync(current) || !fs.statSync(current).isDirectory()) throw new Error('当前项目位置不可用，请从项目目录启动 Trace 桌宠')
+  const selected = current
+  // The folder picker is an explicit user decision. Keep that exact working
+  // directory even when a parent folder happens to contain an unrelated
+  // `.git` marker; Codex can work in both Git and non-Git directories.
+  if (allowPlainDirectory) return selected
   while (true) {
     if (fs.existsSync(path.join(current, '.git'))) return current
     const parent = path.dirname(current)
     if (parent === current) break
     current = parent
   }
-  throw new Error('没有找到当前项目，请从项目目录启动 Trace 桌宠，或设置 TRACE_PROJECT_DIR')
+  throw new Error('还没有选择工作项目，请在 Trace 中选择一个文件夹')
 }
 
 function safeProjectName(projectDir) {
@@ -178,6 +183,7 @@ export function createRuntimeCapabilityClient({
   if (cloudBase.protocol !== 'https:' || cloudBase.username || cloudBase.password || cloudBase.pathname !== '/' || cloudBase.search || cloudBase.hash) throw new Error('TRACE_CLOUD_ORIGIN must be an HTTPS origin')
   let projectContext
   let selectedProjectDir = configuredProjectDir
+  let hasExplicitProjectDir = typeof configuredProjectDir === 'string' && configuredProjectDir.trim().length > 0
   const repositoryPreflights = new Map()
   const recoveryPreviews = new Map()
   const publicationPreviews = new Map()
@@ -197,16 +203,17 @@ export function createRuntimeCapabilityClient({
   }
   const currentProject = () => {
     if (!projectContext) {
-      const projectDir = findProjectDir(selectedProjectDir)
-      projectContext = { projectDir, projectName: safeProjectName(projectDir) }
+      const projectDir = resolveProjectDir(selectedProjectDir, { allowPlainDirectory: hasExplicitProjectDir })
+      projectContext = { projectDir, projectName: safeProjectName(projectDir), repository: fs.existsSync(path.join(projectDir, '.git')) }
     }
     return projectContext
   }
   const setProjectDir = (projectDir) => {
     selectedProjectDir = projectDir
+    hasExplicitProjectDir = true
     projectContext = undefined
     const selected = currentProject()
-    return { connected: true, projectName: selected.projectName, agentLabel: 'Codex', locationLabel: '已选择项目' }
+    return { connected: true, projectName: selected.projectName, repository: selected.repository, agentLabel: 'Codex', locationLabel: selected.repository ? '已选择 Git 项目' : '已选择工作文件夹' }
   }
 
   const setupProgress = (event) => {
@@ -942,7 +949,7 @@ export function createRuntimeCapabilityClient({
       try { project = currentProject() } catch { project = null }
       return {
         runtime: { connected: true, bundled: runtime?.bundled === true || process.env.TRACE_BUNDLED_RUNTIME === '1', ...(runtime?.state ? { state: runtime.state } : {}) },
-        project: project ? { connected: true, name: project.projectName } : { connected: false },
+        project: project ? { connected: true, name: project.projectName, repository: project.repository } : { connected: false },
         codex: { available: Boolean(codex), checked: false, profileId: codex?.profileId || null, label: codex?.label || 'Codex' },
       }
     }

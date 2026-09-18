@@ -4,6 +4,7 @@ import { homeEntries, mattersView, recordsOf, titleOf } from '../product/library
 import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
 import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork, searchPublic } from './capability-client';
 import { classifyWorkspaceLoadFailure, publicWorkspaceLoadMessage, WORKSPACE_LOAD_STATES, workspaceDataState, workspaceError, withWorkspaceTimeout } from './workspace-load.mjs';
+import { canNavigateWhileSavePending } from './save-navigation.mjs';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceLoadState, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -346,7 +347,7 @@ export class WebRuntime {
       }
       data = await response.json();
     } catch {
-      this.setStatus('error', '保存未确认。内容仍在页面中，请重试或导出。');
+      this.setStatus('error', '当前修改尚未保存；此前已保存的内容仍可浏览。你可以重试或导出当前修改。');
       throw new Error('保存连接中断');
     }
     if (!response.ok) {
@@ -495,8 +496,8 @@ export class WebRuntime {
   }
 
   navigate(next: RouteMemory, { replace = false, origin }: RouteNavigationOptions = {}): void {
-    if (this.pendingPayload && this.continuation) {
-      this.message('本次保存尚未确认，请先重试或导出内容。');
+    if (this.pendingPayload && this.continuation && !canNavigateWhileSavePending(next)) {
+      this.message('当前修改尚未保存。此前已保存的内容仍可浏览；继续这一步前，请重试保存或导出当前修改。');
       return;
     }
     this.retain();
