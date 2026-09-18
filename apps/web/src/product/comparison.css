@@ -346,10 +346,17 @@
 .compare-root .compare-heading{z-index:5;pointer-events:none}
 .compare-root .compare-heading h1,.compare-root .compare-heading p{pointer-events:auto}
 .compare-root .compare-canvas-world .compare-candidate-list{overflow:visible}
-.compare-root .compare-canvas-world .compare-candidate{overflow:visible}
-.compare-root .compare-canvas-world .compare-candidate-head{max-height:none;overflow:visible}
-.compare-root .compare-canvas-world .compare-candidate-excerpt,.compare-root .compare-canvas-world .compare-candidate-relation{max-height:none;overflow:visible}
-.compare-root .compare-canvas-world .compare-candidate-excerpt{overflow-wrap:anywhere}
+.compare-root .compare-canvas-world .compare-candidate{overflow:hidden}
+/* Real public results are often much longer than the authored demo copy.  The
+   canvas card is a stable preview, not a second article reader: clamp each
+   semantic region and keep the action in flow, then expose the complete title,
+   excerpt and context in the adjacent reader panel. */
+.compare-root .compare-canvas-world .compare-candidate-head{max-height:94px;overflow:hidden}
+.compare-root .compare-canvas-world .compare-candidate h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.compare-root .compare-canvas-world .compare-source-badge{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.compare-root .compare-canvas-world .compare-candidate-excerpt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;max-height:99px;overflow:hidden;overflow-wrap:anywhere}
+.compare-root .compare-canvas-world .compare-candidate-relation{display:flex;max-height:68px;overflow:hidden}
+.compare-root .compare-canvas-world .compare-candidate-relation span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
 
 .compare-root .compare-reader-panel{position:absolute;z-index:22;top:84px;right:22px;bottom:18px;width:520px;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #ffffffed;border-radius:28px;background:linear-gradient(145deg,#fbfefcf4,#eef8f3f2);box-shadow:0 23px 70px #2559472c,inset 0 1px 0 #fff;color:#17352e;opacity:1;transform:translateX(0);transition:opacity .25s ease,transform .38s cubic-bezier(.16,1,.3,1)}
 .compare-root .compare-reader-panel[data-open=false]{opacity:0;transform:translateX(22px);pointer-events:none}

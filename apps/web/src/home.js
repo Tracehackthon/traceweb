@@ -1127,10 +1127,21 @@ listen(mount,'change',event=>{
     notify(captureAgent==='none'?label:`已选择 ${label}；提交后先准备交接，只有桌宠连接时才会运行。`)
   }
 })
+function resizeCaptureInput(input=$('#capture-input')){
+  if(!input)return
+  const compact=scene.dataset.viewport==='compact'
+  const base=compact?48:30,max=compact?96:86,composerBase=compact?178:121
+  input.style.height='auto'
+  const height=Math.max(base,Math.min(max,input.scrollHeight))
+  input.style.removeProperty('height')
+  input.style.setProperty('--capture-input-height',`${height}px`)
+  input.closest('.home-composer')?.style.setProperty('--capture-composer-height',`${composerBase+height-base}px`)
+  input.setAttribute('aria-multiline','true')
+}
 listen(mount,'input',event=>{
   if(event.target.id==='home-search'){updateSearch(event.target.value);return}
   if(event.target.matches('textarea')){event.target.form.querySelector('[type=submit]').disabled=!event.target.value.trim();if(event.target.id==='detail-input')drafts.set(draftKey(),event.target.value)}
-  if(event.target.id==='capture-input')onDraft?.(event.target.value)
+  if(event.target.id==='capture-input'){resizeCaptureInput(event.target);onDraft?.(event.target.value)}
 })
   listen(mount,'keydown',event=>{
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();if(onSearch)onSearch();else openUtility('search');return}
@@ -1214,6 +1225,7 @@ function resizeScene(){
     }
   }
   canvas.refresh()
+  resizeCaptureInput()
   clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{for(const [el,material]of materials)if(!el.hidden)material.refresh()},180)
 }
 listen(window,'resize',resizeScene)
@@ -1230,6 +1242,7 @@ if (['thinking','work'].includes(state.mode)) {
   mountSceneMotion(state.active, state.mode)?.setExpanded(true, { immediate: true })
 }
 if(snapshot?.captureDraft){$('#capture-input').value=snapshot.captureDraft;$('#capture-form [type=submit]').disabled=!snapshot.captureDraft.trim()}
+resizeCaptureInput()
 function destroy() {
   controller.abort();actionRevision++;cancelAnimations()
   destroySceneMotion()

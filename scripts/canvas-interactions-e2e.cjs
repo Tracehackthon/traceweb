@@ -124,7 +124,18 @@ async function mountCandidateFixture(page) {
   return page.evaluate(async () => {
     const model = await import('/src/product/comparison-model.mjs');
     const module = await import('/src/product/comparison-screen.mjs');
-    let state = model.createComparisonState();
+    const long = '真实知乎收藏与公开内容会带来远长于演示数据的标题和摘要，个人表达与原现场因此必须在稳定候选卡里预览，并把完整内容交给旁边的阅读栏。';
+    const candidates = Array.from({ length: 3 }, (_, index) => ({
+      id: `long-${index}`,
+      title: `${long}${long}${index + 1}`,
+      kind: 'external', source: 'zhihu', sourceType: '知乎公开内容', author: `作者${index + 1}`,
+      excerpt: `${long}${long}${long}${long}`,
+      summary: `${long}${long}${long}`,
+      context: `${long}\n${long}\n${long}`,
+      url: `https://www.zhihu.com/question/${1000 + index}`,
+      relationship: { type: 'supplement', reason: `${long}${long}` },
+    }));
+    let state = model.createComparisonState({ candidates });
     state = model.reduceComparison(state, { type: 'SEARCH' });
     const shell = document.querySelector('.trace-react-shell');
     if (shell) shell.style.visibility = 'hidden';
@@ -170,6 +181,16 @@ async function run() {
   await page.goto(`${base}/app/demo?view=home`, { waitUntil: 'domcontentloaded' });
   await waitHome(page);
   await page.evaluate(() => document.fonts.ready);
+  const capture = page.locator('#capture-input');
+  const captureComposer = page.locator('.home-composer');
+  const captureBefore = await capture.boundingBox();
+  const composerBeforeTyping = await captureComposer.boundingBox();
+  await capture.fill('这是一次真实的较长输入，用来确认用户写下一整段还没想清楚的话时，输入区域会展开，而不是只让最后几个字露在细细的一行里。');
+  await page.waitForTimeout(220);
+  const captureAfter = await capture.boundingBox();
+  const composerAfterTyping = await captureComposer.boundingBox();
+  check('home capture grows to show long input before reaching its bounded scroll area', captureAfter.height > captureBefore.height && composerAfterTyping.height > composerBeforeTyping.height && captureAfter.height <= 86.5, { captureBefore, captureAfter, composerBeforeTyping, composerAfterTyping });
+  await capture.fill('');
   // The shared route host has a short entrance transform.  Let that settle so
   // fixed-chrome assertions compare the same scene frame before and after a
   // camera gesture, rather than capturing the intentional route transition.
@@ -500,6 +521,14 @@ async function run() {
   const candidateCanvas = fixture.locator('.compare-canvas-viewport');
   const candidateWorld = candidateCanvas.locator('[data-canvas-world]');
   check('candidate canvas lays out the real three-card catalog', await candidateCanvas.count() === 1 && await fixture.locator('.compare-candidate').count() === 3);
+  const cardContainment = await fixture.locator('.compare-candidate').evaluateAll((cards) => cards.map((card) => {
+    const button = card.querySelector('[data-action="preview-candidate"]');
+    const relation = card.querySelector('.compare-candidate-relation');
+    const box = card.getBoundingClientRect(), action = button.getBoundingClientRect(), relationBox = relation.getBoundingClientRect();
+    return { contained: action.bottom <= box.bottom + .5 && action.top >= relationBox.bottom - .5, card: box.toJSON(), action: action.toJSON(), relation: relationBox.toJSON() };
+  }));
+  check('real long candidates keep relation text and actions inside every preview card', cardContainment.every((item) => item.contained), { cardContainment });
+
   await candidateCanvas.locator('[data-canvas-action="zoom-in"]').click();
   check('candidate canvas shares explicit zoom controls', Number(await candidateCanvas.getAttribute('aria-valuenow')) > 100);
   await candidateCanvas.locator('[data-canvas-action="fit"]').click();
