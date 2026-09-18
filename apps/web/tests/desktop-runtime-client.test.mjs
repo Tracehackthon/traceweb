@@ -60,7 +60,7 @@ test('desktop runtime client discovers search and Agent independently', async ()
 test('desktop runtime client never sends backend paths or protocol fields to the renderer in errors', async () => {
   const client = createRuntimeCapabilityClient({
     origin: 'http://127.0.0.1:4416',
-    fetchImpl: async () => response({ error: { message: 'projectDir C:\\private\\repo failed with contextHash abc' } }, 500),
+    fetchImpl: async () => response({ error: { message: 'projectDir C:\\private\\repo failed with contextHash abc; pnpm schema rpc details are private' } }, 500),
   })
   await assert.rejects(
     client.request({ operation: 'search', source: 'zhihu', query: '边界', count: 1 }),

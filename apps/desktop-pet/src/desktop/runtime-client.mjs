@@ -81,7 +81,7 @@ function publicRuntimeError(value, status) {
   const fallback = `Trace 没有完成这次请求（${status}）`
   const message = typeof value?.error?.message === 'string' ? value.error.message.trim() : ''
   if (!message) return fallback
-  if (message.length > 500 || /(?:[A-Za-z]:[\\/]|\/(?:Users|home|var|tmp|private|opt|srv)\/|\b(?:projectDir|contextHash|deliveryId|endpoint|cwd|profileId)\b)/i.test(message)) return fallback
+  if (message.length > 500 || /(?:[A-Za-z]:[\\/]|\/(?:Users|home|var|tmp|private|opt|srv)\/|\b(?:projectDir|contextHash|deliveryId|endpoint|cwd|profileId|pnpm|schema|rpc)\b)/i.test(message)) return fallback
   return message
 }
 
