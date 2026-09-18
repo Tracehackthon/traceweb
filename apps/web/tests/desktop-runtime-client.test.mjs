@@ -26,6 +26,18 @@ test('desktop runtime client accepts only loopback HTTP origins', () => {
   assert.throws(() => validateRuntimeOrigin('http://127.0.0.1:4173/api'), /loopback HTTP origin/)
 })
 
+test('desktop runtime client retargets the dynamic bundled listener after retry', async () => {
+  const calls = []
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4400',
+    fetchImpl: async (url) => { calls.push(String(url)); return response({ revision: 0, host: null }) },
+  })
+  assert.equal(client.origin, 'http://127.0.0.1:4400')
+  assert.equal(client.setRuntimeOrigin('http://127.0.0.1:4401'), 'http://127.0.0.1:4401')
+  await client.request({ operation: 'workspace.request', pathname: '/api/web/workspace', method: 'GET' })
+  assert.deepEqual(calls, ['http://127.0.0.1:4401/api/web/workspace'])
+})
+
 test('desktop discovers the Codex App executable outside a stale Explorer PATH', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'trace-codex-discovery-'))
   const executable = path.join(root, 'OpenAI', 'Codex', 'bin', 'release-hash', 'codex.exe')

@@ -173,7 +173,7 @@ export function createRuntimeCapabilityClient({
   runtimeTimeoutMs = 35_000,
   workspaceTimeoutMs = 35_000,
 } = {}) {
-  const backendOrigin = validateRuntimeOrigin(origin)
+  let backendOrigin = validateRuntimeOrigin(origin)
   const cloudBase = new URL(cloudOrigin)
   if (cloudBase.protocol !== 'https:' || cloudBase.username || cloudBase.password || cloudBase.pathname !== '/' || cloudBase.search || cloudBase.hash) throw new Error('TRACE_CLOUD_ORIGIN must be an HTTPS origin')
   let projectContext
@@ -1248,5 +1248,10 @@ export function createRuntimeCapabilityClient({
     agentEventSubscriptions.clear()
   }
 
-  return { origin: backendOrigin, request: capabilityRequest, setProjectDir, subscribeAgentRun, close }
+  function setRuntimeOrigin(nextOrigin) {
+    backendOrigin = validateRuntimeOrigin(nextOrigin)
+    return backendOrigin
+  }
+
+  return { get origin() { return backendOrigin }, request: capabilityRequest, setRuntimeOrigin, setProjectDir, subscribeAgentRun, close }
 }

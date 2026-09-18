@@ -236,6 +236,7 @@ async function startBundledRuntime({ agentEnabled, cacheBust = false } = {}) {
     if (!bundledRuntime) bundledRuntime = loaded
     if (!binding || !Number.isInteger(Number(binding.port)) || Number(binding.port) < 1 || Number(binding.port) > 65_535) throw new Error('Trace 本机内容服务没有返回有效连接')
     if (!configuredBackendOrigin) backendOrigin = `http://127.0.0.1:${Number(binding.port)}`
+    capabilityClient?.setRuntimeOrigin?.(backendOrigin)
     return binding
   } catch (error) {
     try { await loaded?.close?.() } catch { /* startup cleanup is best effort */ }
