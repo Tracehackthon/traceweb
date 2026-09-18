@@ -3,7 +3,8 @@ import { productCommandRequest, workspaceRequest, storageLabel } from './workspa
 import { homeEntries, mattersView, recordsOf, titleOf } from '../product/library.mjs';
 import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
 import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork, searchPublic } from './capability-client';
-import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceSnapshot } from './types';
+import { classifyWorkspaceLoadFailure, publicWorkspaceLoadMessage, WORKSPACE_LOAD_STATES, workspaceDataState, workspaceError, withWorkspaceTimeout } from './workspace-load.mjs';
+import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceLoadState, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
 const uid = (kind: string) => `${kind}-${crypto.randomUUID()}`;
@@ -95,6 +96,7 @@ export class WebRuntime {
   private storage: any = null;
   private route: RouteMemory = fromUrl();
   private ready = false;
+  private loadState: WorkspaceLoadState = WORKSPACE_LOAD_STATES.loading as WorkspaceLoadState;
   private busy = false;
   private pendingPayload: any = null;
   private pendingOperations: any[] | null = null;
@@ -104,7 +106,9 @@ export class WebRuntime {
   private timer: number | undefined;
   private tail: Promise<unknown> = Promise.resolve();
   private continuation: (() => void) | null = null;
-  private startPromise: Promise<void> | null = null;
+  private loadInFlight: Promise<void> | null = null;
+  private loadGeneration = 0;
+  private recoveryDraft: { revision: number; host: any } | null = null;
   private routeRoot: HTMLElement | null = null;
   private nativeWorkReady = false;
   // Matters keeps a short-lived presentation state for the approved
@@ -117,7 +121,7 @@ export class WebRuntime {
   private snapshot: RuntimeSnapshot = this.makeSnapshot();
 
   private makeSnapshot(): RuntimeSnapshot {
-    return { host: this.host, revision: this.revision, storage: this.storage, ready: this.ready, busy: this.busy, pending: Boolean(this.pendingPayload || this.continuation || this.dirty > this.saved), status: this.status, error: this.error, dialog: this.dialog, route: this.route };
+    return { host: this.host, revision: this.revision, storage: this.storage, ready: this.ready, loadState: this.loadState, busy: this.busy, pending: Boolean(this.pendingPayload || this.continuation || this.dirty > this.saved), recoveryDraft: this.recoveryDraft, status: this.status, error: this.error, dialog: this.dialog, route: this.route };
   }
 
   private emit(): void {
@@ -139,9 +143,8 @@ export class WebRuntime {
   isReducedMotion = (): boolean => Boolean(this.host?.preferences?.reduceMotion) || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
   async start(): Promise<void> {
-    if (this.startPromise) return this.startPromise;
-    this.startPromise = this.loadWorkspace();
-    return this.startPromise;
+    if (this.ready) return;
+    return this.beginLoad('initial');
   }
 
   private setStatus(state: WebStatus['state'], text: string): void {
@@ -149,33 +152,114 @@ export class WebRuntime {
     this.emit();
   }
 
-  private async loadWorkspace(): Promise<void> {
-    this.setStatus('loading', `正在读取${storageLabel}中的内容…`);
+  private beginLoad(mode: 'initial' | 'retry' | 'saved'): Promise<void> {
+    if (this.loadInFlight) return this.loadInFlight;
+    const generation = ++this.loadGeneration;
+    const task = this.loadWorkspace(mode, generation);
+    let settled: Promise<void>;
+    settled = task.finally(() => {
+      if (this.loadInFlight === settled) this.loadInFlight = null;
+    });
+    this.loadInFlight = settled;
+    return settled;
+  }
+
+  private async readWorkspace(): Promise<{ data: any; state: WorkspaceLoadState }> {
+    let response: Response;
     try {
-      const response = await workspaceRequest('/api/web/workspace', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`读取本机内容失败（${response.status}），没有重置数据。`);
-      const data = await response.json();
-      if (!Number.isInteger(data.revision)) throw new Error('存储响应不正确');
-      this.host = data.host || (completeDemoMode ? createCompleteDemoWorkspace() : B.createBridge());
+      response = await withWorkspaceTimeout(workspaceRequest('/api/web/workspace', { cache: 'no-store' }));
+    } catch (cause) {
+      throw cause;
+    }
+    let data: any;
+    try {
+      data = await withWorkspaceTimeout(response.json(), { timeoutMs: 2_000, code: 'WORKSPACE_RESPONSE_INVALID', message: '工作区响应不完整，未覆盖已保存内容。' });
+    } catch (cause) {
+      if (cause && typeof cause === 'object' && 'code' in cause) throw cause;
+      throw workspaceError('工作区响应不完整，未覆盖已保存内容。', { code: 'WORKSPACE_RESPONSE_INVALID' });
+    }
+    if (!response.ok) {
+      const detail = data?.error;
+      throw workspaceError(typeof detail?.message === 'string' ? detail.message : `读取${storageLabel}失败。`, { code: detail?.code || 'STORAGE_FAILURE', status: response.status });
+    }
+    return { data, state: workspaceDataState(data) as WorkspaceLoadState };
+  }
+
+  private setLoadFailure(cause: unknown): void {
+    const state = classifyWorkspaceLoadFailure(cause) as WorkspaceLoadState;
+    this.loadState = state;
+    this.error = publicWorkspaceLoadMessage(state);
+    // A failed refresh must not hide a workspace already being edited. The
+    // initial shell has no safe host to mount, so it stays in the recovery
+    // surface instead of manufacturing an empty workspace.
+    if (!this.host) this.ready = false;
+    this.status = { state: 'error', text: this.error };
+    this.emit();
+  }
+
+  private applyLoadedWorkspace(data: any, state: WorkspaceLoadState, mode: 'initial' | 'retry' | 'saved'): void {
+    const keepLocal = mode === 'retry' && this.host !== null;
+    const diskHost = data.host ? clone(data.host) : (completeDemoMode ? createCompleteDemoWorkspace() : B.createBridge());
+    let repairedHost = diskHost;
+    try {
+      repairedHost = B.recoverPendingComparisons(diskHost);
+    } catch (cause) {
+      throw workspaceError('工作区结构或版本不正确，未覆盖已保存内容。', { code: 'INVALID_HOST' });
+    }
+    const needsRepair = !sameValue(repairedHost, diskHost);
+    if (!keepLocal) {
+      this.host = repairedHost;
       this.revision = data.revision;
       this.storage = data.storage;
-      const recovered = B.recoverPendingComparisons(this.host);
-      if (!sameValue(recovered, this.host)) {
-        this.host = recovered;
-        await this.save(this.host, uid('recovery'), [{ type: 'workspace.recover' }]);
-      }
-      if (!data.host && completeDemoMode) await this.save(this.host);
-      this.route = fromUrl();
-      await this.resumeHarnessHandoff();
-      this.ready = true;
-      this.error = null;
-      this.setPreferences();
-      this.setStatus('saved', `内容保存在${storageLabel}`);
+      this.pendingPayload = null;
+      this.pendingOperations = null;
+      this.continuation = null;
+      this.dirty = this.saved = 0;
+    } else {
+      // A refresh only validates the authoritative revision. It never replaces
+      // a host containing an unsaved draft or a surface the user is editing.
+      this.revision = data.revision;
+      this.storage = data.storage;
+    }
+    this.route = fromUrl();
+    const handoffOperations = !keepLocal && mode !== 'saved' ? this.resumeHarnessHandoff() : null;
+    this.ready = true;
+    this.loadState = (keepLocal ? WORKSPACE_LOAD_STATES.ready : state) as WorkspaceLoadState;
+    this.error = null;
+    if (mode === 'saved') this.recoveryGeneration += 1;
+    this.setPreferences();
+    if (!keepLocal && (needsRepair || (!data.host && completeDemoMode) || handoffOperations?.length)) {
+      const operations = [
+        ...(needsRepair ? [{ type: 'workspace.recover' }] : []),
+        ...(handoffOperations || []),
+      ];
+      // Schedule repair after the shell is usable; a slow or unavailable write
+      // must not turn a successful read back into an infinite startup spinner.
+      this.draft(this.host, operations.length ? operations : null);
+    } else if (this.pendingPayload || this.dirty > this.saved) {
+      this.status = { state: 'error', text: '未保存草稿仍在页面中，请重试保存或导出。' };
       this.emit();
+    } else {
+      this.status = { state: 'saved', text: mode === 'saved' ? '已载入本机保存的版本' : state === WORKSPACE_LOAD_STATES.empty ? '这是一个空的 Trace 空间，可以从这里开始。' : `内容保存在${storageLabel}` };
+      if (mode === 'saved') this.closeDialog();
+      this.emit();
+    }
+  }
+
+  private async loadWorkspace(mode: 'initial' | 'retry' | 'saved', generation: number): Promise<void> {
+    this.loadState = WORKSPACE_LOAD_STATES.loading as WorkspaceLoadState;
+    this.status = { state: 'loading', text: mode === 'saved' ? '正在读取已保存版本…' : `正在读取${storageLabel}中的内容…` };
+    this.emit();
+    try {
+      const result = await this.readWorkspace();
+      if (generation !== this.loadGeneration) return;
+      if (mode === 'saved' && (this.pendingPayload || this.dirty > this.saved)) {
+        this.recoveryDraft = { revision: this.revision, host: clone(this.host) };
+      }
+      this.applyLoadedWorkspace(result.data, result.state, mode);
     } catch (cause) {
-      this.error = cause instanceof Error ? cause.message : String(cause);
-      this.setStatus('error', '内容暂时无法读取。原有内容没有被覆盖，请重新加载。');
-      throw cause;
+      if (generation !== this.loadGeneration) return;
+      this.setLoadFailure(cause);
     }
   }
 
@@ -183,9 +267,9 @@ export class WebRuntime {
    * Turn a Harness observation into a normal Trace matter exactly once, then
    * remove the transient query parameters so refresh cannot create a copy.
    */
-  private async resumeHarnessHandoff(): Promise<void> {
+  private resumeHarnessHandoff(): any[] | null {
     const handoff = readHarnessHandoff();
-    if (!handoff || !this.host) return;
+    if (!handoff || !this.host) return null;
 
     const existing = this.host.chain.matters.find((item: any) => {
       const marker = item.externalHandoff;
@@ -224,7 +308,7 @@ export class WebRuntime {
         receivedAt: new Date().toISOString(),
       };
       this.host = next;
-      await this.save(next, uid('handoff'), [{
+      const operation = {
         type: 'capture.create',
         matterId,
         text: handoff.text,
@@ -234,12 +318,17 @@ export class WebRuntime {
           excerpt: handoff.text,
           context: handoff.origin === 'trace-native' ? '从 Trace 桌宠接续的原始现场。' : '从 DeepSeek Harness 接续的原始现场。',
         },
-      }]);
+      };
+      this.route = { view: 'chain', matterId, screen: 'resume' };
+      history.replaceState({ traceRoute: this.route }, '', urlFor(this.route));
+      try { sessionStorage.setItem(`trace:${location.search}`, JSON.stringify({ view: 'chain', matterId, screen: 'resume' })); } catch { /* storage can be disabled */ }
+      return [operation];
     }
 
     this.route = { view: 'chain', matterId, screen: 'resume' };
     history.replaceState({ traceRoute: this.route }, '', urlFor(this.route));
     try { sessionStorage.setItem(`trace:${location.search}`, JSON.stringify(this.route)); } catch { /* storage can be disabled */ }
+    return null;
   }
 
   private async save(value: any, commandId = uid('command'), operations: any[] | null = null): Promise<any> {
@@ -348,29 +437,14 @@ export class WebRuntime {
     }
   }
 
+  async retryLoad(): Promise<void> {
+    if (this.busy) return;
+    await this.beginLoad('retry');
+  }
+
   async loadSaved(): Promise<void> {
-    try {
-      const response = await workspaceRequest('/api/web/workspace', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`读取本机内容失败（${response.status}）`);
-      const data = await response.json();
-      this.host = B.recoverPendingComparisons(data.host || B.createBridge());
-      this.revision = data.revision;
-      this.storage = data.storage;
-      this.pendingPayload = null;
-      this.continuation = null;
-      this.dirty = this.saved = 0;
-      this.ready = true;
-      this.error = null;
-      // Explicitly replacing a workspace must remount scene adapters, which
-      // intentionally keep local input state during ordinary autosaves.
-      this.recoveryGeneration += 1;
-      this.setPreferences();
-      this.closeDialog();
-      this.setStatus('saved', '已载入本机保存的版本');
-      this.emit();
-    } catch (cause) {
-      this.message(cause instanceof Error ? cause.message : String(cause));
-    }
+    if (this.busy) return;
+    await this.beginLoad('saved');
   }
 
   private setPreferences(): void {

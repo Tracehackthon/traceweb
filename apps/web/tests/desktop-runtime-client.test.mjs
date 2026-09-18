@@ -203,6 +203,35 @@ test('desktop setup hides transport and non-JSON runtime errors from the product
   })
 })
 
+test('desktop setup reports a missing local listener without probing Agent', async () => {
+  let calls = 0
+  const client = createRuntimeCapabilityClient({
+    getRuntimeStatus: () => ({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务没有启动，请重试。' }),
+    fetchImpl: async () => { calls += 1; throw new Error('listener should not be probed') },
+  })
+  const setup = await client.request({ operation: 'setup.status' })
+  assert.equal(calls, 0)
+  assert.equal(setup.runtime.connected, false)
+  assert.equal(setup.runtime.state, 'failed')
+  assert.equal(setup.codex.available, false)
+  assert.equal(JSON.stringify(setup).includes('listener should not be probed'), false)
+})
+
+test('desktop workspace IPC has an explicit timeout for a missing listener', async () => {
+  const client = createRuntimeCapabilityClient({
+    workspaceTimeoutMs: 10,
+    // Keep a referenced timer in the fake transport so this test remains
+    // deterministic in Node, where AbortSignal.timeout uses an unref timer.
+    fetchImpl: async () => new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('connection aborted')), 20)
+    }),
+  })
+  await assert.rejects(
+    client.request({ operation: 'workspace.request', pathname: '/api/web/workspace', method: 'GET' }),
+    (error) => error.message === 'Trace 本机内容暂时无法访问，请重新打开 Trace 后再试',
+  )
+})
+
 test('desktop Zhihu status hides redirect and transport implementation errors', async () => {
   const client = createRuntimeCapabilityClient({
     cloudFetchImpl: async () => { throw new TypeError("Attempted to redirect, but redirect policy was 'error'") },

@@ -32,6 +32,8 @@ export interface WebStatus {
   text: string;
 }
 
+export type WorkspaceLoadState = 'loading' | 'ready' | 'empty' | 'recoverable-error' | 'unrecoverable-error';
+
 export interface DialogState {
   type: 'profile' | 'sources' | 'capability' | 'work-context' | 'message' | 'record';
   title: string;
@@ -55,8 +57,10 @@ export interface WorkspaceSnapshot {
   revision: number;
   storage: StorageInfo | null;
   ready: boolean;
+  loadState: WorkspaceLoadState;
   busy: boolean;
   pending: boolean;
+  recoveryDraft: { revision: number; host: any } | null;
   status: WebStatus;
   error: string | null;
   dialog: DialogState | null;

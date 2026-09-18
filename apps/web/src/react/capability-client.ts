@@ -5,6 +5,7 @@ export type SearchResult = { source: SearchSource; query: string; items: SearchI
 type NativeCapabilityBridge = {
   requestCapability?: (request: Record<string, unknown>) => Promise<any>;
   onSetupProgress?: (listener: (event: any) => void) => (() => void) | undefined;
+  getRuntimeStatus?: () => { connected?: boolean; bundled?: boolean; state?: string; message?: string } | null;
 };
 
 function nativeBridge(): NativeCapabilityBridge | undefined {
@@ -172,6 +173,12 @@ export async function desktopSetupStatus(): Promise<any> {
   return bridge.requestCapability({ operation: 'setup.status' });
 }
 
+export async function retryDesktopRuntime(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
+  return bridge.requestCapability({ operation: 'setup.runtime.retry' });
+}
+
 export async function selectDesktopProject(): Promise<any> {
   const bridge = nativeBridge();
   if (!bridge?.requestCapability) return null;
@@ -195,3 +202,21 @@ export function onDesktopSetupProgress(listener: (event: any) => void): (() => v
 }
 
 export function hasNativeCapabilityBridge(): boolean { return Boolean(nativeBridge()?.requestCapability); }
+
+export function nativeRuntimeStatus(): { connected?: boolean; bundled?: boolean; state?: string; message?: string } | null {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability || typeof bridge.getRuntimeStatus !== 'function') return null;
+  try { return bridge.getRuntimeStatus() || null; } catch { return null; }
+}
+
+export function nativeRuntimeConnected(): boolean {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return false;
+  const status = nativeRuntimeStatus();
+  return status ? status.connected === true : true;
+}
+
+export function nativeRuntimeUnavailable(): boolean {
+  const status = nativeRuntimeStatus();
+  return Boolean(status && status.connected === false && status.state !== 'starting');
+}

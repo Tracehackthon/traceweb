@@ -8,7 +8,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
-import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, onDesktopSetupProgress, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
+import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, nativeRuntimeConnected, nativeRuntimeUnavailable, onDesktopSetupProgress, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, retryDesktopRuntime, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
@@ -219,21 +219,27 @@ function RecoveryButton({ children, primary = false, className, ...props }: Reac
 }
 
 function StatusBar({ snapshot }: { snapshot: WorkspaceSnapshot }) {
-  const nativeConnected = hasNativeCapabilityBridge();
+  const nativeConnected = nativeRuntimeConnected();
   const statusText = (() => {
     if (!nativeConnected) return snapshot.status.text;
-    if (snapshot.status.state === 'loading') return '桌宠已连接 · 正在读取内容…';
+    if (snapshot.loadState === 'loading') return '桌宠已连接 · 正在读取内容…';
+    if (snapshot.loadState === 'recoverable-error') return `桌宠已连接 · ${snapshot.status.text}`;
+    if (snapshot.loadState === 'unrecoverable-error') return `桌宠已连接 · ${snapshot.status.text}`;
     if (snapshot.status.state === 'saving') return '桌宠已连接 · 正在保存…';
     if (snapshot.status.state === 'saved') return '桌宠已连接 · 内容已保存';
     return `桌宠已连接 · ${snapshot.status.text}`;
   })();
   const exportRecovery = () => {
-    const value = { revision: snapshot.revision, host: snapshot.host, unsaved: snapshot.pending };
+    const recovery = snapshot.recoveryDraft;
+    const value = { revision: recovery?.revision ?? snapshot.revision, host: recovery?.host ?? snapshot.host, unsaved: snapshot.pending || Boolean(recovery), recovery: Boolean(recovery) };
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `Trace-recovery-${Date.now()}.json`; link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  return <aside className="web-status" data-state={snapshot.status.state} data-native={nativeConnected ? 'connected' : undefined} role="status" aria-live="polite" title={nativeConnected ? '桌宠与主窗口正在使用同一份当前会话数据' : undefined}><i /><span>{statusText}</span>{nativeConnected && snapshot.status.state !== 'error' && <button type="button" onClick={() => runtime.profile()}>本机能力</button>}{snapshot.status.state === 'error' && <><RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton><RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton><RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton></>}</aside>;
+  const loadFailed = snapshot.loadState === 'recoverable-error' || snapshot.loadState === 'unrecoverable-error';
+  const canRetrySave = snapshot.status.state === 'error' && snapshot.pending;
+  const canExport = snapshot.pending || Boolean(snapshot.recoveryDraft);
+  return <aside className="web-status" data-state={snapshot.status.state} data-load-state={snapshot.loadState} data-native={nativeConnected ? 'connected' : undefined} role="status" aria-live="polite" title={nativeConnected ? '桌宠与主窗口正在使用同一份当前会话数据' : undefined}><i /><span>{statusText}</span>{nativeConnected && snapshot.status.state !== 'error' && <button type="button" onClick={() => runtime.profile()}>本机能力</button>}{loadFailed && <RecoveryButton data-retry-load onClick={() => void runtime.retryLoad()}>{snapshot.loadState === 'unrecoverable-error' ? '重新检查' : '重新读取'}</RecoveryButton>}{canRetrySave && <RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton>}{canExport && <RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton>}{loadFailed && <RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton>}</aside>;
 }
 
 function returnLabel(route: RouteMemory): string {
@@ -286,6 +292,23 @@ function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapsh
     <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示</span><b>6 / 6</b></button>
     {open && <div className="demo-guide-body"><div className="demo-guide-source"><i>知</i><span><strong>知乎参与了这条思考链</strong><small>2 份知乎公开内容，分别作为原现场和对照</small></span></div><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => { setOpen(false); runtime.navigate(item.route as RouteMemory); }}><span>{index + 1}</span><b>{item.label}</b>{'source' in item && item.source ? <small>{item.source}</small> : null}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
   </aside>;
+}
+
+function WorkspaceLoadSurface({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
+  if (snapshot.loadState === 'loading') return <section className="react-route-loading" data-load-state="loading" role="status" aria-live="polite"><span className="react-loading-mark">Trace</span><p>正在接回你的内容…</p><small>这一步有时间上限，不会覆盖原有内容。</small></section>;
+  const unrecoverable = snapshot.loadState === 'unrecoverable-error';
+  const runtimeUnavailable = hasNativeCapabilityBridge() && nativeRuntimeUnavailable();
+  const recovery = snapshot.recoveryDraft;
+  const exportRecovery = () => {
+    const value = { revision: recovery?.revision ?? snapshot.revision, host: recovery?.host ?? snapshot.host, unsaved: snapshot.pending || Boolean(recovery), recovery: Boolean(recovery) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = `Trace-recovery-${Date.now()}.json`; link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const restartRuntime = async () => {
+    try { await retryDesktopRuntime(); } finally { await runtime.retryLoad(); }
+  };
+  return <section className="react-route-error workspace-load-surface" data-load-state={snapshot.loadState} role="alert"><h1>{runtimeUnavailable ? '桌面本机服务没有启动' : unrecoverable ? '这份内容无法安全读取' : '内容暂时无法读取'}</h1><p>{runtimeUnavailable ? 'Trace 没有继续等待本机服务。已保存内容没有被覆盖，可以重新启动桌面服务后再读取。' : snapshot.status.text}</p><p>{unrecoverable ? 'Trace 没有用空白内容替换它。请保留当前草稿或备份，再重新检查。' : '这不会清除已保存内容。你可以重新读取，或明确选择载入已保存版本。'}</p><div className="workspace-load-actions">{runtimeUnavailable && <RecoveryButton primary data-retry-runtime onClick={() => void restartRuntime()}>重新启动桌面服务</RecoveryButton>}<RecoveryButton primary={!runtimeUnavailable} data-retry-load onClick={() => void runtime.retryLoad()}>{unrecoverable ? '重新检查' : '重新读取'}</RecoveryButton><RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton>{(snapshot.pending || recovery) && <RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton>}</div></section>;
 }
 
 function RouteOutlet({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
@@ -365,7 +388,7 @@ function RouteOutlet({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnap
     // persisted SQLite state and URL remain authoritative.
     window.location.reload();
   };
-  return <><div className="react-route-host" data-route-host ref={hostRef} aria-busy={!snapshot.ready || Boolean(pendingKey)}>{!snapshot.ready && <section className="react-route-loading"><span className="react-loading-mark">Trace</span><p>正在接回你的内容…</p></section>}</div>{loadError && <section className="react-route-error" role="alert"><h1>页面资源未能加载</h1><p>{loadError}</p><RecoveryButton primary onClick={retry}>重新加载</RecoveryButton></section>}</>;
+  return <><div className="react-route-host" data-route-host ref={hostRef} aria-busy={!snapshot.ready || snapshot.loadState === 'loading' || Boolean(pendingKey)}>{!snapshot.ready && <WorkspaceLoadSurface snapshot={snapshot} />}</div>{loadError && <section className="react-route-error" role="alert"><h1>页面资源未能加载</h1><p>{loadError}</p><RecoveryButton primary onClick={retry}>重新加载</RecoveryButton></section>}</>;
 }
 
 function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: ReturnType<typeof runtime.getSnapshot> }) {
@@ -603,11 +626,22 @@ function CodexConnectionPanel() {
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Codex 插件连接没有完成。'); }
     finally { setBusy(false); }
   };
+  const runtimeUnavailable = hasNativeCapabilityBridge() && nativeRuntimeUnavailable();
+  const retryRuntime = async () => {
+    setBusy(true); setMessage('正在重新启动 Trace 本机内容服务…');
+    try {
+      const value = await retryDesktopRuntime();
+      setSetup((current: any) => ({ ...current, runtime: value }));
+      setMessage(value?.connected ? 'Trace 本机内容服务已连接。' : value?.message || 'Trace 本机内容服务仍未连接。');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Trace 本机内容服务仍未连接。'); }
+    finally { setBusy(false); }
+  };
   const ready = setup?.codex?.ready === true && setup?.project?.connected === true;
   const qualificationRunning = qualification?.status === 'running';
   return <section className="web-codex-setup" data-ready={ready ? 'true' : 'false'}>
     <header><h3>Codex 接入</h3><span>{ready ? '可以开始工作' : qualificationRunning ? '正在完成首次检查' : qualification?.status === 'failed' ? '检查失败，可重试' : setup ? '需要一次检查' : '正在检查'}</span></header>
     <p role="status">{message}</p>
+    {runtimeUnavailable && <RecoveryButton primary disabled={busy} data-retry-runtime onClick={() => void retryRuntime()}>重新启动桌面服务</RecoveryButton>}
     {qualification && <p className="web-codex-qualification" data-status={qualification.status} role="status">{qualification.status === 'running' ? `首次连接 · ${qualification.message || '正在检查…'}` : qualification.status === 'completed' ? '首次连接检查已完成；后续连接会直接复用安全记录。' : `首次连接检查未完成 · ${qualification.message || '可以重试。'}`}</p>}
     <dl><div><dt>桌宠连接</dt><dd>{setup?.runtime?.connected ? setup.runtime.bundled ? '已随桌面版连接' : '已连接' : '正在检查'}</dd></div><div><dt>当前项目</dt><dd>{setup?.project?.connected ? setup.project.name : '尚未选择'}</dd></div><div><dt>Codex</dt><dd>{setup?.codex?.ready ? '已登录，可以使用' : setup?.codex?.available ? '已找到，等待检查' : '尚未找到'}</dd></div><div><dt>结果回来后</dt><dd>先进入 Trace，由你确认</dd></div></dl>
     <div className="web-codex-actions"><RecoveryButton disabled={busy} onClick={() => void chooseProject()}>{setup?.project?.connected ? '更换项目' : '选择项目'}</RecoveryButton><RecoveryButton primary disabled={busy || !setup?.codex?.available} onClick={() => void check()}>{busy ? qualificationRunning ? '正在检查…' : '正在处理…' : qualification?.status === 'failed' ? '重试检查' : '检查 Codex'}</RecoveryButton>{setup?.codex?.ready && <RecoveryButton disabled={busy} onClick={() => void connectPlugin()}>在 Codex 中使用 Trace</RecoveryButton>}</div>
@@ -713,7 +747,7 @@ function App() {
     if (result === 'error') runtime.message(`知乎授权没有完成（${reason || '回调校验失败'}）。请重新发起，不会重放旧授权码。`);
     else runtime.profile();
   }, [snapshot.ready]);
-  return <div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-busy={snapshot.busy ? 'true' : 'false'}><AmbientFrame /><DemoGuide snapshot={snapshot} /><StatusBar snapshot={snapshot} /><Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div>;
+  return <div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-load-state={snapshot.loadState} data-busy={snapshot.busy ? 'true' : 'false'}><AmbientFrame /><DemoGuide snapshot={snapshot} /><StatusBar snapshot={snapshot} /><Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div>;
 }
 
 const mountPoint = document.querySelector('#app');

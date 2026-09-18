@@ -22,6 +22,7 @@ await build({
 const codex = await import(pathToFileURL(join(output, 'codex-events.mjs')).href)
 const placement = await import(pathToFileURL(join(output, 'placement.mjs')).href)
 const runtimeClient = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-client.mjs')).href)
+const installationIdentity = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-installation-identity.mjs')).href)
 
 const event = (overrides = {}) => ({
   threadId: 'thread-a',
@@ -283,9 +284,29 @@ test('native bridge exposes explicit event, bounds and placement channels', asyn
     assert.match(preload + main, new RegExp(channel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
   assert.match(discussionPreload + main, /trace-native:setup-progress/)
+  assert.match(discussionPreload + main, /trace-native:runtime-status/)
+  assert.match(main, /WORKSPACE_IPC_TIMEOUT_MS/)
+  assert.match(main, /RUNTIME_START_TIMEOUT_MS/)
+  assert.match(main, /withIpcTimeout/)
   assert.match(renderer, /data-trace-interactive-region/)
   assert.match(overlay, /reduceTraceCodexEvent/)
   assert.match(overlay, /nativeCodexEventsEnabled/)
+})
+
+test('packaged runtime identity is stable and repairs only missing desktop settings', () => {
+  const values = ['a'.repeat(48), 'b'.repeat(48)]
+  const random = () => values.shift()
+  const first = installationIdentity.ensureRuntimeIdentity({}, random)
+  assert.equal(first.changed, true)
+  assert.match(first.identity.installationId, /^installation-[a-f0-9]{48}$/)
+  assert.match(first.identity.workspaceId, /^workspace-[a-f0-9]{48}$/)
+  const second = installationIdentity.ensureRuntimeIdentity(first.settings, () => { throw new Error('must not rotate stable IDs') })
+  assert.equal(second.changed, false)
+  assert.deepEqual(second.identity, first.identity)
+  const repaired = installationIdentity.ensureRuntimeIdentity({ ...first.settings, runtimeIdentity: { installationId: 'bad', workspaceId: first.identity.workspaceId } }, () => 'c'.repeat(48))
+  assert.equal(repaired.changed, true)
+  assert.equal(repaired.identity.workspaceId, first.identity.workspaceId)
+  assert.equal(repaired.identity.installationId, `installation-${'c'.repeat(48)}`)
 })
 
 test('rendering contract keeps the pet as a visual projection', async () => {

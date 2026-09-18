@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient, resolveCodexExecutable } from './runtime-client.mjs'
+import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -34,6 +35,17 @@ let interactiveBounds = []
 let codexEventPollTimer
 let codexEventPollInFlight = false
 let overlayReady = false
+const IPC_TIMEOUT_MS = 45_000
+const WORKSPACE_IPC_TIMEOUT_MS = 15_000
+const RUNTIME_START_TIMEOUT_MS = 45_000
+let bundledRuntimeStatus = {
+  connected: !app.isPackaged,
+  bundled: app.isPackaged,
+  state: app.isPackaged ? 'starting' : 'external',
+  message: app.isPackaged ? '正在启动 Trace 本机内容服务…' : '正在连接 Trace 本机内容服务…',
+}
+let bundledRuntimeStartPromise = null
+let bundledRuntimeAttempt = 0
 const pendingCodexEvents = []
 
 function sendCodexEvent(event) {
@@ -50,6 +62,33 @@ function sendSetupProgress(event) {
   for (const window of discussionWindows) {
     if (!window.isDestroyed()) window.webContents.send('trace-native:setup-progress', event)
   }
+}
+
+function setBundledRuntimeStatus(next) {
+  bundledRuntimeStatus = {
+    connected: next.connected === true,
+    bundled: next.bundled === true,
+    state: typeof next.state === 'string' ? next.state : next.connected === true ? 'connected' : 'failed',
+    message: typeof next.message === 'string' && next.message.length <= 240 ? next.message : 'Trace 本机内容服务暂时不可用，请重试。',
+  }
+  sendSetupProgress({
+    kind: 'runtime',
+    status: bundledRuntimeStatus.connected ? 'completed' : bundledRuntimeStatus.state === 'starting' ? 'running' : 'failed',
+    phase: bundledRuntimeStatus.state === 'starting' ? 'starting' : bundledRuntimeStatus.connected ? 'ready' : 'failed',
+    message: bundledRuntimeStatus.message,
+  })
+}
+
+function publicBundledRuntimeStatus() {
+  return { ...bundledRuntimeStatus }
+}
+
+function withIpcTimeout(value, timeoutMs, message) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+  })
+  return Promise.race([Promise.resolve(value), timeout]).finally(() => clearTimeout(timer))
 }
 
 function installDiscussionProtocol() {
@@ -172,39 +211,114 @@ function saveCurrentPlacement(payload) {
 async function runtimeReady() {
   if (!backendOrigin) return false
   try {
-    const responses = await Promise.all(['/api/product/workspace', '/api/agent/capabilities'].map((pathname) => (
-      fetch(new URL(pathname, backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
-    )))
-    return responses.every((response) => response.ok && (response.headers.get('content-type') || '').includes('application/json'))
+    // Product Workspace is the content authority. Agent is an optional
+    // capability: a broken/legacy agent ledger must not make the saved Trace
+    // workspace look disconnected or trigger a second listener.
+    const response = await fetch(new URL('/api/product/workspace', backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
+    return response.ok && (response.headers.get('content-type') || '').includes('application/json')
   } catch { return false }
 }
-async function ensureBundledRuntime() {
-  if (await runtimeReady() || !app.isPackaged) return
-  const dynamicBinding = !configuredBackendOrigin
-  const target = new URL(backendOrigin || DEFAULT_RUNTIME_ORIGIN)
-  if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)) return
+
+function isAgentStartupFailure(error) {
+  const code = String(error?.code || '').toUpperCase()
+  return code === 'PRODUCT_IDENTITY_UNVERIFIED' || code.startsWith('AGENT_') || code === 'INVALID_WORKSPACE' || code === 'INVALID_INSTALLATION'
+}
+
+async function startBundledRuntime({ agentEnabled, cacheBust = false } = {}) {
   const runtimeRoot = join(process.resourcesPath, 'trace-runtime')
   const server = join(runtimeRoot, 'apps', 'desktop', 'server.mjs')
-  if (!existsSync(server)) return
+  const specifier = `${pathToFileURL(server).href}${cacheBust ? `?attempt=${++bundledRuntimeAttempt}` : ''}`
+  process.env.TRACE_AGENT_ENABLED = agentEnabled ? '1' : '0'
+  let loaded
+  try {
+    loaded = await withIpcTimeout(import(specifier), RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
+    const binding = await withIpcTimeout(loaded.ready, RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
+    if (!bundledRuntime) bundledRuntime = loaded
+    if (!binding || !Number.isInteger(Number(binding.port)) || Number(binding.port) < 1 || Number(binding.port) > 65_535) throw new Error('Trace 本机内容服务没有返回有效连接')
+    if (!configuredBackendOrigin) backendOrigin = `http://127.0.0.1:${Number(binding.port)}`
+    return binding
+  } catch (error) {
+    try { await loaded?.close?.() } catch { /* startup cleanup is best effort */ }
+    if (bundledRuntime === loaded) bundledRuntime = undefined
+    throw error
+  }
+}
+
+async function doEnsureBundledRuntime({ retry = false } = {}) {
+  if (await runtimeReady()) {
+    if (bundledRuntimeStatus.state !== 'degraded') setBundledRuntimeStatus({ connected: true, bundled: app.isPackaged, state: 'connected', message: 'Trace 本机内容服务已连接。' })
+    return
+  }
+  if (!app.isPackaged) {
+    setBundledRuntimeStatus({ connected: Boolean(backendOrigin), bundled: false, state: 'external', message: '正在连接 Trace 本机内容服务…' })
+    return
+  }
+  const target = new URL(backendOrigin || DEFAULT_RUNTIME_ORIGIN)
+  if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)) {
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务地址不可用，请重新启动 Trace。' })
+    return
+  }
+  const runtimeRoot = join(process.resourcesPath, 'trace-runtime')
+  const server = join(runtimeRoot, 'apps', 'desktop', 'server.mjs')
+  if (!existsSync(server)) {
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: '当前安装缺少 Trace 本机内容服务，请重新安装后重试。' })
+    throw new Error('Trace bundled runtime entrypoint is missing')
+  }
   const stateRoot = join(app.getPath('userData'), 'state')
   mkdirSync(stateRoot, { recursive: true })
+  const settings = readDesktopSettings()
+  const persistedIdentity = ensureRuntimeIdentity(settings, () => randomBytes(24).toString('hex'))
+  if (persistedIdentity.changed) writeDesktopSettings(persistedIdentity.settings)
   process.env.TRACE_RUNTIME_ROOT = runtimeRoot
   process.env.TRACE_BUNDLED_RUNTIME = '1'
-  process.env.TRACE_DESKTOP_PORT = dynamicBinding ? '0' : target.port || '80'
+  process.env.TRACE_DESKTOP_PORT = configuredBackendOrigin ? target.port || '80' : '0'
   process.env.TRACE_WEB_STATE_FILE = join(stateRoot, 'web.sqlite')
   process.env.TRACE_AGENT_STATE_FILE = join(stateRoot, 'agent.sqlite')
   process.env.TRACE_AGENT_RUNTIME_ROOT = join(stateRoot, 'agent-runs')
+  // The packaged runtime must never silently accept a legacy/null identity.
+  // Bind this app-owned database to stable IDs and let the runtime perform its
+  // explicit, transactional legacy upgrade before serving any state.
+  process.env.TRACE_INSTALLATION_ID = persistedIdentity.identity.installationId
+  process.env.TRACE_WORKSPACE_ID = persistedIdentity.identity.workspaceId
+  process.env.TRACE_UPGRADE_LEGACY_IDENTITY = '1'
+  delete process.env.TRACE_ALLOW_LEGACY_IDENTITY
   process.env.TRACE_AGENT_ENABLED ??= '1'
   process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN ??= randomBytes(32).toString('base64url')
   const codexExecutable = resolveCodexExecutable()
   if (codexExecutable) process.env.TRACE_CODEX_BIN = codexExecutable
-  bundledRuntime = await import(pathToFileURL(server).href)
-  const binding = await bundledRuntime.ready
-  if (dynamicBinding) {
-    const port = Number(binding?.port)
-    if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('Trace bundled runtime did not report a valid loopback port')
-    backendOrigin = `http://127.0.0.1:${port}`
+  setBundledRuntimeStatus({ connected: false, bundled: true, state: 'starting', message: '正在启动 Trace 本机内容服务…' })
+  const requestedAgent = process.env.TRACE_AGENT_ENABLED !== '0'
+  try {
+    await startBundledRuntime({ agentEnabled: requestedAgent, cacheBust: retry })
+    setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: 'Trace 本机内容服务已连接。' })
+  } catch (error) {
+    // Agent is optional for reading and editing the Product Workspace. If an
+    // old agent ledger cannot be opened, retry the same packaged server with
+    // Agent disabled rather than leaving the product window without a local
+    // listener. Product state remains authoritative and readable.
+    if (requestedAgent && isAgentStartupFailure(error)) {
+      try {
+        await startBundledRuntime({ agentEnabled: false, cacheBust: true })
+        setBundledRuntimeStatus({ connected: true, bundled: true, state: 'degraded', message: 'Trace 内容已连接；本机 Agent 暂时不可用，可稍后重试。' })
+        return
+      } catch (fallbackError) {
+        error = fallbackError
+      }
+    }
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务没有启动，请重试。' })
+    throw error
   }
+}
+
+function ensureBundledRuntime(options = {}) {
+  if (bundledRuntimeStartPromise) return bundledRuntimeStartPromise
+  let settled
+  const task = doEnsureBundledRuntime(options)
+  settled = task.finally(() => {
+    if (bundledRuntimeStartPromise === settled) bundledRuntimeStartPromise = null
+  })
+  bundledRuntimeStartPromise = settled
+  return settled
 }
 
 function positionOverlay() {
@@ -452,6 +566,16 @@ if (!ownsInstance) {
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
         onCodexEvent: (event) => sendCodexEvent(event),
         onSetupProgress: (event) => sendSetupProgress(event),
+        getRuntimeStatus: () => publicBundledRuntimeStatus(),
+        retryRuntime: async () => {
+          try {
+            await ensureBundledRuntime({ retry: true })
+          } catch {
+            // The public status is deliberately stable and does not include
+            // server paths, ports or loader details.
+          }
+          return publicBundledRuntimeStatus()
+        },
         getCodexThreadId: (workId) => readDesktopSettings().codexThreads?.[workId],
         setCodexThreadId: (workId, threadId) => {
           const current = readDesktopSettings()
@@ -477,6 +601,15 @@ if (!ownsInstance) {
     })()
   })
 }
+
+ipcMain.on('trace-native:runtime-status', (event) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) {
+    event.returnValue = { connected: false, bundled: app.isPackaged, state: 'failed', message: 'Trace 本机内容服务暂时不可用，请重试。' }
+    return
+  }
+  event.returnValue = publicBundledRuntimeStatus()
+})
 
 ipcMain.on('trace-native:set-ignore-mouse-events', (event, ignore) => {
   if (!overlayWindow || event.sender !== overlayWindow.webContents || typeof ignore !== 'boolean') return
@@ -512,12 +645,13 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
   if (!capabilityClient) throw new Error('Trace 本机能力仍在启动，请稍后再试')
   if (request?.operation === 'work.project.select') {
     const result = await dialog.showOpenDialog(senderWindow, { title: '选择要与 Codex 一起工作的项目', properties: ['openDirectory'] })
-    if (result.canceled || !result.filePaths[0]) return capabilityClient.request({ operation: 'work.environment' })
+    if (result.canceled || !result.filePaths[0]) return withIpcTimeout(capabilityClient.request({ operation: 'work.environment' }), IPC_TIMEOUT_MS, 'Trace 本机能力响应超时，请重试。')
     const selected = capabilityClient.setProjectDir(result.filePaths[0])
     writeDesktopSettings({ ...readDesktopSettings(), projectDir: result.filePaths[0] })
     return selected
   }
-  const result = await capabilityClient.request(request)
+  const timeoutMs = request?.operation === 'work.run' ? 210_000 : request?.operation === 'agent.run' ? 200_000 : IPC_TIMEOUT_MS
+  const result = await withIpcTimeout(capabilityClient.request(request), timeoutMs, 'Trace 本机能力响应超时，请重试。')
   if (request?.operation === 'zhihu.oauth.start') await openZhihuAuthorization(result.login_url, senderWindow)
   return result
 })
@@ -539,7 +673,11 @@ ipcMain.handle('trace-native:workspace', async (event, payload) => {
   const pathname = payload?.pathname
   const method = payload?.options?.method || 'GET'
   const body = payload?.options?.body
-  return capabilityClient.request({ operation: 'workspace.request', pathname, method, ...(body === undefined ? {} : { body }) })
+  return withIpcTimeout(
+    capabilityClient.request({ operation: 'workspace.request', pathname, method, ...(body === undefined ? {} : { body }) }),
+    WORKSPACE_IPC_TIMEOUT_MS,
+    'Trace 本机内容读取超时，请重试。',
+  )
 })
 
 app.on('window-all-closed', () => {})

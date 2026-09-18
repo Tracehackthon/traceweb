@@ -168,6 +168,10 @@ export function createRuntimeCapabilityClient({
   qualifyCodexAppServerImpl = null,
   getCodexThreadId = null,
   setCodexThreadId = null,
+  getRuntimeStatus = null,
+  retryRuntime = null,
+  runtimeTimeoutMs = 35_000,
+  workspaceTimeoutMs = 35_000,
 } = {}) {
   const backendOrigin = validateRuntimeOrigin(origin)
   const cloudBase = new URL(cloudOrigin)
@@ -302,7 +306,7 @@ export function createRuntimeCapabilityClient({
     return qualificationPromise
   }
 
-  async function runtimeRequest(pathname, body, timeoutMs = 35_000, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
+  async function runtimeRequest(pathname, body, timeoutMs = runtimeTimeoutMs, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
     const url = new URL(pathname, backendOrigin)
     if (url.origin !== backendOrigin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Runtime path')
     let response
@@ -790,7 +794,7 @@ export function createRuntimeCapabilityClient({
       response = await fetchImpl(url, {
         method,
         redirect: 'error',
-        signal: AbortSignal.timeout(35_000),
+        signal: AbortSignal.timeout(workspaceTimeoutMs),
         headers: {
           origin: backendOrigin,
           accept: 'application/json',
@@ -914,15 +918,37 @@ export function createRuntimeCapabilityClient({
     if (request.operation === 'host.panel.read') return readRuntimePanel()
     if (request.operation === 'host.panel.action') return runtimePanelAction(request)
     if (request.operation === 'setup.status') {
-      const capabilities = await runtimeRequest('/api/agent/capabilities')
+      const runtime = typeof getRuntimeStatus === 'function' ? getRuntimeStatus() : null
+      if (runtime?.connected === false) {
+        return {
+          runtime: { connected: false, bundled: runtime.bundled === true, state: runtime.state || 'failed', message: runtime.message || 'Trace 本机内容服务暂时不可用，请重试。' },
+          project: { connected: false },
+          codex: { available: false, checked: false, profileId: null, label: 'Codex' },
+        }
+      }
+      let capabilities
+      try { capabilities = await runtimeRequest('/api/agent/capabilities') }
+      catch (error) {
+        // A connected Product listener may still have Agent disabled (for
+        // example when Codex is not installed).  Preserve the runtime
+        // client's safe transport error for callers that have no authoritative
+        // status yet; only degrade Agent when the desktop has confirmed that
+        // the bundled Product listener is healthy.
+        if (runtime?.connected === true) capabilities = { enabled: false, profiles: [] }
+        else throw error
+      }
       const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
       let project
       try { project = currentProject() } catch { project = null }
       return {
-        runtime: { connected: true, bundled: process.env.TRACE_BUNDLED_RUNTIME === '1' },
+        runtime: { connected: true, bundled: runtime?.bundled === true || process.env.TRACE_BUNDLED_RUNTIME === '1', ...(runtime?.state ? { state: runtime.state } : {}) },
         project: project ? { connected: true, name: project.projectName } : { connected: false },
         codex: { available: Boolean(codex), checked: false, profileId: codex?.profileId || null, label: codex?.label || 'Codex' },
       }
+    }
+    if (request.operation === 'setup.runtime.retry') {
+      if (typeof retryRuntime !== 'function') throw new Error('Trace 本机内容服务暂时不可用，请重新启动 Trace 后重试')
+      return retryRuntime()
     }
     if (request.operation === 'setup.codex.check') {
       const capabilities = await runtimeRequest('/api/agent/capabilities')

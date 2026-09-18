@@ -20,6 +20,10 @@ ipcRenderer.on('trace-native:setup-progress', (_event, payload) => {
 })
 
 contextBridge.exposeInMainWorld('traceNative', {
+  getRuntimeStatus() {
+    try { return ipcRenderer.sendSync('trace-native:runtime-status') }
+    catch { return null }
+  },
   requestCapability(request) {
     return invokePublic('trace-native:capability', request)
   },
