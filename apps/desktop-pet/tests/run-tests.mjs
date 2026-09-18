@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -23,6 +23,49 @@ const codex = await import(pathToFileURL(join(output, 'codex-events.mjs')).href)
 const placement = await import(pathToFileURL(join(output, 'placement.mjs')).href)
 const runtimeClient = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-client.mjs')).href)
 const installationIdentity = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-installation-identity.mjs')).href)
+const runtimeIntegrations = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-integrations.mjs')).href)
+
+test('desktop runtime integrations load backend-only Zhihu config without overriding explicit environment', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-'))
+  const file = join(directory, 'runtime-integrations.json')
+  await writeFile(file, JSON.stringify({ zhihu: {
+    enabled: true,
+    accessSecret: 'file-secret',
+    oauthAppId: '669',
+    oauthAppKey: 'file-app-key',
+    oauthRedirectUri: 'https://trace.neutrom.store/callback',
+  } }), 'utf8')
+  const env = { ZHIHU_ACCESS_SECRET: 'environment-wins' }
+  const result = runtimeIntegrations.applyRuntimeIntegrationConfig({ file, env })
+  assert.equal(result.zhihuEnabled, true)
+  assert.equal(env.TRACE_ZHIHU_ENABLED, '1')
+  assert.equal(env.ZHIHU_ACCESS_SECRET, 'environment-wins')
+  assert.equal(env.ZHIHU_OAUTH_APP_ID, '669')
+  assert.equal(env.ZHIHU_OAUTH_APP_KEY, 'file-app-key')
+  assert.equal(env.ZHIHU_OAUTH_REDIRECT_URI, 'https://trace.neutrom.store/callback')
+  assert.equal(JSON.stringify(result).includes('file-secret'), false)
+  assert.equal(JSON.stringify(result).includes('file-app-key'), false)
+})
+
+test('desktop runtime integrations stay disabled when config is absent or explicitly disabled', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-off-'))
+  const missing = runtimeIntegrations.applyRuntimeIntegrationConfig({ file: join(directory, 'missing.json'), env: {} })
+  assert.equal(missing.found, false)
+  assert.equal(missing.zhihuEnabled, false)
+  const file = join(directory, 'runtime-integrations.json')
+  await writeFile(file, JSON.stringify({ zhihu: { enabled: false } }), 'utf8')
+  const env = {}
+  runtimeIntegrations.applyRuntimeIntegrationConfig({ file, env })
+  assert.equal(env.TRACE_ZHIHU_ENABLED, '0')
+})
+
+test('desktop runtime integrations reject unsafe callback and relative config paths', async () => {
+  assert.throws(() => runtimeIntegrations.readRuntimeIntegrationConfig('relative.json'), /absolute/)
+  const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-bad-'))
+  const file = join(directory, 'runtime-integrations.json')
+  await writeFile(file, JSON.stringify({ zhihu: { enabled: true, oauthRedirectUri: 'http://example.test/callback?code=x' } }), 'utf8')
+  assert.throws(() => runtimeIntegrations.readRuntimeIntegrationConfig(file), /HTTPS OAuth redirect/)
+})
 
 const event = (overrides = {}) => ({
   threadId: 'thread-a',

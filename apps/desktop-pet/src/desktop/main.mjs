@@ -5,6 +5,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient, resolveCodexExecutable } from './runtime-client.mjs'
 import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
+import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -285,6 +286,8 @@ async function doEnsureBundledRuntime({ retry = false } = {}) {
   delete process.env.TRACE_ALLOW_LEGACY_IDENTITY
   process.env.TRACE_AGENT_ENABLED ??= '1'
   process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN ??= randomBytes(32).toString('base64url')
+  const integrationConfigFile = process.env.TRACE_DESKTOP_INTEGRATIONS_FILE || join(app.getPath('userData'), 'runtime-integrations.json')
+  applyRuntimeIntegrationConfig({ file: integrationConfigFile })
   const codexExecutable = resolveCodexExecutable()
   if (codexExecutable) process.env.TRACE_CODEX_BIN = codexExecutable
   setBundledRuntimeStatus({ connected: false, bundled: true, state: 'starting', message: '正在启动 Trace 本机内容服务…' })

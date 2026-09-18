@@ -94,6 +94,7 @@ await Promise.all([
   copyFile(resolve(root, 'src/desktop/main.mjs'), resolve(desktopOutDir, 'main.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-client.mjs'), resolve(desktopOutDir, 'runtime-client.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-installation-identity.mjs'), resolve(desktopOutDir, 'runtime-installation-identity.mjs')),
+  copyFile(resolve(root, 'src/desktop/runtime-integrations.mjs'), resolve(desktopOutDir, 'runtime-integrations.mjs')),
   copyFile(resolve(root, 'src/desktop/preload.cjs'), resolve(desktopOutDir, 'preload.cjs')),
   copyFile(resolve(root, 'src/desktop/discussion-preload.cjs'), resolve(desktopOutDir, 'discussion-preload.cjs')),
   copyFile(resolve(root, 'src/client/assets/liukanshan.png'), resolve(desktopOutDir, 'liukanshan.png')),

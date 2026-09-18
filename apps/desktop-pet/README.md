@@ -18,6 +18,22 @@
 
 本机 Runtime 会把状态保存在应用数据目录。桌宠位置也保存在同一份 `desktop-settings.json` 的版本化 `placement` 节点中，按 `displayId` 和分辨率保留记录；换显示器或升级版本时优先恢复对应显示器，再回退到同分辨率记录并做工作区边界校正，不会因为窗口版本更新而清空位置。知乎公开搜索和个人账号授权连接 `https://trace.neutrom.store` 的同源服务，不会把 App Secret 打进安装包。点「授权连接知乎」后，Trace 会打开一个独立的知乎授权窗口；成功回到 Trace 后窗口自动关闭，Token 只保存在桌面应用的加密 HttpOnly Cookie 中。服务不可用时界面只显示清楚的用户提示，不暴露内部接口字段。
 
+维护者也可以显式使用本机 Runtime 的知乎 provider，而不把 Secret 放进安装包或 renderer。桌面主进程会在启动 Runtime 前读取 Electron `userData` 目录下的 `runtime-integrations.json`；也可以用 `TRACE_DESKTOP_INTEGRATIONS_FILE` 指向另一个绝对路径。环境变量优先于文件，文件内容只会转换为后端进程环境，不写进 `desktop-settings.json`、IPC 或页面响应：
+
+```json
+{
+  "zhihu": {
+    "enabled": true,
+    "accessSecret": "由本机 Secret 管理提供",
+    "oauthAppId": "669",
+    "oauthAppKey": "由本机 Secret 管理提供",
+    "oauthRedirectUri": "https://trace.neutrom.store/callback"
+  }
+}
+```
+
+该文件应只允许当前用户读取，不能提交、导出或放进前端资源。文件不存在或 `enabled` 不是 `true` 时，本机知乎后端保持关闭，Runtime identity 也不会宣告不可达的搜索和授权路由。默认桌面联网仍使用 `TRACE_CLOUD_ORIGIN`（默认 `https://trace.neutrom.store`）的同源服务代理；本机 provider 是明确配置的替代路径，不会静默接管云端授权 Cookie。
+
 构建安装包：
 
 ```powershell
