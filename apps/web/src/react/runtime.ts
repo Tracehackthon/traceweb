@@ -1,4 +1,5 @@
 import * as B from '../product/bridge.mjs';
+import { recordDialogTitle } from './presentation-copy.mjs';
 import { productCommandRequest, workspaceRequest, storageLabel } from './workspace-storage';
 import { homeEntries, mattersView, recordsOf, titleOf } from '../product/library.mjs';
 import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
@@ -555,7 +556,7 @@ export class WebRuntime {
 
   openRecordIfNeeded(): void {
     const record = this.recordForRoute();
-    if (record) this.showDialog({ type: 'record', title: record.kind === 'result' ? '保存下来的这次结果' : record.kind === 'source' ? '原材料与来处' : '这次修订的记录', record });
+    if (record) this.showDialog({ type: 'record', title: recordDialogTitle(record.kind), record });
   }
 
   matter(): any | null { return this.host?.chain?.matters?.find((matter: any) => matter.id === this.route.matterId) || null; }

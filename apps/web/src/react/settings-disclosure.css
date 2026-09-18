@@ -1,0 +1,9 @@
+/* Advanced controls stay out of the ordinary profile until requested. */
+.web-settings-advanced{margin-top:22px;padding-top:16px;border-top:1px solid #d6e6dc}
+.web-settings-advanced>button{min-height:44px;text-align:left;white-space:normal}
+.web-settings-advanced>button[aria-expanded=true]{background:#e1eee5;color:#123e35}
+.web-settings-advanced>p{margin:8px 0 0;font-size:12px;line-height:1.65;color:#49675d}
+.web-settings-advanced>.web-runtime-operations,.web-settings-advanced .web-runtime-operations{margin-top:14px}
+.web-settings-advanced button:focus-visible{outline:2px solid #1f7057;outline-offset:3px}
+
+.web-settings-advanced .web-runtime-operations>header>button{flex-shrink:0;min-height:44px;font-size:13px;white-space:nowrap}
