@@ -44,7 +44,7 @@ test('release smoke rejects a development identity before publishing', async () 
     fs.writeFileSync(path.join(appSource, 'lib', 'desktop', 'main.mjs'), 'main')
     fs.writeFileSync(path.join(appSource, 'lib', 'desktop', 'preload.cjs'), 'preload')
     fs.writeFileSync(path.join(appSource, 'lib', 'desktop', 'discussion', 'index.html'), 'html')
-    fs.writeFileSync(path.join(appSource, 'package.json'), JSON.stringify({ version: '0.1.11' }))
+    fs.writeFileSync(path.join(appSource, 'package.json'), JSON.stringify({ version: '0.2.0' }))
     await createPackage(appSource, path.join(directory, 'resources', 'app.asar'))
     const identity = { git_commit: 'a'.repeat(40), git_tree: 'b'.repeat(40), content_sha256: 'c'.repeat(64), worktree_state: 'clean', clean: true }
     const api = { runtime: ['/api/runtime/identity'], product: [], agent: [], zhihu: [], host: [] }
@@ -57,7 +57,7 @@ test('release smoke rejects a development identity before publishing', async () 
     const entry = (name, text) => ({ path: name, bytes: Buffer.byteLength(text), sha256: createHash('sha256').update(text).digest('hex') })
     const manifest = { runtime_version: '0.7.1', distribution_eligibility: 'development-dirty', source_identity: identity, files: [entry('runtime.json', runtimeText), entry('desktop-runtime-source.json', sourceText)] }
     fs.writeFileSync(path.join(traceRuntime, 'release-manifest.json'), JSON.stringify(manifest))
-    const result = spawnSync(process.execPath, [smoke, '--unpacked', directory, '--expected-version', '0.1.11'], { encoding: 'utf8' })
+    const result = spawnSync(process.execPath, [smoke, '--unpacked', directory, '--expected-version', '0.2.0'], { encoding: 'utf8' })
     assert.notEqual(result.status, 0)
     assert.match(result.stderr, /asar|non-release runtime|invalid/i)
   } finally { fs.rmSync(directory, { recursive: true, force: true }) }

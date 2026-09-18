@@ -8,9 +8,33 @@ const invokePublic = async (channel, payload) => {
   }
 }
 
+// React subscribes from an effect, while the native window can deliver the
+// first runtime snapshot immediately after did-finish-load. Keep a tiny
+// bounded hand-off queue in preload so an early terminal event cannot vanish
+// between IPC and component mount.
+const codexEventListeners = new Set()
+const pendingCodexEvents = []
+ipcRenderer.on('trace-native:codex-event', (_event, payload) => {
+  if (codexEventListeners.size === 0) {
+    pendingCodexEvents.push(payload)
+    while (pendingCodexEvents.length > 256) pendingCodexEvents.shift()
+    return
+  }
+  for (const listener of codexEventListeners) listener(payload)
+})
+
 contextBridge.exposeInMainWorld('traceNative', {
   setIgnoreMouseEvents(ignore) {
     ipcRenderer.send('trace-native:set-ignore-mouse-events', ignore === true)
+  },
+  reportInteractiveBounds(bounds) {
+    if (Array.isArray(bounds)) ipcRenderer.send('trace-native:interactive-bounds', bounds)
+  },
+  getPlacement() {
+    return invokePublic('trace-native:placement:get')
+  },
+  savePlacement(placement) {
+    return invokePublic('trace-native:placement:save', placement)
   },
   openDiscussion(url) {
     if (typeof url === 'string') ipcRenderer.send('trace-native:open-discussion', url)
@@ -23,5 +47,11 @@ contextBridge.exposeInMainWorld('traceNative', {
     const wrapped = (_event, payload) => listener(payload)
     ipcRenderer.on('trace-native:candidate', wrapped)
     return () => ipcRenderer.removeListener('trace-native:candidate', wrapped)
+  },
+  onCodexEvent(listener) {
+    if (typeof listener !== 'function') return undefined
+    codexEventListeners.add(listener)
+    while (pendingCodexEvents.length) listener(pendingCodexEvents.shift())
+    return () => codexEventListeners.delete(listener)
   },
 })

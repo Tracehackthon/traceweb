@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { type Observation, type ObservationStatus } from './mock-data'
+import { type PetProjection, type TraceCodexApprovalDecision } from './codex-events'
 
 type TracePanelProps = {
   observations: Observation[]
@@ -15,6 +16,11 @@ type TracePanelProps = {
   compact?: boolean
   capabilities?: any
   onCapabilityRequest?: (request: Record<string, unknown>) => Promise<any>
+  codexProjection?: PetProjection
+  onCodexDecision?: (decision: TraceCodexApprovalDecision) => Promise<void>
+  onCodexInput?: (answers: Record<string, { answers: string[] }>) => Promise<void>
+  codexInteractionBusy?: boolean
+  codexInteractionNotice?: string
 }
 
 const statusClass: Record<ObservationStatus, string> = {
@@ -40,6 +46,11 @@ export function TracePanel({
   compact = false,
   capabilities,
   onCapabilityRequest,
+  codexProjection,
+  onCodexDecision,
+  onCodexInput,
+  codexInteractionBusy = false,
+  codexInteractionNotice = '',
 }: TracePanelProps) {
   const [draft, setDraft] = useState('')
   const [isRecording, setIsRecording] = useState(false)
@@ -50,10 +61,12 @@ export function TracePanel({
   const [capabilityNotice, setCapabilityNotice] = useState('')
   const [sourceResults, setSourceResults] = useState<any[]>([])
   const [agentRun, setAgentRun] = useState<any>(null)
+  const [codexAnswers, setCodexAnswers] = useState<Record<string, string>>({})
   const focusedCardRef = useRef<HTMLElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const recordingTimerRef = useRef<number | undefined>(undefined)
   const focusedObservation = observations.find((observation) => observation.id === focusedObservationId)
+  const pendingCodexInteraction = codexProjection?.pendingInteraction
   const agent = capabilities?.agent
   const profiles = agent?.profiles || []
   const sourceMetric = (item: any) => [
@@ -70,6 +83,10 @@ export function TracePanel({
     if (!focusedObservationId) return
     focusedCardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [focusedObservationId])
+
+  useEffect(() => {
+    setCodexAnswers({})
+  }, [pendingCodexInteraction?.interactionId])
 
   useEffect(() => () => {
     if (recordingTimerRef.current !== undefined) window.clearTimeout(recordingTimerRef.current)
@@ -133,6 +150,16 @@ export function TracePanel({
     finally { setCapabilityBusy('') }
   }
 
+  const submitCodexInput = () => {
+    const answers: Record<string, { answers: string[] }> = {}
+    for (const [id, answer] of Object.entries(codexAnswers)) {
+      const trimmed = answer.trim()
+      if (trimmed) answers[id] = { answers: [trimmed] }
+    }
+    if (!Object.keys(answers).length) return
+    void onCodexInput?.(answers)
+  }
+
   return (
     <aside className={`trace-panel ${compact ? 'trace-panel-compact' : ''}`} aria-label="Trace 思考沉淀面板">
       <header
@@ -156,6 +183,102 @@ export function TracePanel({
           </button>
         </div>
       </header>
+
+      {pendingCodexInteraction && (
+        <section className="trace-section trace-approval-section" aria-labelledby="trace-approval-title" data-trace-interactive-region="approval">
+          <div className="trace-approval-kicker">需要你的决定 · {pendingCodexInteraction.kind === 'input' ? '输入请求' : '操作请求'}</div>
+          <h3 id="trace-approval-title">{pendingCodexInteraction.title}</h3>
+          <p className="trace-approval-summary">{pendingCodexInteraction.summary}</p>
+          <div className="trace-approval-impact">
+            <span>将要发生什么</span>
+            <strong>{pendingCodexInteraction.impact}</strong>
+          </div>
+          {pendingCodexInteraction.kind === 'input' ? (
+            <>
+              <p className="trace-approval-note">这次请求需要回答 Codex 的问题。Trace 只展示安全的问题摘要，不会猜测选项或代填答案。</p>
+              {pendingCodexInteraction.questions?.length ? (
+                <div className="trace-input-questions" aria-label="Codex 输入问题">
+                  {pendingCodexInteraction.questions.map((question) => (
+                    <label className="trace-input-question" key={question.id}>
+                      <span>{question.header || '需要回答的问题'}</span>
+                      <small>{question.question || '请填写你的回答'}</small>
+                      <input
+                        type={question.isSecret ? 'password' : 'text'}
+                        value={codexAnswers[question.id] || ''}
+                        onChange={(event) => setCodexAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
+                        placeholder={question.isSecret ? '不会在 Trace 界面回显' : '填写回答'}
+                        autoComplete={question.isSecret ? 'off' : 'on'}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="trace-approval-disabled">当前请求没有可安全展示的问题，Trace 不会猜测输入格式。</p>
+              )}
+            </>
+          ) : (
+            <p className="trace-approval-note">默认不会放行。允许只作用于这一次请求；拒绝当前操作不会代替 Agent 停止，若要中断本轮请明确选择“停止本轮”。</p>
+          )}
+          {codexInteractionNotice && <p className="trace-approval-notice" role="status">{codexInteractionNotice}</p>}
+          {pendingCodexInteraction.kind === 'input' ? (
+            <div className="trace-approval-actions">
+              <button
+                className="trace-button trace-button-primary"
+                type="button"
+                disabled={codexInteractionBusy || !onCodexInput || !pendingCodexInteraction.recoverable || !Object.values(codexAnswers).some((answer) => answer.trim())}
+                onClick={submitCodexInput}
+              >
+                {codexInteractionBusy ? '正在提交…' : '提交回答'}
+              </button>
+              <button
+                className="trace-button trace-button-secondary trace-approval-reject"
+                type="button"
+                disabled={codexInteractionBusy || !onCodexDecision || !pendingCodexInteraction.recoverable}
+                onClick={() => void onCodexDecision?.('cancel')}
+              >
+                停止本轮
+              </button>
+            </div>
+          ) : (
+            <div className="trace-approval-actions">
+              <button
+                className="trace-button trace-button-secondary trace-approval-reject"
+                type="button"
+                disabled={codexInteractionBusy || !onCodexDecision || !pendingCodexInteraction.recoverable}
+                onClick={() => void onCodexDecision?.('decline')}
+              >
+                {codexInteractionBusy ? '正在提交…' : '拒绝此操作'}
+              </button>
+              <button
+                className="trace-button trace-button-quiet trace-approval-cancel"
+                type="button"
+                disabled={codexInteractionBusy || !onCodexDecision || !pendingCodexInteraction.recoverable}
+                onClick={() => void onCodexDecision?.('cancel')}
+              >
+                停止本轮
+              </button>
+              <button
+                className="trace-button trace-button-primary"
+                type="button"
+                disabled={codexInteractionBusy || !onCodexDecision || !pendingCodexInteraction.recoverable}
+                onClick={() => void onCodexDecision?.('accept')}
+              >
+                允许这一次
+              </button>
+            </div>
+          )}
+          {!pendingCodexInteraction.recoverable && (
+            <p className="trace-approval-disabled" role="status">
+              {pendingCodexInteraction.state === 'expired'
+                ? '这条请求已经过期，Trace 不会继续提交。请重新触发当前 Codex 操作。'
+                : pendingCodexInteraction.state === 'conflict'
+                  ? '这条请求的运行版本已经变化，请刷新当前 Codex 状态后再决定。'
+                  : '这条请求当前不可恢复，Trace 不会猜测或重复提交。'}
+            </p>
+          )}
+          {!pendingCodexInteraction.runId && <small className="trace-approval-disabled">这条请求缺少可恢复的运行身份，Trace 不会猜测目标。</small>}
+        </section>
+      )}
 
       <section className="trace-section trace-capture-section">
         <label className="trace-label" htmlFor="trace-capture-input">此刻想留下什么？</label>

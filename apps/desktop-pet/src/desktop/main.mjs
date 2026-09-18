@@ -30,6 +30,21 @@ let capabilityClient
 let bundledRuntime
 const discussionWindows = new Set()
 let zhihuAuthWindow
+let interactiveBounds = []
+let codexEventPollTimer
+let codexEventPollInFlight = false
+let overlayReady = false
+const pendingCodexEvents = []
+
+function sendCodexEvent(event) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  if (!overlayReady) {
+    pendingCodexEvents.push(event)
+    while (pendingCodexEvents.length > 256) pendingCodexEvents.shift()
+    return
+  }
+  overlayWindow.webContents.send('trace-native:codex-event', event)
+}
 
 function installDiscussionProtocol() {
   const discussionRoot = resolve(root, 'discussion')
@@ -57,6 +72,96 @@ function writeDesktopSettings(value) {
   const file = settingsFile()
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function finite(value) { return typeof value === 'number' && Number.isFinite(value) }
+function displayId(display) { return String(display?.id ?? 'primary') }
+function displayResolution(display) { return `${Math.round(display.workArea.width)}x${Math.round(display.workArea.height)}` }
+function displayByStoredId(value) {
+  const id = value === undefined || value === null ? '' : String(value)
+  return screen.getAllDisplays().find((display) => displayId(display) === id)
+}
+function overlayDisplay() {
+  const settings = readDesktopSettings()
+  return displayByStoredId(settings.placement?.displayId)
+    || (overlayWindow && !overlayWindow.isDestroyed() ? screen.getDisplayMatching(overlayWindow.getBounds()) : null)
+    || screen.getPrimaryDisplay()
+}
+function workAreaRecord(display) {
+  const area = display.workArea
+  return { x: area.x, y: area.y, width: area.width, height: area.height }
+}
+function clampLocalPosition(value, area, size = { width: 92, height: 116 }) {
+  const maxX = Math.max(8, area.width - size.width - 8)
+  const maxY = Math.max(8, area.height - size.height - 6)
+  return {
+    x: Math.min(Math.max(8, Number(value.x)), maxX),
+    y: Math.min(Math.max(8, Number(value.y)), maxY),
+  }
+}
+function placementRecordFor(display) {
+  const settings = readDesktopSettings()
+  const state = settings.placement && typeof settings.placement === 'object' ? settings.placement : {}
+  const id = displayId(display)
+  const resolution = displayResolution(display)
+  const candidates = [state.byDisplayId?.[id], state.byResolution?.[resolution], state.placement]
+  return candidates.find((value) => value && finite(value.x) && finite(value.y))
+}
+function currentPlacement() {
+  const display = overlayDisplay()
+  const area = workAreaRecord(display)
+  const record = placementRecordFor(display)
+  const source = record?.displayBounds && finite(record.displayBounds.width) && finite(record.displayBounds.height) ? record.displayBounds : area
+  const sourceX = record ? record.x - source.x : 0
+  const sourceY = record ? record.y - source.y : 0
+  const local = record ? clampLocalPosition({
+    // The renderer is as large as one display work area, so it consumes
+    // viewport-local coordinates. Persisted records are screen coordinates;
+    // translating by the destination display origin here would offset the
+    // pet twice on secondary displays (especially displays left of primary).
+    x: source.width === area.width && source.height === area.height ? sourceX : (sourceX / Math.max(1, source.width)) * area.width,
+    y: source.width === area.width && source.height === area.height ? sourceY : (sourceY / Math.max(1, source.height)) * area.height,
+  }, area) : null
+  return {
+    ...(local || {}),
+    displayId: displayId(display),
+    displayBounds: area,
+    placement: record?.placement || 'bottom-end',
+    isFreelyPositioned: record?.isFreelyPositioned === true,
+  }
+}
+function saveCurrentPlacement(payload) {
+  if (!payload || !finite(payload.x) || !finite(payload.y) || Math.abs(payload.x) > 100_000 || Math.abs(payload.y) > 100_000) throw new Error('桌宠位置不完整')
+  const display = overlayDisplay()
+  const area = workAreaRecord(display)
+  const local = clampLocalPosition(payload, area)
+  const id = displayId(display)
+  const resolution = displayResolution(display)
+  const now = Date.now()
+  const record = {
+    displayId: id,
+    displayBounds: area,
+    x: area.x + local.x,
+    y: area.y + local.y,
+    placement: 'free',
+    isFreelyPositioned: payload.isFreelyPositioned !== false,
+    updatedAt: now,
+  }
+  const current = readDesktopSettings()
+  const previous = current.placement && typeof current.placement === 'object' ? current.placement : {}
+  writeDesktopSettings({
+    ...current,
+    placement: {
+      version: 1,
+      displayId: id,
+      displayBounds: area,
+      byDisplayId: { ...(previous.byDisplayId || {}), [id]: record },
+      byResolution: { ...(previous.byResolution || {}), [resolution]: record },
+      placement: record,
+      isFreelyPositioned: record.isFreelyPositioned,
+    },
+  })
+  return { ...local, displayId: id, displayBounds: area, placement: record.placement, isFreelyPositioned: record.isFreelyPositioned }
 }
 async function runtimeReady() {
   if (!backendOrigin) return false
@@ -98,13 +203,14 @@ async function ensureBundledRuntime() {
 
 function positionOverlay() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
-  const { x, y, width, height } = screen.getPrimaryDisplay().workArea
+  const { x, y, width, height } = overlayDisplay().workArea
   overlayWindow.setBounds({ x, y, width, height })
 }
 
 function showOverlay() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
   positionOverlay()
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true })
   overlayWindow.showInactive()
 }
 
@@ -196,6 +302,14 @@ function createOverlayWindow() {
   overlayWindow.setAlwaysOnTop(true, 'floating')
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
+  overlayWindow.on('hide', () => {
+    if (!overlayWindow.isDestroyed()) overlayWindow.setIgnoreMouseEvents(true, { forward: false })
+  })
+  overlayWindow.webContents.on('did-start-loading', () => { overlayReady = false })
+  overlayWindow.webContents.on('did-finish-load', () => {
+    overlayReady = true
+    while (pendingCodexEvents.length) sendCodexEvent(pendingCodexEvents.shift())
+  })
   overlayWindow.on('close', (event) => {
     if (quitting) return
     event.preventDefault()
@@ -229,6 +343,38 @@ function createTray() {
     },
   ]))
   tray.on('click', toggleOverlay)
+}
+
+/**
+ * Event transport only. The overlay never starts a second Agent: the native
+ * process asks the existing Trace Runtime/Codex adapter for its latest safe
+ * event projection and forwards it over a narrow renderer IPC channel.
+ */
+function startCodexEventPolling() {
+  if (codexEventPollTimer || !capabilityClient) return
+  const poll = async () => {
+    if (codexEventPollInFlight || !overlayWindow || overlayWindow.isDestroyed() || !overlayWindow.webContents) return
+    codexEventPollInFlight = true
+    try {
+      const result = await capabilityClient.request({ operation: 'codex.events' })
+      if (Array.isArray(result?.events)) {
+        for (const event of result.events.slice(0, 128)) sendCodexEvent(event)
+      }
+    } catch {
+      // Runtime startup/disconnect is normal. The pet stays at its last
+      // projection and does not invent a local task to fill the gap.
+    } finally {
+      codexEventPollInFlight = false
+    }
+  }
+  void poll()
+  codexEventPollTimer = setInterval(() => void poll(), 1500)
+  codexEventPollTimer.unref?.()
+}
+function stopCodexEventPolling() {
+  if (!codexEventPollTimer) return
+  clearInterval(codexEventPollTimer)
+  codexEventPollTimer = undefined
 }
 
 function openZhihuAuthorization(loginUrl, parentWindow) {
@@ -298,11 +444,13 @@ if (!ownsInstance) {
         projectDir: process.env.TRACE_PROJECT_DIR || settings.projectDir,
         desktopSnapshotToken: process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
+        onCodexEvent: (event) => sendCodexEvent(event),
       })
       app.setAppUserModelId('store.neutrom.trace.desktop')
       Menu.setApplicationMenu(null)
       createOverlayWindow()
       createTray()
+      startCodexEventPolling()
       if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=home`)
 
       screen.on('display-metrics-changed', positionOverlay)
@@ -314,7 +462,17 @@ if (!ownsInstance) {
 
 ipcMain.on('trace-native:set-ignore-mouse-events', (event, ignore) => {
   if (!overlayWindow || event.sender !== overlayWindow.webContents || typeof ignore !== 'boolean') return
-  overlayWindow.setIgnoreMouseEvents(ignore, { forward: true })
+  overlayWindow.setIgnoreMouseEvents(ignore, { forward: ignore })
+})
+
+ipcMain.on('trace-native:interactive-bounds', (event, payload) => {
+  if (!overlayWindow || event.sender !== overlayWindow.webContents || !Array.isArray(payload)) return
+  interactiveBounds = payload.slice(0, 64).flatMap((value) => {
+    if (!value || typeof value !== 'object') return []
+    const x = Number(value.x), y = Number(value.y), width = Number(value.width), height = Number(value.height)
+    if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0 || width > 20_000 || height > 20_000) return []
+    return [{ x, y, width, height }]
+  })
 })
 
 ipcMain.on('trace-native:open-discussion', (event, url) => {
@@ -346,6 +504,16 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
   return result
 })
 
+ipcMain.handle('trace-native:placement:get', (event) => {
+  if (!overlayWindow || event.sender !== overlayWindow.webContents) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
+  return currentPlacement()
+})
+
+ipcMain.handle('trace-native:placement:save', (event, payload) => {
+  if (!overlayWindow || event.sender !== overlayWindow.webContents) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
+  return saveCurrentPlacement(payload)
+})
+
 ipcMain.handle('trace-native:workspace', async (event, payload) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender)
   if (!senderWindow || !discussionWindows.has(senderWindow)) throw new Error('工作区请求不是来自 Trace 桌面窗口')
@@ -359,5 +527,6 @@ ipcMain.handle('trace-native:workspace', async (event, payload) => {
 app.on('window-all-closed', () => {})
 app.on('before-quit', () => {
   quitting = true
+  stopCodexEventPolling()
   void bundledRuntime?.close?.()
 })

@@ -4,6 +4,17 @@ import crawlBImage from './assets/pet/crawl_B.png'
 import sitAImage from './assets/pet/sit_A.png'
 import transitionAImage from './assets/pet/transition_A.png'
 import transitionBImage from './assets/pet/transition_B.png'
+import {
+  createInitialTraceCodexState,
+  normalizeTraceCodexEvent,
+  projectTraceCodexState,
+  reduceTraceCodexEvent,
+  type PetProjection,
+  type TraceCodexApprovalDecision,
+  type TraceCodexInteraction,
+  type TraceCodexEvent,
+  type TraceCodexState,
+} from './codex-events'
 import { type CandidateStatus, type Observation, type ObservationStatus } from './mock-data'
 import { TracePanel } from './TracePanel'
 
@@ -28,12 +39,18 @@ const panelInset = 16
 
 type Viewport = { width: number; height: number }
 type PetPosition = { x: number; y: number }
+type NativePlacement = { x: number; y: number; displayId?: string; isFreelyPositioned?: boolean }
+type InteractiveBounds = { x: number; y: number; width: number; height: number }
 type TraceReminder = { observationId: string; text: string }
 type DesktopCandidatePayload = { type?: string; observationId?: string; status?: ObservationStatus }
 type TraceNativeBridge = {
   openDiscussion?: (url: string) => void
   requestCapability?: (request: Record<string, unknown>) => Promise<any>
   onCandidate?: (listener: (payload: DesktopCandidatePayload) => void) => (() => void) | undefined
+  onCodexEvent?: (listener: (event: TraceCodexEvent) => void) => (() => void) | undefined
+  getPlacement?: () => Promise<NativePlacement | null>
+  savePlacement?: (placement: NativePlacement & { placement?: string }) => Promise<void> | void
+  reportInteractiveBounds?: (bounds: InteractiveBounds[]) => void
 }
 type ReminderPlacement = { side: 'top' | 'bottom' | 'inside'; style: CSSProperties }
 type QuickComposerPlacement = {
@@ -278,6 +295,21 @@ function getReminderPlacement(petPosition: PetPosition, viewport: Viewport, pref
   }
 }
 
+function isPetWorking(status: PetProjection['status']) {
+  return status === 'thinking'
+    || status === 'running-command'
+    || status === 'editing'
+    || status === 'searching'
+}
+
+function codexStatusPosition(position: PetPosition, viewport: Viewport): CSSProperties {
+  const width = 244
+  return {
+    left: `${Math.min(Math.max(12, position.x + petSize.width / 2 - width / 2), Math.max(12, viewport.width - width - 12))}px`,
+    top: `${Math.max(12, position.y - 74)}px`,
+  }
+}
+
 function getQuickComposerPlacement(petPosition: PetPosition, viewport: Viewport): QuickComposerPlacement {
   const gap = 12
   const composerWidth = Math.min(224, Math.max(188, viewport.width - 76))
@@ -349,6 +381,16 @@ export function TraceOverlay() {
   const [candidateStatus, setCandidateStatus] = useState<CandidateStatus>(() => traceSessionStore.candidateStatus)
   const [discussionNotice, setDiscussionNotice] = useState('')
   const [capabilities, setCapabilities] = useState<any>({ connected: false, loading: true })
+  const [codexState, setCodexState] = useState<TraceCodexState>(() => createInitialTraceCodexState())
+  const [nativeCodexEventsEnabled, setNativeCodexEventsEnabled] = useState(false)
+  const [codexInteractionBusy, setCodexInteractionBusy] = useState(false)
+  const [codexInteractionNotice, setCodexInteractionNotice] = useState('')
+  const codexDecisionInFlightRef = useRef(false)
+  // A request can time out locally after the runtime accepted it. Keep the
+  // same idempotency key for an exact retry instead of accidentally issuing a
+  // second decision. Input fingerprints only live in renderer memory and are
+  // never sent or rendered; this avoids retaining a secret in the key itself.
+  const codexInteractionKeysRef = useRef(new Map<string, { key: string; fingerprint: string }>())
   const [reminder, setReminder] = useState<TraceReminder | null>(null)
   const [reminderSide, setReminderSide] = useState<ReminderPlacement['side'] | null>(null)
   const [panelPosition, setPanelPosition] = useState<PetPosition | null>(null)
@@ -372,6 +414,8 @@ export function TraceOverlay() {
   const petClickSideRef = useRef<'left' | 'right'>('left')
   const lastReminderIndexRef = useRef(-1)
   const openRef = useRef(open)
+
+  const codexProjection = projectTraceCodexState(codexState)
 
   useEffect(() => {
     const handleResize = () => {
@@ -398,6 +442,32 @@ export function TraceOverlay() {
     refresh()
     const timer = window.setInterval(refresh, 5000)
     return () => { active = false; window.clearInterval(timer) }
+  }, [])
+
+  useEffect(() => {
+    const bridge = getTraceNativeBridge()
+    if (!bridge?.onCodexEvent) return
+    // A native desktop instance is event-driven even when the adapter is
+    // temporarily quiet. It must not fall back to a fabricated reminder loop.
+    setNativeCodexEventsEnabled(true)
+    const receiveEvent = (payload: TraceCodexEvent) => {
+      const event = normalizeTraceCodexEvent(payload)
+      if (!event) return
+      setCodexState((current) => reduceTraceCodexEvent(current, event))
+    }
+    const remove = bridge.onCodexEvent(receiveEvent)
+    return () => remove?.()
+  }, [])
+
+  useEffect(() => {
+    const bridge = getTraceNativeBridge()
+    if (!bridge?.getPlacement) return
+    let active = true
+    void bridge.getPlacement().then((placement) => {
+      if (!active || !placement || !Number.isFinite(placement.x) || !Number.isFinite(placement.y)) return
+      setPetPosition(clampPetPosition({ x: placement.x, y: placement.y }, getViewport()))
+    }).catch(() => {})
+    return () => { active = false }
   }, [])
 
   useEffect(() => () => {
@@ -435,6 +505,7 @@ export function TraceOverlay() {
   }, [petPose, crawlRunning])
 
   useEffect(() => {
+    if (nativeCodexEventsEnabled) return
     let timer: number | undefined
     const scheduleReminder = () => {
       const delay = 60_000 + Math.floor(Math.random() * 30_001)
@@ -456,7 +527,17 @@ export function TraceOverlay() {
     }
     scheduleReminder()
     return () => { if (timer !== undefined) window.clearTimeout(timer) }
-  }, [])
+  }, [nativeCodexEventsEnabled])
+
+  useEffect(() => {
+    if (!nativeCodexEventsEnabled || codexProjection.status === 'idle') return
+    // The sprite remains a projection of session state. It does not run an
+    // Agent; motion is only a visual acknowledgement of the incoming event.
+    const nextPose: PetPose = isPetWorking(codexProjection.status) ? 'crawl' : 'sit'
+    setPetPose(nextPose)
+    setCrawlRunning(isPetWorking(codexProjection.status))
+    setPetFrame(0)
+  }, [codexProjection.status, nativeCodexEventsEnabled])
 
   useEffect(() => {
     const receiveCandidate = (payload: DesktopCandidatePayload) => {
@@ -509,6 +590,7 @@ export function TraceOverlay() {
     : clampPanelPosition({ x: defaultCompactPanelPosition.x, y: defaultCompactPanelPosition.y }, viewport, false)
   const currentPanelPosition = panelPosition ?? defaultPanelPosition
   const panelIsDetached = showPanel && panelMode === 'expanded'
+  const codexStatusStyle = codexStatusPosition(currentPetPosition, viewport)
   const guideItems: OrbitItem[] = [
     { id: 'guide-quick', kind: 'guide', kicker: '极简对话', title: '回到快速输入', detail: '不展开小窗，直接写一句', tone: 'warm', action: 'quick' },
   ]
@@ -570,6 +652,184 @@ export function TraceOverlay() {
     const bridge = getTraceNativeBridge()
     if (!bridge?.requestCapability) throw new Error('当前宿主没有连接 Trace Runtime。')
     return bridge.requestCapability(request)
+  }
+
+  const interactionFingerprint = (answers: Record<string, { answers: string[] }>) => JSON.stringify(
+    Object.keys(answers).sort().map((questionId) => [questionId, answers[questionId]?.answers ?? []]),
+  )
+
+  const idempotencyKeyFor = (scope: string, fingerprint = '') => {
+    const current = codexInteractionKeysRef.current.get(scope)
+    if (current?.fingerprint === fingerprint) return current.key
+    const key = typeof crypto?.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `trace-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    codexInteractionKeysRef.current.set(scope, { key, fingerprint })
+    while (codexInteractionKeysRef.current.size > 32) {
+      codexInteractionKeysRef.current.delete(codexInteractionKeysRef.current.keys().next().value as string)
+    }
+    return key
+  }
+
+  const decideCodexInteraction = async (decision: TraceCodexApprovalDecision) => {
+    if (codexDecisionInFlightRef.current) return
+    const interaction: TraceCodexInteraction | null = codexProjection.pendingInteraction
+    if (!interaction) return
+    if (interaction.kind !== 'approval') {
+      if (decision !== 'cancel') {
+        setCodexInteractionNotice('这类请求需要填写问题答案，Trace 不会把批准决定误当成输入。')
+        return
+      }
+      if (!interaction.runId) {
+        setCodexInteractionNotice('这条输入请求缺少可恢复的运行身份，Trace 没有猜测目标。')
+        return
+      }
+      codexDecisionInFlightRef.current = true
+      setCodexInteractionBusy(true)
+      setCodexInteractionNotice('正在停止本轮运行…')
+      try {
+        await requestCapability({ operation: 'agent.run.cancel', runId: interaction.runId })
+        setCodexInteractionNotice('已停止本轮运行。')
+        const resolved = normalizeTraceCodexEvent({
+          eventId: `${interaction.runId}:${interaction.interactionId}:cancel`,
+          type: 'runtime.interaction.resolved',
+          runId: interaction.runId,
+          threadId: interaction.threadId || undefined,
+          turnId: interaction.turnId || undefined,
+          itemId: interaction.itemId || undefined,
+          data: { state: 'cancelled', status: 'cancelled', interaction: { interactionId: interaction.interactionId } },
+        })
+        if (resolved) setCodexState((current) => reduceTraceCodexEvent(current, resolved))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setCodexInteractionNotice(/409|conflict|revision|stale|expired|already.?handled|已处理|版本/i.test(message)
+          ? '这条输入请求已经结束或版本发生变化，请刷新当前状态。'
+          : message)
+      } finally {
+        codexDecisionInFlightRef.current = false
+        setCodexInteractionBusy(false)
+      }
+      return
+    }
+    if (!interaction.runId || interaction.expectedRevision === null) {
+      setCodexInteractionNotice('这条审批缺少可恢复的运行版本，Trace 已保持拒绝。请重新打开当前 Codex 任务。')
+      return
+    }
+    if (!interaction.recoverable) {
+      setCodexInteractionNotice('这条审批已经过期或不可恢复，Trace 没有继续提交。')
+      return
+    }
+    if (interaction.expiresAt !== null && interaction.expiresAt <= Date.now()) {
+      setCodexInteractionNotice('这条审批已经过期，Trace 没有继续提交。请重新触发当前 Codex 操作。')
+      return
+    }
+    codexDecisionInFlightRef.current = true
+    setCodexInteractionBusy(true)
+    setCodexInteractionNotice(
+      decision === 'accept'
+        ? '正在提交允许决定…'
+        : decision === 'cancel'
+          ? '正在提交停止本轮…'
+          : '正在提交拒绝决定…',
+    )
+    const idempotencyScope = `${interaction.interactionId}:approval:${interaction.expectedRevision}:${decision}`
+    const idempotencyKey = idempotencyKeyFor(idempotencyScope)
+    try {
+      await requestCapability({
+        operation: 'agent.run.approval',
+        runId: interaction.runId,
+        interactionId: interaction.interactionId,
+        expectedRevision: interaction.expectedRevision,
+        idempotencyKey,
+        decision,
+      })
+      setCodexInteractionNotice(
+        decision === 'accept'
+          ? '已允许这一次，正在继续。'
+          : decision === 'cancel'
+            ? '已停止本轮运行。'
+            : '已拒绝这次操作，Agent 可以继续处理其它步骤。',
+      )
+      codexInteractionKeysRef.current.delete(idempotencyScope)
+      // The runtime emits runtime.approval.resolved as the authoritative
+      // event.  Optimistically clear only after the endpoint accepted the
+      // idempotent decision; a later event can still move the session to a
+      // terminal/review state without re-opening the prompt.
+      const resolved = normalizeTraceCodexEvent({
+        eventId: `${interaction.runId}:${interaction.interactionId}:${decision}`,
+        type: 'runtime.approval.resolved',
+        runId: interaction.runId,
+        threadId: interaction.threadId || undefined,
+        turnId: interaction.turnId || undefined,
+        itemId: interaction.itemId || undefined,
+        data: {
+          interaction: { interactionId: interaction.interactionId },
+          status: decision === 'accept' || decision === 'accept_for_session'
+            ? 'accepted'
+            : decision === 'cancel'
+              ? 'cancelled'
+              : 'declined',
+        },
+      })
+      if (resolved) setCodexState((current) => reduceTraceCodexEvent(current, resolved))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setCodexInteractionNotice(/409|conflict|revision|stale|expired|already.?handled|已处理|版本/i.test(message)
+        ? '这条审批已经被处理、过期或版本发生变化，请刷新当前状态。'
+        : message)
+    } finally {
+      codexDecisionInFlightRef.current = false
+      setCodexInteractionBusy(false)
+    }
+  }
+
+  const submitCodexInput = async (answers: Record<string, { answers: string[] }>) => {
+    if (codexDecisionInFlightRef.current) return
+    const interaction: TraceCodexInteraction | null = codexProjection.pendingInteraction
+    if (!interaction || interaction.kind !== 'input') return
+    if (!interaction.runId || interaction.expectedRevision === null) {
+      setCodexInteractionNotice('这条输入请求缺少可恢复的运行版本，Trace 没有猜测目标。')
+      return
+    }
+    if (!interaction.recoverable || (interaction.expiresAt !== null && interaction.expiresAt <= Date.now())) {
+      setCodexInteractionNotice('这条输入请求已经过期或不可恢复，请重新触发当前 Codex 操作。')
+      return
+    }
+    codexDecisionInFlightRef.current = true
+    setCodexInteractionBusy(true)
+    setCodexInteractionNotice('正在提交回答…')
+    const idempotencyScope = `${interaction.interactionId}:input:${interaction.expectedRevision}`
+    const idempotencyKey = idempotencyKeyFor(idempotencyScope, interactionFingerprint(answers))
+    try {
+      await requestCapability({
+        operation: 'agent.run.input',
+        runId: interaction.runId,
+        interactionId: interaction.interactionId,
+        expectedRevision: interaction.expectedRevision,
+        idempotencyKey,
+        answers,
+      })
+      setCodexInteractionNotice('已提交回答，正在继续。')
+      codexInteractionKeysRef.current.delete(idempotencyScope)
+      const resolved = normalizeTraceCodexEvent({
+        eventId: `${interaction.runId}:${interaction.interactionId}:input`,
+        type: 'runtime.interaction.resolved',
+        runId: interaction.runId,
+        threadId: interaction.threadId || undefined,
+        turnId: interaction.turnId || undefined,
+        itemId: interaction.itemId || undefined,
+        data: { state: 'resolved', status: 'resolved', interaction: { interactionId: interaction.interactionId } },
+      })
+      if (resolved) setCodexState((current) => reduceTraceCodexEvent(current, resolved))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setCodexInteractionNotice(/409|conflict|revision|stale|expired|already.?handled|已处理|版本/i.test(message)
+        ? '这条输入请求已经被处理、过期或版本发生变化，请刷新当前状态。'
+        : message)
+    } finally {
+      codexDecisionInFlightRef.current = false
+      setCodexInteractionBusy(false)
+    }
   }
 
   const continueDiscussion = () => {
@@ -686,6 +946,17 @@ export function TraceOverlay() {
     startPoseTransition('to-crawl', revealFan)
   }
 
+  const persistPetPosition = (position: PetPosition) => {
+    const bridge = getTraceNativeBridge()
+    if (!bridge?.savePlacement) return
+    void Promise.resolve(bridge.savePlacement({
+      x: position.x,
+      y: position.y,
+      placement: 'free',
+      isFreelyPositioned: true,
+    })).catch(() => {})
+  }
+
   const handlePetPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0 || poseTransitionLockRef.current) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -718,6 +989,10 @@ export function TraceOverlay() {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
     if (drag.moved) suppressClickRef.current = true
+    if (drag.moved) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      persistPetPosition(clampPetPosition({ x: rect.left, y: rect.top }, viewport))
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     dragRef.current = null
   }
@@ -733,6 +1008,10 @@ export function TraceOverlay() {
       if (poseTransitionLockRef.current) return
       if (open) {
         collapseTrace()
+      } else if (nativeCodexEventsEnabled && codexProjection.pendingInteraction) {
+        // Waiting is an actionable pet state: a click opens the bounded
+        // approval panel directly instead of routing through the quick box.
+        openCapturePanel()
       } else {
         const direction = petClickSideRef.current
         const beginCrawlStep = () => {
@@ -860,8 +1139,22 @@ export function TraceOverlay() {
 
   return (
     <div className={`trace-overlay ${open ? 'trace-overlay-open' : ''} ${collapsing ? 'trace-overlay-collapsing' : ''} ${poseTransition ? 'trace-overlay-transitioning' : ''}`} style={overlayStyle}>
+      {nativeCodexEventsEnabled && codexProjection.status !== 'idle' && !open && (
+        <div
+          className={`trace-codex-status trace-codex-status-${codexProjection.status}`}
+          style={codexStatusStyle}
+          data-trace-interactive-region="status"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="trace-codex-status-kicker">Codex · {codexProjection.label}</span>
+          <strong>{codexProjection.title}</strong>
+          {codexProjection.detail && <small>{codexProjection.detail}</small>}
+          {codexProjection.pendingInteraction && <button className="trace-codex-status-action" type="button" onClick={() => openCapturePanel()}>{codexProjection.pendingInteraction.kind === 'approval' ? '查看并决定' : '查看请求'}</button>}
+        </div>
+      )}
       {reminder && !open && (
-        <div className={`trace-reminder-bubble trace-reminder-bubble-${reminderPlacement.side}`} style={reminderPlacement.style} role="status">
+        <div className={`trace-reminder-bubble trace-reminder-bubble-${reminderPlacement.side}`} style={reminderPlacement.style} data-trace-interactive-region="reminder" role="status">
           <span className="trace-reminder-cloud-bump" aria-hidden="true" />
           <span className="trace-reminder-bubbles" aria-hidden="true">
             <i />
@@ -876,13 +1169,14 @@ export function TraceOverlay() {
         </div>
       )}
       {open && (
-        <button className="trace-gesture-backdrop" type="button" onClick={collapseTrace} aria-label="收回 Trace 卡片" />
+        <button className="trace-gesture-backdrop" data-trace-interactive-region="backdrop" type="button" onClick={collapseTrace} aria-label="收回 Trace 卡片" />
       )}
 
       {open && !showPanel && surfaceMode === 'quick' && (
         <div
           className={`trace-quick-cluster trace-quick-cluster-${quickComposerPlacement.side}`}
           style={quickComposerPlacement.style}
+          data-trace-interactive-region="quick"
           onClick={(event) => event.stopPropagation()}
         >
           <form className="trace-quick-composer" onSubmit={submitQuickObservation} aria-label="快速记录">
@@ -912,7 +1206,7 @@ export function TraceOverlay() {
         </div>
       )}
       {open && !showPanel && surfaceMode === 'bubbles' && (
-        <div className="trace-orbit-stage" aria-label="Trace 历史观察卡片">
+        <div className="trace-orbit-stage" data-trace-interactive-region="orbit" aria-label="Trace 历史观察卡片">
           {orbitItems.map((item, index) => {
             const position = orbitPositions[index]
             const brightnessClass = item.kind === 'observation'
@@ -960,7 +1254,7 @@ export function TraceOverlay() {
       )}
 
       {showPanel && (
-        <div className={`trace-detail-panel ${panelIsDetached ? 'trace-detail-panel-detached' : `trace-detail-panel-linked trace-detail-panel-side-${panelSide}`}`} style={detailPanelStyle} onClick={(event) => event.stopPropagation()}>
+        <div className={`trace-detail-panel ${panelIsDetached ? 'trace-detail-panel-detached' : `trace-detail-panel-linked trace-detail-panel-side-${panelSide}`}`} style={detailPanelStyle} data-trace-interactive-region="panel" onClick={(event) => event.stopPropagation()}>
           <TracePanel
             observations={observations}
             focusedObservationId={focusedObservationId}
@@ -975,12 +1269,18 @@ export function TraceOverlay() {
             compact={panelMode === 'compact'}
             capabilities={capabilities}
             onCapabilityRequest={requestCapability}
+            codexProjection={codexProjection}
+            onCodexDecision={decideCodexInteraction}
+            onCodexInput={submitCodexInput}
+            codexInteractionBusy={codexInteractionBusy}
+            codexInteractionNotice={codexInteractionNotice}
           />
         </div>
       )}
 
       <button
-        className={`trace-pet-button trace-pet-button-${petPose} trace-pet-button-frame-${petFrame} trace-pet-button-facing-${petFacing} ${poseTransition ? `trace-pet-button-transition-${poseTransition}` : ''} ${crawlRunning ? 'trace-pet-button-crawling' : ''} ${open ? 'trace-pet-button-active' : ''} ${panelIsDetached ? 'trace-pet-button-thinking' : ''} ${hugging ? 'trace-pet-button-hugging' : ''}`}
+        className={`trace-pet-button trace-pet-button-${petPose} trace-pet-button-frame-${petFrame} trace-pet-button-facing-${petFacing} ${poseTransition ? `trace-pet-button-transition-${poseTransition}` : ''} ${crawlRunning ? 'trace-pet-button-crawling' : ''} ${open ? 'trace-pet-button-active' : ''} ${panelIsDetached || (nativeCodexEventsEnabled && isPetWorking(codexProjection.status)) ? 'trace-pet-button-thinking' : ''} ${nativeCodexEventsEnabled ? `trace-pet-button-status-${codexProjection.status}` : ''} ${hugging ? 'trace-pet-button-hugging' : ''}`}
+        data-trace-interactive-region="pet"
         type="button"
         disabled={Boolean(poseTransition)}
         onPointerDown={handlePetPointerDown}

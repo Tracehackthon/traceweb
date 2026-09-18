@@ -25,6 +25,73 @@
 .trace-overlay > * { pointer-events: auto; }
 .trace-overlay-transitioning > * { pointer-events: none; }
 
+/* Native Codex status is a bounded projection of the runtime event stream.
+   It is deliberately separate from the Trace memory fan and never presents
+   raw command output or an extra Agent surface. */
+.trace-codex-status {
+  position: fixed;
+  z-index: 7;
+  display: grid;
+  gap: 3px;
+  width: min(244px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid rgba(31, 107, 75, .14);
+  border-radius: 14px;
+  background: rgba(250, 248, 240, .94);
+  color: var(--trace-ink);
+  box-shadow: 0 12px 28px rgba(21, 54, 39, .14);
+  pointer-events: auto;
+  animation: trace-codex-status-in 220ms cubic-bezier(.16, 1, .3, 1) both;
+}
+.trace-codex-status-kicker {
+  color: var(--trace-green);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.trace-codex-status strong {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trace-codex-status small {
+  overflow: hidden;
+  color: var(--trace-muted);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trace-codex-status-action {
+  justify-self: start;
+  margin-top: 5px;
+  min-height: 25px;
+  padding: 4px 9px;
+  border: 1px solid rgba(31, 107, 75, .22);
+  border-radius: 999px;
+  background: rgba(231, 241, 233, .86);
+  color: var(--trace-green-dark);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.trace-codex-status-action:hover { background: #fff; border-color: var(--trace-green); }
+.trace-codex-status-running-command .trace-codex-status-kicker { color: #9a6337; }
+.trace-codex-status-editing .trace-codex-status-kicker { color: #7162a5; }
+.trace-codex-status-searching .trace-codex-status-kicker { color: #3e7d97; }
+.trace-codex-status-waiting .trace-codex-status-kicker { color: #9a6f28; }
+.trace-codex-status-review .trace-codex-status-kicker { color: var(--trace-green); }
+.trace-codex-status-failed .trace-codex-status-kicker { color: #a14e4e; }
+@keyframes trace-codex-status-in {
+  from { opacity: 0; transform: translateY(5px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .trace-pet-button {
   position: relative;
   z-index: 4;
@@ -643,7 +710,7 @@
 }
 
 .trace-panel-compact { width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
-.trace-panel-compact > .trace-section:not(.trace-capture-section),
+.trace-panel-compact > .trace-section:not(.trace-capture-section):not(.trace-approval-section),
 .trace-panel-compact > .trace-footer-note { display: none; }
 .trace-compact-observation {
   display: grid;
@@ -695,6 +762,31 @@
 .trace-eyebrow { color: var(--trace-green); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 
 .trace-section { margin-top: 18px; padding: 16px; border: 1px solid var(--trace-line); border-radius: 18px; background: rgba(255, 255, 255, .84); }
+.trace-approval-section {
+  border-color: rgba(182, 133, 42, .38);
+  background: linear-gradient(145deg, rgba(255, 251, 231, .98), rgba(250, 248, 240, .94));
+  box-shadow: 0 8px 22px rgba(146, 108, 36, .08);
+}
+.trace-approval-kicker { color: #946d20; font-size: 10px; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
+.trace-approval-section h3 { margin: 6px 0 5px; color: var(--trace-ink); font-size: 17px; line-height: 1.35; }
+.trace-approval-summary { margin: 0; color: var(--trace-muted); font-size: 12px; line-height: 1.48; }
+.trace-approval-impact { display: grid; gap: 4px; margin-top: 12px; padding: 10px 11px; border: 1px solid rgba(148, 109, 32, .18); border-radius: 12px; background: rgba(255,255,255,.7); }
+.trace-approval-impact span { color: #946d20; font-size: 10px; font-weight: 800; }
+.trace-approval-impact strong { overflow-wrap: anywhere; color: var(--trace-ink); font-size: 11px; line-height: 1.45; }
+.trace-approval-note { margin: 9px 0 0; color: var(--trace-muted); font-size: 10px; line-height: 1.45; }
+.trace-approval-notice { margin: 9px 0 0; color: var(--trace-green-dark); font-size: 10px; line-height: 1.45; }
+.trace-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; }
+.trace-input-questions { display: grid; gap: 9px; margin-top: 11px; }
+.trace-input-question { display: grid; gap: 4px; }
+.trace-input-question > span { color: var(--trace-ink); font-size: 11px; font-weight: 750; }
+.trace-input-question > small { color: var(--trace-muted); font-size: 10px; line-height: 1.4; }
+.trace-input-question > input { width: 100%; box-sizing: border-box; min-height: 34px; padding: 7px 9px; border: 1px solid rgba(148, 109, 32, .24); border-radius: 9px; background: rgba(255,255,255,.78); color: var(--trace-ink); font: inherit; font-size: 12px; outline: none; }
+.trace-input-question > input:focus { border-color: #946d20; box-shadow: 0 0 0 3px rgba(148, 109, 32, .12); }
+.trace-approval-reject { border-color: #d3b9a9; background: #fffaf6; color: #87533a; }
+.trace-approval-reject:hover { border-color: #b56e50; background: #fff; }
+.trace-approval-cancel { border-color: #d6c9b6; background: #fffdf7; color: #76624a; }
+.trace-approval-cancel:hover { border-color: #af9776; background: #fff; }
+.trace-approval-disabled { display: block; margin-top: 8px; color: #956516; font-size: 10px; line-height: 1.4; }
 .trace-section-heading { justify-content: space-between; gap: 12px; }
 .trace-section-heading h3 { margin: 4px 0 0; font-size: 16px; }
 .trace-label { display: block; margin-bottom: 8px; color: var(--trace-muted); font-size: 12px; font-weight: 700; }

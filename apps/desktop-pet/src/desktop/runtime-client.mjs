@@ -12,7 +12,11 @@ export const DEFAULT_RUNTIME_ORIGIN = 'http://127.0.0.1:42731'
 // native cloud requests deliberately stay on that same origin instead of
 // using the deployment alias.
 export const DEFAULT_CLOUD_ORIGIN = 'https://trace.neutrom.store'
-const TERMINAL_AGENT_STATES = new Set(['succeeded', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
+const TERMINAL_AGENT_STATES = new Set(['succeeded', 'success', 'completed', 'failed', 'cancelled', 'stale', 'timed_out', 'interrupted'])
+const TERMINAL_AGENT_EVENT_TYPES = new Set([
+  'run.succeeded', 'run.completed', 'run.failed', 'run.cancelled',
+  'run.stale', 'run.timed_out', 'run.interrupted',
+])
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 const DESKTOP_HOST = 'codex'
 const DESKTOP_HOST_SESSION = 'trace-desktop'
@@ -144,6 +148,7 @@ export function createRuntimeCapabilityClient({
   desktopSnapshotToken = process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
   now = Date.now,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  onCodexEvent = null,
 } = {}) {
   const backendOrigin = validateRuntimeOrigin(origin)
   const cloudBase = new URL(cloudOrigin)
@@ -153,6 +158,7 @@ export function createRuntimeCapabilityClient({
   const repositoryPreflights = new Map()
   const recoveryPreviews = new Map()
   const publicationPreviews = new Map()
+  const agentEventSubscriptions = new Map()
   let lastPanelRows = null
   const remember = (map, key, value) => {
     map.set(key, {...value, createdAt: now()})
@@ -235,6 +241,106 @@ export function createRuntimeCapabilityClient({
       if (chunk.done) break
     }
     return { runId, after, events }
+  }
+
+  /**
+   * Consume one Agent run's persisted SSE stream.  Unlike the old host-turn
+   * sampler this forwards runtime.approval.required immediately, so the
+   * desktop can ask the user before the run reaches a terminal state.  The
+   * sequence cursor is retained across a dropped loopback connection.
+   */
+  async function subscribeAgentRun(runId, onEvent = onCodexEvent, { signal } = {}) {
+    const safeRunId = requireId(runId, 'Agent 运行')
+    if (typeof onEvent !== 'function') throw new Error('Agent 事件订阅没有接收器')
+    const existing = agentEventSubscriptions.get(safeRunId)
+    if (existing) return existing.promise
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    signal?.addEventListener?.('abort', abort, { once: true })
+    const subscription = { controller, promise: null }
+    const promise = (async () => {
+      let after = 0
+      let retries = 0
+      let terminal = false
+      try {
+        while (!controller.signal.aborted && !terminal) {
+          let response
+          try {
+            const url = new URL(`/api/agent/runs/${encodeURIComponent(safeRunId)}/events?after=${after}`, backendOrigin)
+            response = await fetchImpl(url, {
+              method: 'GET', redirect: 'error', cache: 'no-store', signal: controller.signal,
+              headers: { origin: backendOrigin, accept: 'text/event-stream', ...(after ? { 'last-event-id': String(after) } : {}) },
+            })
+          } catch {
+            if (controller.signal.aborted) break
+            if (++retries > 8) throw new Error('Agent 实时进度连接已断开，请重新打开桌宠')
+            await wait(Math.min(1_000 * retries, 5_000))
+            continue
+          }
+          if (!response.ok) {
+            if (response.status === 404 || response.status === 409) throw new Error(`Agent 运行已不可恢复（${response.status}）`)
+            if (++retries > 8) throw new Error(`Agent 实时进度暂时不可用（${response.status}）`)
+            await wait(Math.min(1_000 * retries, 5_000))
+            continue
+          }
+          retries = 0
+          const reader = response.body?.getReader?.()
+          if (!reader) throw new Error('Agent 实时进度返回为空')
+          const decoder = new TextDecoder()
+          let buffer = ''
+          const deliver = (block) => {
+            const lines = block.split(/\r?\n/)
+            let type = 'message', idValue = '', data = ''
+            for (const line of lines) {
+              if (line.startsWith('event:')) type = line.slice(6).trim().slice(0, 96)
+              else if (line.startsWith('id:')) idValue = line.slice(3).trim().slice(0, 96)
+              else if (line.startsWith('data:')) data += line.slice(5).trim()
+            }
+            if (!data) return
+            let payload
+            try { payload = JSON.parse(data) } catch { return }
+            const sequence = Number.isSafeInteger(payload?.sequence) ? payload.sequence : Number(idValue)
+            if (Number.isSafeInteger(sequence) && sequence > after) after = sequence
+            const event = {
+              ...payload,
+              runId: payload?.runId || safeRunId,
+              sequence: Number.isSafeInteger(sequence) ? sequence : undefined,
+              type: payload?.type || type,
+              eventId: payload?.eventId || `${safeRunId}:${Number.isSafeInteger(sequence) ? sequence : idValue || Date.now()}`,
+            }
+            try { onEvent(event) } catch { /* UI subscribers must not stop transport. */ }
+            const status = String(payload?.data?.status || payload?.status || '').toLowerCase()
+            terminal = TERMINAL_AGENT_EVENT_TYPES.has(String(event.type))
+              || TERMINAL_AGENT_STATES.has(status)
+          }
+          while (!controller.signal.aborted) {
+            const chunk = await reader.read()
+            buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done })
+            let boundary
+            while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+              deliver(buffer.slice(0, boundary)); buffer = buffer.slice(boundary + 2)
+            }
+            if (chunk.done) break
+          }
+          if (!terminal && !controller.signal.aborted) await wait(200)
+        }
+      } finally {
+        signal?.removeEventListener?.('abort', abort)
+        if (agentEventSubscriptions.get(safeRunId) === subscription) agentEventSubscriptions.delete(safeRunId)
+      }
+      return { runId: safeRunId, after, terminal }
+    })()
+    subscription.promise = promise
+    agentEventSubscriptions.set(safeRunId, subscription)
+    return promise
+  }
+
+  function beginAgentEventSubscription(runId) {
+    if (typeof onCodexEvent !== 'function') return
+    void subscribeAgentRun(runId).catch(() => {
+      // The run/read response remains authoritative; no synthetic failure is
+      // emitted when only the optional live projection is disconnected.
+    })
   }
 
   async function cloudRequest(pathname, body, timeoutMs = 35_000) {
@@ -323,6 +429,44 @@ export function createRuntimeCapabilityClient({
       status: safePanelText(item?.status, 40),
       count: Number.isFinite(item?.item_count) ? item.item_count : 0,
       createdAt: safePanelText(item?.created_at, 80),
+    }
+  }
+
+  /**
+   * Safe, transport-only projection for the native pet. The current product
+   * host endpoint exposes turn rows rather than a dedicated event stream, so
+   * this adapter emits a turn-level event when those rows carry stable IDs.
+   * A future Codex app-server adapter can return the same contract without
+   * changing the renderer or pet reducer.
+   */
+  async function readCodexEvents() {
+    const response = await runtimeRequest(listQuery('/api/product/host/turns', { host: DESKTOP_HOST, session_id: DESKTOP_HOST_SESSION }), undefined, 8_000, { items: [] })
+    const rows = Array.isArray(response?.items) ? response.items : []
+    return {
+      source: 'trace-runtime/codex-host',
+      events: rows.slice(0, 128).flatMap((item) => {
+        const threadId = safePanelText(item?.thread_id || item?.threadId || item?.session_id || item?.sessionId, 512)
+        const turnId = safePanelText(item?.turn_id || item?.turnId || item?.id, 512)
+        if (!threadId || !turnId) return []
+        const status = String(item?.status || item?.state || '').toLowerCase().replace(/[- ]/g, '_')
+        const failed = ['failed', 'error', 'timed_out', 'cancelled', 'canceled'].includes(status)
+        const completed = ['completed', 'complete', 'succeeded', 'success', 'done'].includes(status)
+        const kind = failed ? 'turn.failed' : completed ? 'turn.completed' : 'turn.updated'
+        const at = item?.updated_at || item?.updatedAt || item?.last_event_at || item?.lastEventAt || item?.created_at || item?.createdAt
+        const title = safePanelText(item?.title || item?.summary || item?.label, 160)
+        const detail = safePanelText(item?.detail || item?.message, 160)
+        return [{
+          eventId: `turn:${threadId}:${turnId}:${status || 'unknown'}:${String(at || '')}`.slice(0, 512),
+          threadId,
+          turnId,
+          itemId: null,
+          kind,
+          status: failed ? 'failed' : completed ? 'completed' : 'in_progress',
+          title,
+          detail,
+          ...(at ? { at } : {}),
+        }]
+      }),
     }
   }
 
@@ -645,6 +789,7 @@ export function createRuntimeCapabilityClient({
       })
     }
     if (request.operation === 'workspace.summary') return readObservationSummary()
+    if (request.operation === 'codex.events') return readCodexEvents()
     if (request.operation === 'workspace.capture') return captureObservation(request.text, request.source)
     if (request.operation === 'host.panel.read') return readRuntimePanel()
     if (request.operation === 'host.panel.action') return runtimePanelAction(request)
@@ -719,6 +864,7 @@ export function createRuntimeCapabilityClient({
       const sources = await remoteSourceContext(request.source, request.text)
       const submitted = await runtimeRequest('/api/agent/runs', { protocolVersion: 1, requestId: `pet-run-${randomId()}`, expectedRevision: created.revision, matterId, contextMode: session.contextMode, contextEpoch: session.contextEpoch, purpose: 'discuss', input: `请帮助我分清这段原话里的条件、证据与仍不确定之处。结果只作为候选。${sources ? `\n\n${sources.prompt}` : ''}`, ...(profileId ? { profileId } : {}) })
       if (!submitted.run?.runId) throw new Error('Trace Runtime did not return a run identity')
+      beginAgentEventSubscription(submitted.run.runId)
       return { ...submitted.run, ...(sources ? { sources: { source: sources.source, items: sources.items } } : {}) }
     }
     if (request.operation === 'agent.run.read') {
@@ -726,6 +872,27 @@ export function createRuntimeCapabilityClient({
       return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}`, undefined, 10_000)
     }
     if (request.operation === 'agent.run.events') return runtimeEventStream(request.runId, request.after === undefined ? 0 : request.after)
+    if (request.operation === 'agent.run.approval') {
+      const runId = requireId(request.runId, 'Agent 运行')
+      const interactionId = requireId(request.interactionId, '交互请求')
+      if (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new Error('审批需要当前运行版本')
+      const idempotencyKey = requireId(request.idempotencyKey, '审批幂等键')
+      const decision = ['accept', 'accept_for_session', 'decline', 'cancel'].includes(request.decision) ? request.decision : null
+      if (!decision) throw new Error('审批决定不正确')
+      return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/approval`, {
+        interactionId, expectedRevision: request.expectedRevision, idempotencyKey, decision,
+      })
+    }
+    if (request.operation === 'agent.run.input') {
+      const runId = requireId(request.runId, 'Agent 运行')
+      const interactionId = requireId(request.interactionId, '交互请求')
+      if (!Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new Error('输入请求需要当前运行版本')
+      const idempotencyKey = requireId(request.idempotencyKey, '输入幂等键')
+      if (!request.answers || typeof request.answers !== 'object' || Array.isArray(request.answers)) throw new Error('输入答案不完整')
+      return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/input`, {
+        interactionId, expectedRevision: request.expectedRevision, idempotencyKey, answers: request.answers,
+      })
+    }
     if (request.operation === 'agent.run.cancel') {
       const runId = requireId(request.runId, 'Agent 运行')
       return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/cancel`, {})
@@ -769,6 +936,7 @@ export function createRuntimeCapabilityClient({
       })
       const runId = submitted.run?.runId
       if (!runId) throw new Error('Trace Runtime did not return a run identity')
+      beginAgentEventSubscription(runId)
       const deadline = now() + 190_000
       let run = submitted.run
       while (!TERMINAL_AGENT_STATES.has(run.status)) {
@@ -866,6 +1034,7 @@ export function createRuntimeCapabilityClient({
       })
       const runId = submitted.run?.runId
       if (!runId) throw new Error('Codex 没有返回本次运行')
+      beginAgentEventSubscription(runId)
       const deadline = now() + 190_000
       let run = submitted.run
       while (!TERMINAL_AGENT_STATES.has(run.status)) {
@@ -901,5 +1070,5 @@ export function createRuntimeCapabilityClient({
     throw new Error('Unsupported capability operation')
   }
 
-  return { origin: backendOrigin, request: capabilityRequest, setProjectDir }
+  return { origin: backendOrigin, request: capabilityRequest, setProjectDir, subscribeAgentRun }
 }
