@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 // Safe fallback for standalone client construction. The packaged desktop
 // host asks the OS for a free loopback port and passes that resolved origin
@@ -20,6 +21,8 @@ const TERMINAL_AGENT_EVENT_TYPES = new Set([
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 const DESKTOP_HOST = 'codex'
 const DESKTOP_HOST_SESSION = 'trace-desktop'
+const CODEX_QUALIFICATION_REQUIRED = 'CODEX_QUALIFICATION_REQUIRED'
+const QUALIFICATION_TIMEOUT_MS = 60_000
 
 export function resolveCodexExecutable({ env = process.env, platform = process.platform } = {}) {
   const explicit = typeof env.TRACE_CODEX_BIN === 'string' ? env.TRACE_CODEX_BIN.trim() : ''
@@ -82,6 +85,17 @@ function publicRuntimeError(value, status) {
   return message
 }
 
+function runtimeError(value, status) {
+  const error = new Error(publicRuntimeError(value, status))
+  if (typeof value?.error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,80}$/.test(value.error.code)) error.code = value.error.code
+  error.status = status
+  return error
+}
+
+function safeThreadId(value) {
+  return typeof value === 'string' && value.trim() && value.length <= 200 && !/[\0\r\n]/.test(value) ? value.trim() : null
+}
+
 function safeWorkResult(workspace, workId) {
   const work = workspace?.host?.worksite?.works?.[workId]
   const session = workspace?.host?.worksite?.sessions?.[workId]
@@ -142,6 +156,7 @@ export function createRuntimeCapabilityClient({
   origin = process.env.TRACE_BACKEND_ORIGIN || DEFAULT_RUNTIME_ORIGIN,
   cloudOrigin = process.env.TRACE_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN,
   projectDir: configuredProjectDir,
+  runtimeRoot = process.env.TRACE_RUNTIME_ROOT,
   fetchImpl = globalThis.fetch,
   cloudFetchImpl = fetchImpl,
   randomId = randomUUID,
@@ -149,6 +164,10 @@ export function createRuntimeCapabilityClient({
   now = Date.now,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   onCodexEvent = null,
+  onSetupProgress = null,
+  qualifyCodexAppServerImpl = null,
+  getCodexThreadId = null,
+  setCodexThreadId = null,
 } = {}) {
   const backendOrigin = validateRuntimeOrigin(origin)
   const cloudBase = new URL(cloudOrigin)
@@ -159,6 +178,10 @@ export function createRuntimeCapabilityClient({
   const recoveryPreviews = new Map()
   const publicationPreviews = new Map()
   const agentEventSubscriptions = new Map()
+  const codexThreadIds = new Map()
+  let qualificationPromise = null
+  let qualificationController = null
+  let closed = false
   let lastPanelRows = null
   const remember = (map, key, value) => {
     map.set(key, {...value, createdAt: now()})
@@ -180,6 +203,100 @@ export function createRuntimeCapabilityClient({
     projectContext = undefined
     const selected = currentProject()
     return { connected: true, projectName: selected.projectName, agentLabel: 'Codex', locationLabel: '已选择项目' }
+  }
+
+  const setupProgress = (event) => {
+    if (closed || typeof onSetupProgress !== 'function') return
+    const safe = {
+      kind: 'codex-qualification',
+      status: event?.status === 'failed' ? 'failed' : event?.status === 'completed' ? 'completed' : 'running',
+      phase: typeof event?.phase === 'string' && /^[a-z-]{2,40}$/.test(event.phase) ? event.phase : 'checking',
+      message: typeof event?.message === 'string' && event.message.length <= 240 ? event.message : '正在检查 Codex 兼容性…',
+    }
+    try { onSetupProgress(safe) } catch { /* Renderer progress is advisory. */ }
+  }
+
+  function setupError(code, message) {
+    const error = new Error(message)
+    error.code = code
+    return error
+  }
+
+  async function loadPackagedQualifier() {
+    if (!runtimeRoot || !path.isAbsolute(runtimeRoot)) return null
+    const entry = path.join(runtimeRoot, 'native', 'qualify-codex-app-server.mjs')
+    if (!fs.existsSync(entry)) return null
+    try {
+      const module = await import(pathToFileURL(entry).href)
+      return typeof module.qualifyCodexAppServer === 'function' ? module.qualifyCodexAppServer : null
+    } catch {
+      return null
+    }
+  }
+
+  function storedCodexThreadId(workId) {
+    const local = safeThreadId(codexThreadIds.get(workId))
+    if (local) return local
+    if (typeof getCodexThreadId !== 'function') return null
+    try {
+      const persisted = safeThreadId(getCodexThreadId(workId))
+      if (persisted) codexThreadIds.set(workId, persisted)
+      return persisted
+    } catch { return null }
+  }
+
+  function rememberCodexThreadId(workId, run) {
+    const threadId = safeThreadId(run?.runtime?.threadId || run?.threadId)
+    if (!threadId) return null
+    codexThreadIds.set(workId, threadId)
+    try { setCodexThreadId?.(workId, threadId) } catch { /* Local resume state is best effort. */ }
+    return threadId
+  }
+
+  function withWorkThreadId(work, workId) {
+    const threadId = storedCodexThreadId(workId)
+    return threadId ? { ...work, threadId } : work
+  }
+
+  async function qualifyCodexAppServer() {
+    if (qualificationPromise) return qualificationPromise
+    qualificationPromise = (async () => {
+      qualificationController = new AbortController()
+      const timer = setTimeout(() => qualificationController?.abort(), QUALIFICATION_TIMEOUT_MS)
+      try {
+        setupProgress({ phase: 'starting', message: '正在准备一次性 Codex 兼容性检查…' })
+        const qualifier = qualifyCodexAppServerImpl || await loadPackagedQualifier()
+        if (typeof qualifier !== 'function') throw setupError('CODEX_QUALIFIER_UNAVAILABLE', '当前桌面版本无法完成首次 Codex 检查，请更新 Trace 后重试。')
+        const executable = resolveCodexExecutable()
+        const projectCwd = projectContext?.projectDir || selectedProjectDir || process.cwd()
+        setupProgress({ phase: 'checking', message: '正在验证 Codex 登录状态与连接能力（不会运行模型）…' })
+        const result = await qualifier({
+          ...(executable ? { executable, command: executable } : {}),
+          projectCwd,
+          timeoutMs: QUALIFICATION_TIMEOUT_MS,
+          signal: qualificationController.signal,
+        })
+        if (!result || result.status !== 'compatible' || !Array.isArray(result.result?.checks) || !result.result.checks.includes('no-model-turn')) {
+          throw setupError('CODEX_QUALIFICATION_FAILED', 'Codex 兼容性检查没有通过，请确认 Codex 已安装并登录后重试。')
+        }
+        setupProgress({ status: 'completed', phase: 'complete', message: 'Codex 兼容性检查已完成，正在重新确认连接…' })
+        return { status: 'completed' }
+      } catch (error) {
+        const code = error?.name === 'AbortError' || qualificationController?.signal.aborted ? 'CODEX_QUALIFICATION_TIMEOUT' : (error?.code || 'CODEX_QUALIFICATION_FAILED')
+        const message = code === 'CODEX_QUALIFIER_UNAVAILABLE'
+          ? '当前桌面版本无法完成首次 Codex 检查，请更新 Trace 后重试。'
+          : code === 'CODEX_QUALIFICATION_TIMEOUT'
+            ? 'Codex 兼容性检查超时，请重试。'
+            : 'Codex 兼容性检查没有通过，请确认 Codex 已安装并登录后重试。'
+        setupProgress({ status: 'failed', phase: 'failed', message })
+        throw setupError(code, message)
+      } finally {
+        clearTimeout(timer)
+        qualificationController = null
+        qualificationPromise = null
+      }
+    })()
+    return qualificationPromise
   }
 
   async function runtimeRequest(pathname, body, timeoutMs = 35_000, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
@@ -206,7 +323,7 @@ export function createRuntimeCapabilityClient({
     if (response.status === 404 && notFoundFallback !== NO_NOT_FOUND_FALLBACK) return notFoundFallback
     let value
     try { value = JSON.parse(text) } catch { throw new Error('Trace 本机能力没有正确响应，请重新打开 Trace 后再试') }
-    if (!response.ok) throw new Error(publicRuntimeError(value, response.status))
+    if (!response.ok) throw runtimeError(value, response.status)
     return value
   }
 
@@ -808,8 +925,26 @@ export function createRuntimeCapabilityClient({
       const capabilities = await runtimeRequest('/api/agent/capabilities')
       const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
       if (!codex) throw new Error('这台设备还没有可用的 Codex 执行器')
-      const checked = await runtimeRequest('/api/agent/check', { profileId: codex.profileId }, 45_000)
-      return { ready: checked.authenticated === true, authenticated: checked.authenticated === true, version: checked.version || null, label: codex.label || 'Codex' }
+      let qualification = null
+      let checked
+      try {
+        checked = await runtimeRequest('/api/agent/check', { profileId: codex.profileId }, 45_000)
+      } catch (error) {
+        if (error?.code !== CODEX_QUALIFICATION_REQUIRED) throw error
+        qualification = await qualifyCodexAppServer()
+        try {
+          checked = await runtimeRequest('/api/agent/check', { profileId: codex.profileId }, 45_000)
+        } catch {
+          throw setupError('CODEX_CHECK_FAILED', 'Codex 连接检查没有通过，请重试。')
+        }
+      }
+      return {
+        ready: checked.authenticated === true,
+        authenticated: checked.authenticated === true,
+        version: checked.version || null,
+        label: codex.label || 'Codex',
+        ...(qualification ? { qualification } : {}),
+      }
     }
     if (request.operation === 'setup.codex.connect') {
       const runtimeRoot = process.env.TRACE_RUNTIME_ROOT
@@ -968,6 +1103,10 @@ export function createRuntimeCapabilityClient({
       const note = typeof request.note === 'string' && request.note.length <= 16_000 ? request.note.trim() : ''
       const role = ['reference', 'trial'].includes(request.role) ? request.role : 'reference'
       const source = ['none', 'zhihu', 'global'].includes(request.source) ? request.source : 'none'
+      const threadId = request.threadId === undefined
+        ? storedCodexThreadId(workId)
+        : safeThreadId(request.threadId)
+      if (request.threadId !== undefined && !threadId) throw new Error('Codex 会话标识不完整')
       const sessionId = `trace-desktop:${workId}`
 
       let workspace = await runtimeRequest('/api/product/workspace')
@@ -993,7 +1132,7 @@ export function createRuntimeCapabilityClient({
       }
 
       let visible = safeWorkResult(workspace, workId)
-      if (visible?.status === 'returned_for_review' && visible.result) return visible
+      if (visible?.status === 'returned_for_review' && visible.result) return withWorkThreadId(visible, workId)
 
       let delivery = workspace.host?.worksite?.sessions?.[workId]?.codexDelivery
       if (!delivery) {
@@ -1031,9 +1170,11 @@ export function createRuntimeCapabilityClient({
         purpose: 'discuss',
         profileId: profile.profileId,
         input: `完成这次工作：${title}\n\n请只返回实际得到的结果、你的解释与仍需确认的条件；不要自动修改用户的理解。${sources ? `\n\n${sources.prompt}` : ''}`,
+        ...(threadId ? { threadId } : {}),
       })
       const runId = submitted.run?.runId
       if (!runId) throw new Error('Codex 没有返回本次运行')
+      rememberCodexThreadId(workId, submitted.run)
       beginAgentEventSubscription(runId)
       const deadline = now() + 190_000
       let run = submitted.run
@@ -1041,6 +1182,7 @@ export function createRuntimeCapabilityClient({
         if (now() >= deadline) throw new Error('等待 Codex 返回结果超时；可以稍后重新接回')
         await wait(500)
         run = await runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}`, undefined, 10_000)
+        rememberCodexThreadId(workId, run)
       }
       if (run.status !== 'succeeded' || !run.result?.answer) throw new Error(run.error?.message || `Codex 本次工作未完成（${run.status}）`)
 
@@ -1065,10 +1207,17 @@ export function createRuntimeCapabilityClient({
       workspace = await runtimeRequest('/api/product/workspace')
       visible = safeWorkResult(workspace, workId)
       if (!visible?.result || returned.receipt?.status !== 'returned_for_review') throw new Error('Codex 结果尚未进入 Trace 复核区')
-      return visible
+      return withWorkThreadId(visible, workId)
     }
     throw new Error('Unsupported capability operation')
   }
 
-  return { origin: backendOrigin, request: capabilityRequest, setProjectDir, subscribeAgentRun }
+  function close() {
+    closed = true
+    qualificationController?.abort()
+    for (const subscription of agentEventSubscriptions.values()) subscription.controller.abort()
+    agentEventSubscriptions.clear()
+  }
+
+  return { origin: backendOrigin, request: capabilityRequest, setProjectDir, subscribeAgentRun, close }
 }

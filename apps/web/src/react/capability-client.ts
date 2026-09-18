@@ -2,7 +2,10 @@ export type SearchSource = 'zhihu' | 'global';
 export type SearchItem = { id: string; provider: 'zhihu'; source: SearchSource; title: string; author: string | null; url: string | null; excerpt: string; content_id?: string | null; content_type: string; comment_count?: number | null; vote_up_count?: number | null; authority_level?: string | null; edited_at?: string | null; content_mode: string; fetched_at: string };
 export type SearchResult = { source: SearchSource; query: string; items: SearchItem[]; content_mode: string; saved_to_trace: false };
 
-type NativeCapabilityBridge = { requestCapability?: (request: Record<string, unknown>) => Promise<any> };
+type NativeCapabilityBridge = {
+  requestCapability?: (request: Record<string, unknown>) => Promise<any>;
+  onSetupProgress?: (listener: (event: any) => void) => (() => void) | undefined;
+};
 
 function nativeBridge(): NativeCapabilityBridge | undefined {
   return (window as Window & { traceNative?: NativeCapabilityBridge }).traceNative;
@@ -150,6 +153,7 @@ export async function runNativeWork(input: {
   note?: string;
   source?: SearchSource | 'none';
   profileId?: string;
+  threadId?: string;
 }): Promise<any> {
   const bridge = nativeBridge();
   if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌宠，再把这次工作交给本机 Codex。');
@@ -184,6 +188,10 @@ export async function connectTraceCodexPlugin(): Promise<any> {
   const bridge = nativeBridge();
   if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
   return bridge.requestCapability({ operation: 'setup.codex.connect' });
+}
+
+export function onDesktopSetupProgress(listener: (event: any) => void): (() => void) | undefined {
+  return nativeBridge()?.onSetupProgress?.(listener);
 }
 
 export function hasNativeCapabilityBridge(): boolean { return Boolean(nativeBridge()?.requestCapability); }

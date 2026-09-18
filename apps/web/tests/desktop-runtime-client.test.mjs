@@ -94,6 +94,84 @@ test('desktop first-run setup reports only safe project and verified Codex detai
   assert.deepEqual(calls[2].body, { profileId: 'local-codex' })
 })
 
+test('desktop first-run Codex check qualifies once without a model turn, then rechecks automatically', async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-qualification-'))
+  const projectDir = path.join(fixtureRoot, 'private-workspace')
+  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+  const calls = []
+  const progress = []
+  let checkCount = 0
+  let qualifierCount = 0
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4415',
+    projectDir,
+    onSetupProgress: (event) => progress.push(event),
+    qualifyCodexAppServerImpl: async (options) => {
+      qualifierCount += 1
+      assert.equal(options.projectCwd, projectDir)
+      assert.equal(options.timeoutMs, 60_000)
+      assert.equal(typeof options.signal?.aborted, 'boolean')
+      return { status: 'compatible', recordPath: 'hidden', schemaRoot: 'hidden', result: { checks: ['no-model-turn'] } }
+    },
+    fetchImpl: async (url, init) => {
+      const body = init.body ? JSON.parse(init.body) : undefined
+      calls.push({ pathname: url.pathname, body })
+      if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', label: 'Codex', kind: 'codex' }] })
+      if (url.pathname === '/api/agent/check') {
+        checkCount += 1
+        if (checkCount === 1) return response({ error: { code: 'CODEX_QUALIFICATION_REQUIRED', message: '请先运行 pnpm qualify:codex-app-server' } }, 503)
+        return response({ authenticated: true, version: 'codex-cli 0.155.0' })
+      }
+      return response({ error: { message: 'not found' } }, 404)
+    },
+  })
+
+  const checked = await client.request({ operation: 'setup.codex.check' })
+  assert.equal(qualifierCount, 1)
+  assert.equal(checkCount, 2)
+  assert.deepEqual(checked.qualification, { status: 'completed' })
+  assert.equal(checked.ready, true)
+  assert.equal(progress.at(-1).status, 'completed')
+  assert.equal(progress.some((event) => /pnpm|schema|rpc|[A-Za-z]:[\\/]/i.test(JSON.stringify(event))), false)
+  assert.deepEqual(calls.map((call) => call.pathname), ['/api/agent/capabilities', '/api/agent/check', '/api/agent/check'])
+})
+
+test('desktop first-run qualification is single-flight and exposes a bounded retryable failure', async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-qualification-failure-'))
+  const projectDir = path.join(fixtureRoot, 'private-workspace')
+  await mkdir(path.join(projectDir, '.git'), { recursive: true })
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+  const progress = []
+  let qualifierCount = 0
+  let release
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4414',
+    projectDir,
+    onSetupProgress: (event) => progress.push(event),
+    qualifyCodexAppServerImpl: async () => {
+      qualifierCount += 1
+      return new Promise((resolve) => { release = resolve })
+    },
+    fetchImpl: async (url) => {
+      if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', kind: 'codex' }] })
+      if (url.pathname === '/api/agent/check') return response({ error: { code: 'CODEX_QUALIFICATION_REQUIRED', message: 'qualification required: pnpm and schema details are private' } }, 503)
+      return response({ error: { message: 'not found' } }, 404)
+    },
+  })
+  const first = client.request({ operation: 'setup.codex.check' })
+  const second = client.request({ operation: 'setup.codex.check' })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(qualifierCount, 1)
+  release({ status: 'incompatible', error: 'private schema/RPC detail' })
+  const results = await Promise.allSettled([first, second])
+  assert.equal(results.every((result) => result.status === 'rejected'), true)
+  assert.equal(results.every((result) => result.reason.message === 'Codex 兼容性检查没有通过，请确认 Codex 已安装并登录后重试。'), true)
+  assert.equal(progress.at(-1).status, 'failed')
+  assert.equal(JSON.stringify(progress).includes('schema'), false)
+  assert.equal(JSON.stringify(progress).includes('pnpm'), false)
+})
+
 test('desktop first-run Zhihu status fails safely when the cloud route is unavailable', async () => {
   const client = createRuntimeCapabilityClient({
     fetchImpl: async () => new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } }),
@@ -296,6 +374,7 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
   const client = createRuntimeCapabilityClient({
     origin: 'http://127.0.0.1:4420',
     projectDir,
+    getCodexThreadId: (workId) => workId === 'work-1' ? 'persisted-codex-thread' : null,
     wait: async () => {},
     now: () => 0,
     fetchImpl: async (url, init) => {
@@ -329,5 +408,6 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
   ])
   assert.equal(calls[1].body.operations[1].destination.project, 'traceweb')
   assert.equal(calls[2].body.projectDir, projectDir)
+  assert.equal(calls[5].body.threadId, 'persisted-codex-thread')
   assert.deepEqual(calls[6].body.result.artifacts, [])
 })

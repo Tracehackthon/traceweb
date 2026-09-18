@@ -634,7 +634,8 @@ export class WebRuntime {
     try {
       const matter = this.host.chain.matters.find((item: any) => item.id === matterId);
       const source = matter?.captureIntent?.source === 'web' ? 'global' : matter?.captureIntent?.source || 'none';
-      const returned = await runNativeWork({ workId, matterId, title: work.title, text: intake.sourceText, role: intake.role, note: intake.note, source });
+      const threadId = typeof work.connection?.threadId === 'string' && work.connection.threadId.trim() ? work.connection.threadId.trim() : undefined;
+      const returned = await runNativeWork({ workId, matterId, title: work.title, text: intake.sourceText, role: intake.role, note: intake.note, source, ...(threadId ? { threadId } : {}) });
       if (!returned?.result) throw new Error('Codex 已接收工作，但结果还没有回到 Trace。');
       this.closeDialog();
       await this.commit((state) => {
@@ -642,7 +643,7 @@ export class WebRuntime {
         if (next.error) return next;
         next = clone(next);
         next.worksite.works[workId].connected = true;
-        next.worksite.works[workId].connection = { hostType: 'codex', status: 'returned_for_review' };
+        next.worksite.works[workId].connection = { hostType: 'codex', status: 'returned_for_review', ...(typeof returned.threadId === 'string' && returned.threadId ? { threadId: returned.threadId } : {}) };
         return next;
       }, () => this.navigate({ view: 'worksite', workId, matterId, screen: 'results' }), [{ type: 'worksite.action', workId, action: { type: 'RESULT_DRAFT', patch: { matterId, ...returned.result } } }]);
     } catch (cause) {
@@ -663,7 +664,7 @@ export class WebRuntime {
           if (next.error) return next;
           next = clone(next);
           next.worksite.works[work.id].connected = true;
-          next.worksite.works[work.id].connection = { hostType: 'codex', status: 'returned_for_review' };
+          next.worksite.works[work.id].connection = { hostType: 'codex', status: 'returned_for_review', ...(typeof known.threadId === 'string' && known.threadId ? { threadId: known.threadId } : {}) };
           return next;
         }, () => this.navigate({ view: 'worksite', workId: work.id, matterId, screen: 'results' }), [{ type: 'worksite.action', workId: work.id, action: { type: 'RESULT_DRAFT', patch: { matterId, ...known.result } } }]);
         return;

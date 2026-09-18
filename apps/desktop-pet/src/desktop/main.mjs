@@ -46,6 +46,12 @@ function sendCodexEvent(event) {
   overlayWindow.webContents.send('trace-native:codex-event', event)
 }
 
+function sendSetupProgress(event) {
+  for (const window of discussionWindows) {
+    if (!window.isDestroyed()) window.webContents.send('trace-native:setup-progress', event)
+  }
+}
+
 function installDiscussionProtocol() {
   const discussionRoot = resolve(root, 'discussion')
   const prefix = `${discussionRoot}${sep}`
@@ -445,6 +451,18 @@ if (!ownsInstance) {
         desktopSnapshotToken: process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
         onCodexEvent: (event) => sendCodexEvent(event),
+        onSetupProgress: (event) => sendSetupProgress(event),
+        getCodexThreadId: (workId) => readDesktopSettings().codexThreads?.[workId],
+        setCodexThreadId: (workId, threadId) => {
+          const current = readDesktopSettings()
+          const entries = current.codexThreads && typeof current.codexThreads === 'object' && !Array.isArray(current.codexThreads)
+            ? { ...current.codexThreads }
+            : {}
+          entries[workId] = threadId
+          const keys = Object.keys(entries)
+          while (keys.length > 128) delete entries[keys.shift()]
+          writeDesktopSettings({ ...current, codexThreads: entries })
+        },
       })
       app.setAppUserModelId('store.neutrom.trace.desktop')
       Menu.setApplicationMenu(null)
@@ -528,5 +546,6 @@ app.on('window-all-closed', () => {})
 app.on('before-quit', () => {
   quitting = true
   stopCodexEventPolling()
+  capabilityClient?.close?.()
   void bundledRuntime?.close?.()
 })

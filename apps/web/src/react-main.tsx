@@ -8,7 +8,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
-import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
+import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, onDesktopSetupProgress, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
 import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
@@ -553,6 +553,7 @@ function RuntimeOperationsPanel() {
 function CodexConnectionPanel() {
   const [setup, setSetup] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [qualification, setQualification] = useState<any>(null);
   const [message, setMessage] = useState('正在检查桌宠、项目和 Codex…');
   const load = async () => {
     try {
@@ -562,6 +563,14 @@ function CodexConnectionPanel() {
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : '暂时无法检查本机接入。'); }
   };
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const remove = onDesktopSetupProgress((event) => {
+      if (event?.kind !== 'codex-qualification') return;
+      setQualification(event);
+      if (typeof event.message === 'string' && event.message) setMessage(event.message);
+    });
+    return () => remove?.();
+  }, []);
   const chooseProject = async () => {
     setBusy(true);
     try {
@@ -572,12 +581,20 @@ function CodexConnectionPanel() {
     finally { setBusy(false); }
   };
   const check = async () => {
-    setBusy(true); setMessage('正在通过受限连接检查 Codex 版本与登录状态…');
+    setBusy(true); setQualification({ status: 'running', phase: 'starting', message: '正在通过受限连接检查 Codex 版本与登录状态…' }); setMessage('正在通过受限连接检查 Codex 版本与登录状态…');
     try {
       const value = await checkCodexConnection();
       setSetup((current: any) => ({ ...current, codex: { ...current?.codex, ...value, checked: true } }));
+      if (value?.qualification?.status === 'completed') setQualification({ status: 'completed', phase: 'complete', message: '首次 Codex 兼容性检查已完成。' });
       setMessage(value.ready ? `Codex ${value.version || ''} 已登录，可以接收 Trace 工作。` : 'Codex 已找到，但尚未登录。请先打开 Codex 完成登录。');
-    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Codex 检查没有完成。'); }
+    } catch (cause) {
+      const raw = cause instanceof Error ? cause.message : '';
+      const safe = /(?:pnpm|schema|rpc|[A-Za-z]:[\\/]|\/(?:Users|home|var|tmp|private|opt|srv)\/)/i.test(raw)
+        ? 'Codex 兼容性检查没有完成，请重试。'
+        : raw || 'Codex 检查没有完成，请重试。';
+      setQualification((current: any) => ({ ...(current || {}), status: 'failed', phase: 'failed', message: safe }));
+      setMessage(safe);
+    }
     finally { setBusy(false); }
   };
   const connectPlugin = async () => {
@@ -587,11 +604,13 @@ function CodexConnectionPanel() {
     finally { setBusy(false); }
   };
   const ready = setup?.codex?.ready === true && setup?.project?.connected === true;
+  const qualificationRunning = qualification?.status === 'running';
   return <section className="web-codex-setup" data-ready={ready ? 'true' : 'false'}>
-    <header><h3>Codex 接入</h3><span>{ready ? '可以开始工作' : setup ? '需要一次检查' : '正在检查'}</span></header>
+    <header><h3>Codex 接入</h3><span>{ready ? '可以开始工作' : qualificationRunning ? '正在完成首次检查' : qualification?.status === 'failed' ? '检查失败，可重试' : setup ? '需要一次检查' : '正在检查'}</span></header>
     <p role="status">{message}</p>
+    {qualification && <p className="web-codex-qualification" data-status={qualification.status} role="status">{qualification.status === 'running' ? `首次连接 · ${qualification.message || '正在检查…'}` : qualification.status === 'completed' ? '首次连接检查已完成；后续连接会直接复用安全记录。' : `首次连接检查未完成 · ${qualification.message || '可以重试。'}`}</p>}
     <dl><div><dt>桌宠连接</dt><dd>{setup?.runtime?.connected ? setup.runtime.bundled ? '已随桌面版连接' : '已连接' : '正在检查'}</dd></div><div><dt>当前项目</dt><dd>{setup?.project?.connected ? setup.project.name : '尚未选择'}</dd></div><div><dt>Codex</dt><dd>{setup?.codex?.ready ? '已登录，可以使用' : setup?.codex?.available ? '已找到，等待检查' : '尚未找到'}</dd></div><div><dt>结果回来后</dt><dd>先进入 Trace，由你确认</dd></div></dl>
-    <div className="web-codex-actions"><RecoveryButton disabled={busy} onClick={() => void chooseProject()}>{setup?.project?.connected ? '更换项目' : '选择项目'}</RecoveryButton><RecoveryButton primary disabled={busy || !setup?.codex?.available} onClick={() => void check()}>{busy ? '正在处理…' : '检查 Codex'}</RecoveryButton>{setup?.codex?.ready && <RecoveryButton disabled={busy} onClick={() => void connectPlugin()}>在 Codex 中使用 Trace</RecoveryButton>}</div>
+    <div className="web-codex-actions"><RecoveryButton disabled={busy} onClick={() => void chooseProject()}>{setup?.project?.connected ? '更换项目' : '选择项目'}</RecoveryButton><RecoveryButton primary disabled={busy || !setup?.codex?.available} onClick={() => void check()}>{busy ? qualificationRunning ? '正在检查…' : '正在处理…' : qualification?.status === 'failed' ? '重试检查' : '检查 Codex'}</RecoveryButton>{setup?.codex?.ready && <RecoveryButton disabled={busy} onClick={() => void connectPlugin()}>在 Codex 中使用 Trace</RecoveryButton>}</div>
     <small className="web-codex-note">“检查 Codex”用于从 Trace 把工作交给本机 Codex；“在 Codex 中使用 Trace”是可选入口，安装后请新开 Codex 任务。项目绝对路径只留在本机，不会显示在页面或发送给模型。</small>
   </section>;
 }

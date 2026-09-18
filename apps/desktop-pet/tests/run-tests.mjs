@@ -275,12 +275,14 @@ test('placement records restore by display then resolution and clamp to work are
 
 test('native bridge exposes explicit event, bounds and placement channels', async () => {
   const preload = await readFile(resolve(root, 'src/desktop/preload.cjs'), 'utf8')
+  const discussionPreload = await readFile(resolve(root, 'src/desktop/discussion-preload.cjs'), 'utf8')
   const main = await readFile(resolve(root, 'src/desktop/main.mjs'), 'utf8')
   const renderer = await readFile(resolve(root, 'src/desktop/renderer.tsx'), 'utf8')
   const overlay = await readFile(resolve(root, 'src/client/TraceOverlay.tsx'), 'utf8')
   for (const channel of ['trace-native:codex-event', 'trace-native:placement:get', 'trace-native:placement:save', 'trace-native:interactive-bounds']) {
     assert.match(preload + main, new RegExp(channel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
+  assert.match(discussionPreload + main, /trace-native:setup-progress/)
   assert.match(renderer, /data-trace-interactive-region/)
   assert.match(overlay, /reduceTraceCodexEvent/)
   assert.match(overlay, /nativeCodexEventsEnabled/)
