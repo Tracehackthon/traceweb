@@ -25,6 +25,61 @@ const runtimeClient = await import(pathToFileURL(resolve(root, 'src/desktop/runt
 const installationIdentity = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-installation-identity.mjs')).href)
 const runtimeIntegrations = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-integrations.mjs')).href)
 const projectBinding = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-project-binding.mjs')).href)
+const desktopLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/lifecycle.mjs')).href)
+
+test('desktop shutdown is single-flight, bypasses renderer unload vetoes and waits for local state cleanup', async () => {
+  const calls = []
+  const windows = [
+    { isDestroyed: () => false, hide: () => calls.push('hide-a'), destroy: () => calls.push('destroy-a') },
+    { isDestroyed: () => true, hide: () => calls.push('hide-dead'), destroy: () => calls.push('destroy-dead') },
+    { isDestroyed: () => false, hide: () => calls.push('hide-b'), destroy: () => calls.push('destroy-b') },
+  ]
+  const app = { exit: (code) => calls.push(`exit-${code}`) }
+  const controller = desktopLifecycle.createDesktopShutdownController({
+    app,
+    listWindows: () => windows,
+    destroyTray: () => calls.push('tray'),
+    stopPolling: () => calls.push('polling'),
+    closeCapability: () => calls.push('capability'),
+    closeRuntime: async () => { calls.push('runtime-start'); await new Promise((resolve) => setTimeout(resolve, 5)); calls.push('runtime-end') },
+    onStart: (reason) => calls.push(`start-${reason}`),
+    timeoutMs: 100,
+  })
+  const quitEvent = { prevented: false, preventDefault() { this.prevented = true } }
+  controller.handleBeforeQuit(quitEvent)
+  assert.equal(quitEvent.prevented, true)
+  await Promise.all([controller.requestShutdown('duplicate'), controller.done])
+  assert.deepEqual(calls, [
+    'start-before-quit', 'polling', 'capability', 'hide-a', 'destroy-a', 'hide-b', 'destroy-b', 'tray',
+    'runtime-start', 'runtime-end', 'exit-0',
+  ])
+  assert.equal(controller.isShuttingDown(), true)
+})
+
+test('desktop update-shutdown launch intent is explicit and bounded cleanup cannot keep the process alive', async () => {
+  assert.equal(desktopLifecycle.launchIntent(['Trace.exe']).action, 'activate')
+  assert.equal(desktopLifecycle.launchIntent(['Trace.exe', desktopLifecycle.UPDATE_SHUTDOWN_ARGUMENT]).action, 'shutdown-for-update')
+  const calls = []
+  const controller = desktopLifecycle.createDesktopShutdownController({
+    app: { exit: (code) => calls.push(`exit-${code}`) },
+    listWindows: () => [],
+    closeRuntime: () => new Promise(() => {}),
+    timeoutMs: 10,
+  })
+  await controller.requestShutdown('installer')
+  assert.deepEqual(calls, ['exit-0'])
+})
+
+test('installer asks the registered app to stop, then force-closes only the registered executable before overwrite', async () => {
+  const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+  const installer = await readFile(resolve(root, 'build/installer.nsh'), 'utf8')
+  assert.equal(manifest.build.nsis.include, 'build/installer.nsh')
+  assert.match(installer, /--trace-shutdown-for-update/)
+  assert.match(installer, /InstallLocation/)
+  assert.match(installer, /ExecutablePath/)
+  assert.match(installer, /Stop-Process/)
+  assert.match(installer, /customCheckAppRunning/)
+})
 
 test('desktop runtime integrations load backend-only Zhihu config without overriding explicit environment', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-'))

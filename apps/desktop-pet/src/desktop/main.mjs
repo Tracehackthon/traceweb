@@ -7,6 +7,7 @@ import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityCl
 import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
 import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
 import { bindNativeAgentProject } from './runtime-project-binding.mjs'
+import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -49,6 +50,27 @@ let bundledRuntimeStatus = {
 let bundledRuntimeStartPromise = null
 let bundledRuntimeAttempt = 0
 const pendingCodexEvents = []
+const desktopLaunchIntent = launchIntent(process.argv)
+const shutdownController = createDesktopShutdownController({
+  app,
+  listWindows: () => BrowserWindow.getAllWindows(),
+  destroyTray: () => {
+    if (tray && !tray.isDestroyed()) tray.destroy()
+    tray = undefined
+  },
+  stopPolling: stopCodexEventPolling,
+  closeCapability: () => {
+    capabilityClient?.close?.()
+    capabilityClient = undefined
+  },
+  closeRuntime: async () => {
+    try { await bundledRuntimeStartPromise } catch { /* startup failure has already been reported */ }
+    const runtime = bundledRuntime
+    bundledRuntime = undefined
+    await runtime?.close?.()
+  },
+  onStart: () => { quitting = true },
+})
 
 function sendCodexEvent(event) {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
@@ -463,8 +485,7 @@ function createTray() {
     {
       label: '退出',
       click: () => {
-        quitting = true
-        app.quit()
+        void shutdownController.requestShutdown('tray')
       },
     },
   ]))
@@ -553,16 +574,29 @@ function openZhihuAuthorization(loginUrl, parentWindow) {
   })
 }
 
-const ownsInstance = app.requestSingleInstanceLock()
+const ownsInstance = app.requestSingleInstanceLock(desktopLaunchIntent)
 if (!ownsInstance) {
-  app.quit()
+  app.exit(0)
+} else if (desktopLaunchIntent.action === 'shutdown-for-update') {
+  // The installer can be launched when Trace is already closed. In that case
+  // this helper owns the lock itself and must not create any windows/runtime.
+  app.releaseSingleInstanceLock()
+  app.exit(0)
 } else {
-  app.on('second-instance', showOverlay)
+  app.on('second-instance', (_event, commandLine, _workingDirectory, additionalData) => {
+    const action = additionalData?.action || launchIntent(commandLine).action
+    if (action === 'shutdown-for-update') {
+      void shutdownController.requestShutdown('installer')
+      return
+    }
+    showOverlay()
+  })
   app.whenReady().then(() => {
     void (async () => {
       installDiscussionProtocol()
       try { await ensureBundledRuntime() }
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
+      if (quitting) return
       const settings = readDesktopSettings()
       capabilityClient = createRuntimeCapabilityClient({
         origin: backendOrigin || DEFAULT_RUNTIME_ORIGIN,
@@ -688,9 +722,4 @@ ipcMain.handle('trace-native:workspace', async (event, payload) => {
 })
 
 app.on('window-all-closed', () => {})
-app.on('before-quit', () => {
-  quitting = true
-  stopCodexEventPolling()
-  capabilityClient?.close?.()
-  void bundledRuntime?.close?.()
-})
+app.on('before-quit', (event) => shutdownController.handleBeforeQuit(event))

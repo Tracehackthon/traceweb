@@ -30,7 +30,7 @@ const runtimeManifest = readJson('resources/trace-runtime/release-manifest.json'
 const source = readJson('resources/trace-runtime/desktop-runtime-source.json')
 const appAsar = requireFile('resources/app.asar')
 const asarPaths = new Set(listPackage(appAsar).map(value => value.replaceAll('\\', '/').replace(/^\//, '')))
-for (const required of ['lib/desktop/main.mjs', 'lib/desktop/preload.cjs', 'lib/desktop/discussion/index.html']) {
+for (const required of ['lib/desktop/main.mjs', 'lib/desktop/lifecycle.mjs', 'lib/desktop/preload.cjs', 'lib/desktop/discussion/index.html']) {
   if (!asarPaths.has(required)) throw new Error(`app.asar is missing ${required}`)
 }
 const packageInfo = JSON.parse(extractFile(appAsar, 'package.json').toString('utf8'))

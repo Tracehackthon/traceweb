@@ -1,6 +1,6 @@
 {
   "name": "@trace/desktop-pet",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "author": "Trace",
   "description": "Trace UI V1 for DeepSeek Harness Web and the native desktop overlay",
@@ -90,6 +90,7 @@
       "icon": "../web/public/brand/trace-app-icon.ico"
     },
     "nsis": {
+      "include": "build/installer.nsh",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
