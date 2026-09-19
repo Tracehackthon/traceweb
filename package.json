@@ -23,6 +23,8 @@
     "test:e2e": "node scripts/product-e2e.cjs",
     "test:canvas": "node scripts/canvas-interactions-e2e.cjs",
     "test:desktop-capabilities": "node --test scripts/desktop-capability-bridge.test.mjs",
+    "test:desktop-headless": "node scripts/desktop-capability-headless.mjs",
+    "test:desktop-headless:cloud": "node scripts/desktop-capability-headless.mjs --live-cloud",
     "test:experience": "node scripts/experience-e2e.cjs",
     "test:ui-renovation": "node scripts/ui-renovation-e2e.cjs",
     "video:studio": "remotion studio video/src/index.tsx --public-dir=video/public --no-open",
