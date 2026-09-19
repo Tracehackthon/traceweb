@@ -428,6 +428,8 @@ test('native bridge exposes explicit event, bounds and placement channels', asyn
   }
   assert.match(discussionPreload + main, /trace-native:setup-progress/)
   assert.match(discussionPreload + main, /trace-native:runtime-status/)
+  assert.match(main, /scheduleBundledRuntimeRecovery/)
+  assert.match(main, /RUNTIME_RECOVERY_DELAYS_MS/)
   assert.match(main, /WORKSPACE_IPC_TIMEOUT_MS/)
   assert.match(main, /RUNTIME_START_TIMEOUT_MS/)
   assert.match(main, /withIpcTimeout/)

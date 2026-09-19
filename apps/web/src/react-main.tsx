@@ -296,6 +296,24 @@ function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapsh
 }
 
 function WorkspaceLoadSurface({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
+  const automaticRecoveryStarted = useRef(false);
+  useEffect(() => {
+    let disposed = false;
+    const recover = () => {
+      if (disposed || automaticRecoveryStarted.current || !nativeRuntimeConnected()) return;
+      automaticRecoveryStarted.current = true;
+      void runtime.retryLoad().finally(() => {
+        if (!disposed) automaticRecoveryStarted.current = false;
+      });
+    };
+    // Cover both orderings: the runtime may have recovered just before React
+    // subscribed, or it may report recovery after the failure surface mounts.
+    recover();
+    const remove = onDesktopSetupProgress((event) => {
+      if (event?.kind === 'runtime' && event?.status === 'completed') recover();
+    });
+    return () => { disposed = true; remove?.(); };
+  }, [snapshot.loadState]);
   if (snapshot.loadState === 'loading') return <section className="react-route-loading" data-load-state="loading" role="status" aria-live="polite"><span className="react-loading-mark">Trace</span><p>正在接回你的内容…</p><small>这一步有时间上限，不会覆盖原有内容。</small></section>;
   const unrecoverable = snapshot.loadState === 'unrecoverable-error';
   const runtimeUnavailable = hasNativeCapabilityBridge() && nativeRuntimeUnavailable();

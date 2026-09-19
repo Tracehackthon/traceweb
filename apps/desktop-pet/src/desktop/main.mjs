@@ -50,6 +50,8 @@ let bundledRuntimeStatus = {
 }
 let bundledRuntimeStartPromise = null
 let bundledRuntimeAttempt = 0
+let bundledRuntimeRecoveryTimer = null
+let bundledRuntimeRecoveryAttempt = 0
 const pendingCodexEvents = []
 const desktopLaunchIntent = launchIntent(process.argv)
 const shutdownController = createDesktopShutdownController({
@@ -59,7 +61,10 @@ const shutdownController = createDesktopShutdownController({
     if (tray && !tray.isDestroyed()) tray.destroy()
     tray = undefined
   },
-  stopPolling: stopCodexEventPolling,
+  stopPolling: () => {
+    stopCodexEventPolling()
+    stopBundledRuntimeRecovery()
+  },
   closeCapability: () => {
     capabilityClient?.close?.()
     capabilityClient = undefined
@@ -363,6 +368,26 @@ function ensureBundledRuntime(options = {}) {
   return settled
 }
 
+const RUNTIME_RECOVERY_DELAYS_MS = [750, 2_000, 5_000]
+function stopBundledRuntimeRecovery() {
+  if (bundledRuntimeRecoveryTimer) clearTimeout(bundledRuntimeRecoveryTimer)
+  bundledRuntimeRecoveryTimer = null
+  bundledRuntimeRecoveryAttempt = 0
+}
+function scheduleBundledRuntimeRecovery() {
+  if (quitting || !app.isPackaged || bundledRuntimeStatus.connected || bundledRuntimeRecoveryTimer) return
+  const attempt = bundledRuntimeRecoveryAttempt++
+  if (attempt >= RUNTIME_RECOVERY_DELAYS_MS.length) return
+  bundledRuntimeRecoveryTimer = setTimeout(() => {
+    bundledRuntimeRecoveryTimer = null
+    void ensureBundledRuntime({ retry: true }).then(() => {
+      if (bundledRuntimeStatus.connected) stopBundledRuntimeRecovery()
+      else scheduleBundledRuntimeRecovery()
+    }).catch(() => scheduleBundledRuntimeRecovery())
+  }, RUNTIME_RECOVERY_DELAYS_MS[attempt])
+  bundledRuntimeRecoveryTimer.unref?.()
+}
+
 function positionOverlay() {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
   const { x, y, width, height } = overlayDisplay().workArea
@@ -649,6 +674,11 @@ if (!ownsInstance) {
       createTray()
       startCodexEventPolling()
       if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=home`)
+      // Runtime startup can briefly race an updater, antivirus scanner or a
+      // previous instance finishing its shutdown.  Do not leave the product
+      // window on a permanent recovery screen: retry a few times in the same
+      // process and publish the existing setup-progress event when it is back.
+      scheduleBundledRuntimeRecovery()
 
       screen.on('display-metrics-changed', positionOverlay)
       screen.on('display-added', positionOverlay)
