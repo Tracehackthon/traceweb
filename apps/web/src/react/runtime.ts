@@ -6,6 +6,7 @@ import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
 import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork, searchPublic } from './capability-client';
 import { classifyWorkspaceLoadFailure, publicWorkspaceLoadMessage, WORKSPACE_LOAD_STATES, workspaceDataState, workspaceError, withWorkspaceTimeout } from './workspace-load.mjs';
 import { canNavigateWhileSavePending } from './save-navigation.mjs';
+import { existingMatterForHandoff } from './handoff-resolution.mjs';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceLoadState, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -273,13 +274,7 @@ export class WebRuntime {
     const handoff = readHarnessHandoff();
     if (!handoff || !this.host) return null;
 
-    const existing = this.host.chain.matters.find((item: any) => {
-      const marker = item.externalHandoff;
-      if (marker?.origin !== handoff.origin) return false;
-      return handoff.observationId
-        ? marker.observationId === handoff.observationId
-        : marker.text === handoff.text && marker.source === handoff.source;
-    });
+    const existing = existingMatterForHandoff(this.host.chain.matters, handoff);
 
     let matterId: string;
     if (existing) {

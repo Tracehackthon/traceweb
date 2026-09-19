@@ -367,6 +367,26 @@ test('desktop pet reads and writes the same authoritative workspace as the produ
   assert.equal(summary.observations[0].id, captured.observation.id)
 })
 
+test('desktop product command preserves Runtime conflict status across native IPC', async () => {
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4432',
+    fetchImpl: async () => response({ error: { code: 'REVISION_CONFLICT', message: '工作区已有更新；动作尚未执行，草稿应保留。' } }, 409),
+  })
+  const result = await client.request({
+    operation: 'product.command',
+    protocolVersion: 1,
+    commandId: 'command-conflict',
+    expectedRevision: 4,
+    operations: [{ type: 'capture.draft', text: '仍保留在页面里的草稿' }],
+  })
+  assert.deepEqual(result, {
+    kind: 'trace.native-product-response@1',
+    ok: false,
+    status: 409,
+    error: { code: 'REVISION_CONFLICT', message: '工作区已有更新；动作尚未执行，草稿应保留。' },
+  })
+})
+
 test('desktop runtime client routes public searches by explicit source', async () => {
   const paths = []
   const client = createRuntimeCapabilityClient({

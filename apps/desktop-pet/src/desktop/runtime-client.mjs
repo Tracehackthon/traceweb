@@ -23,6 +23,7 @@ const DESKTOP_HOST = 'codex'
 const DESKTOP_HOST_SESSION = 'trace-desktop'
 const CODEX_QUALIFICATION_REQUIRED = 'CODEX_QUALIFICATION_REQUIRED'
 const QUALIFICATION_TIMEOUT_MS = 60_000
+const NATIVE_PRODUCT_RESPONSE_KIND = 'trace.native-product-response@1'
 
 export function resolveCodexExecutable({ env = process.env, platform = process.platform } = {}) {
   const explicit = typeof env.TRACE_CODEX_BIN === 'string' ? env.TRACE_CODEX_BIN.trim() : ''
@@ -912,12 +913,31 @@ export function createRuntimeCapabilityClient({
       // Keep the desktop bridge as a thin, authenticated transport. Product
       // Workspace remains the authority for operation schemas, CAS and
       // idempotency; the renderer never sends a whole host snapshot here.
-      return runtimeRequest('/api/product/commands', {
-        protocolVersion: 1,
-        commandId,
-        expectedRevision: request.expectedRevision,
-        operations: request.operations,
-      })
+      try {
+        return await runtimeRequest('/api/product/commands', {
+          protocolVersion: 1,
+          commandId,
+          expectedRevision: request.expectedRevision,
+          operations: request.operations,
+        })
+      } catch (error) {
+        // Electron serializes thrown Errors across IPC without custom status
+        // and code fields. Preserve known Runtime HTTP failures as a bounded
+        // data envelope so the product window can distinguish a 409 conflict
+        // from an offline bridge instead of showing a false connection error.
+        if (Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599) {
+          return {
+            kind: NATIVE_PRODUCT_RESPONSE_KIND,
+            ok: false,
+            status: error.status,
+            error: {
+              ...(typeof error.code === 'string' ? { code: error.code } : {}),
+              message: typeof error.message === 'string' ? error.message : 'Trace 没有完成这次保存。',
+            },
+          }
+        }
+        throw error
+      }
     }
     if (request.operation === 'workspace.summary') return readObservationSummary()
     if (request.operation === 'codex.events') return readCodexEvents()

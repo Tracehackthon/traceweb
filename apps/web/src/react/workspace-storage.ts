@@ -1,3 +1,5 @@
+import { responseFromNativeProductCommand } from './native-product-response.mjs';
+
 // The hosted build uses browser storage. The complete demo always uses its
 // own IndexedDB namespace, including during local development, so synthetic
 // records can never be written into a maintainer's personal SQLite workspace.
@@ -30,7 +32,7 @@ export async function productCommandRequest(payload: { protocolVersion?: number;
   const bridge = nativeCapabilityBridge();
   if (!bridge?.requestCapability) throw new Error('Trace 桌面工作区尚未连接。');
   const value = await bridge.requestCapability({ operation: 'product.command', protocolVersion: payload.protocolVersion ?? 1, ...payload });
-  return new Response(JSON.stringify(value), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+  return responseFromNativeProductCommand(value);
 }
 
 export async function workspaceRequest(url: string, options: RequestInit = {}): Promise<Response> {

@@ -16,7 +16,8 @@ function value(flag, fallback) {
   return index >= 0 && args[index + 1] ? args[index + 1] : fallback
 }
 const unpacked = path.resolve(root, value('--unpacked', 'apps/desktop-pet/release/win-unpacked'))
-const expectedVersion = value('--expected-version', '0.2.0')
+const desktopSourcePackage = JSON.parse(fs.readFileSync(path.join(root, 'apps', 'desktop-pet', 'package.json'), 'utf8'))
+const expectedVersion = value('--expected-version', desktopSourcePackage.version)
 const allowDevelopment = args.includes('--allow-development')
 const requireFile = relative => {
   const absolute = path.join(unpacked, relative)
