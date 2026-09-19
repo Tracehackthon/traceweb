@@ -8,6 +8,7 @@ import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
 import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
 import { bindNativeAgentProject } from './runtime-project-binding.mjs'
 import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
+import { clearVersionBoundStorage } from './storage-lifecycle.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -141,6 +142,19 @@ function writeDesktopSettings(value) {
   const file = settingsFile()
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function prepareVersionedDesktopStorage() {
+  const current = readDesktopSettings()
+  const currentVersion = app.getVersion()
+  const cleanup = clearVersionBoundStorage({
+    userData: app.getPath('userData'),
+    previousVersion: current.desktopVersion,
+    currentVersion,
+  })
+  if (current.desktopVersion !== currentVersion) writeDesktopSettings({ ...current, desktopVersion: currentVersion })
+  if (cleanup.failed.length) console.warn(`Trace could not clear ${cleanup.failed.length} transient cache location(s) during upgrade.`)
+  return cleanup
 }
 
 function finite(value) { return typeof value === 'number' && Number.isFinite(value) }
@@ -583,6 +597,7 @@ if (!ownsInstance) {
   app.releaseSingleInstanceLock()
   app.exit(0)
 } else {
+  prepareVersionedDesktopStorage()
   app.on('second-instance', (_event, commandLine, _workingDirectory, additionalData) => {
     const action = additionalData?.action || launchIntent(commandLine).action
     if (action === 'shutdown-for-update') {

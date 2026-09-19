@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile, writeFile } from 'node:fs/promises'
-import { mkdtemp } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -26,6 +25,28 @@ const installationIdentity = await import(pathToFileURL(resolve(root, 'src/deskt
 const runtimeIntegrations = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-integrations.mjs')).href)
 const projectBinding = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-project-binding.mjs')).href)
 const desktopLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/lifecycle.mjs')).href)
+const storageLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/storage-lifecycle.mjs')).href)
+
+test('desktop upgrades discard version-bound caches while preserving user state and authorization data', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-storage-upgrade-'))
+  for (const name of storageLifecycle.TRANSIENT_STORAGE_NAMES) {
+    await mkdir(join(directory, name), { recursive: true })
+    await writeFile(join(directory, name, 'stale.bin'), 'old-version', 'utf8')
+  }
+  for (const name of ['state', 'IndexedDB', 'Local Storage', 'Network']) {
+    await mkdir(join(directory, name), { recursive: true })
+    await writeFile(join(directory, name, 'keep.bin'), 'user-data', 'utf8')
+  }
+  await writeFile(join(directory, 'desktop-settings.json'), '{}', 'utf8')
+
+  const result = storageLifecycle.clearVersionBoundStorage({ userData: directory, previousVersion: '0.2.2', currentVersion: '0.2.3' })
+  assert.equal(result.changed, true)
+  for (const name of storageLifecycle.TRANSIENT_STORAGE_NAMES) await assert.rejects(access(join(directory, name)))
+  for (const name of ['state', 'IndexedDB', 'Local Storage', 'Network', 'desktop-settings.json']) await access(join(directory, name))
+
+  const stable = storageLifecycle.clearVersionBoundStorage({ userData: directory, previousVersion: '0.2.3', currentVersion: '0.2.3' })
+  assert.deepEqual(stable, { changed: false, removed: [], failed: [] })
+})
 
 test('desktop shutdown is single-flight, bypasses renderer unload vetoes and waits for local state cleanup', async () => {
   const calls = []
@@ -73,12 +94,19 @@ test('desktop update-shutdown launch intent is explicit and bounded cleanup cann
 test('installer asks the registered app to stop, then force-closes only the registered executable before overwrite', async () => {
   const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
   const installer = await readFile(resolve(root, 'build/installer.nsh'), 'utf8')
+  const installSection = await readFile(resolve(root, 'node_modules/app-builder-lib/templates/nsis/installSection.nsh'), 'utf8')
+  const installUtil = await readFile(resolve(root, 'node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh'), 'utf8')
+  const uninstaller = await readFile(resolve(root, 'node_modules/app-builder-lib/templates/nsis/uninstaller.nsh'), 'utf8')
   assert.equal(manifest.build.nsis.include, 'build/installer.nsh')
+  assert.equal(manifest.build.nsis.deleteAppDataOnUninstall, false)
   assert.match(installer, /--trace-shutdown-for-update/)
   assert.match(installer, /InstallLocation/)
   assert.match(installer, /ExecutablePath/)
   assert.match(installer, /Stop-Process/)
   assert.match(installer, /customCheckAppRunning/)
+  assert.ok(installSection.indexOf('uninstallOldVersion') < installSection.indexOf('installApplicationFiles'))
+  assert.match(installUtil, /\/S \/KEEP_APP_DATA/)
+  assert.match(uninstaller, /RMDir \/r \$INSTDIR/)
 })
 
 test('desktop runtime integrations load backend-only Zhihu config without overriding explicit environment', async () => {
