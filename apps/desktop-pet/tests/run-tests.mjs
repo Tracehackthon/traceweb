@@ -24,6 +24,7 @@ const placement = await import(pathToFileURL(join(output, 'placement.mjs')).href
 const runtimeClient = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-client.mjs')).href)
 const installationIdentity = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-installation-identity.mjs')).href)
 const runtimeIntegrations = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-integrations.mjs')).href)
+const projectBinding = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-project-binding.mjs')).href)
 
 test('desktop runtime integrations load backend-only Zhihu config without overriding explicit environment', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-'))
@@ -331,9 +332,20 @@ test('native bridge exposes explicit event, bounds and placement channels', asyn
   assert.match(main, /WORKSPACE_IPC_TIMEOUT_MS/)
   assert.match(main, /RUNTIME_START_TIMEOUT_MS/)
   assert.match(main, /withIpcTimeout/)
+  assert.match(main, /bindNativeAgentProject\(process\.env\.TRACE_PROJECT_DIR \|\| settings\.projectDir\)/)
+  assert.match(main, /bindNativeAgentProject\(result\.filePaths\[0\]\)/)
   assert.match(renderer, /data-trace-interactive-region/)
   assert.match(overlay, /reduceTraceCodexEvent/)
   assert.match(overlay, /nativeCodexEventsEnabled/)
+})
+
+test('desktop project binding configures native Agent only for an existing absolute directory', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-native-project-binding-'))
+  const env = { TRACE_AGENT_NATIVE_PROJECT_CWD: 'stale-value' }
+  assert.deepEqual(projectBinding.bindNativeAgentProject(directory, { env }), { configured: true })
+  assert.equal(env.TRACE_AGENT_NATIVE_PROJECT_CWD, resolve(directory))
+  assert.deepEqual(projectBinding.bindNativeAgentProject('relative-project', { env }), { configured: false })
+  assert.equal('TRACE_AGENT_NATIVE_PROJECT_CWD' in env, false)
 })
 
 test('packaged runtime identity is stable and repairs only missing desktop settings', () => {

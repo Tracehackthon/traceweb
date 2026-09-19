@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient, resolveCodexExecutable } from './runtime-client.mjs'
 import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
 import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
+import { bindNativeAgentProject } from './runtime-project-binding.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -285,6 +286,7 @@ async function doEnsureBundledRuntime({ retry = false } = {}) {
   process.env.TRACE_UPGRADE_LEGACY_IDENTITY = '1'
   delete process.env.TRACE_ALLOW_LEGACY_IDENTITY
   process.env.TRACE_AGENT_ENABLED ??= '1'
+  bindNativeAgentProject(process.env.TRACE_PROJECT_DIR || settings.projectDir)
   process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN ??= randomBytes(32).toString('base64url')
   const integrationConfigFile = process.env.TRACE_DESKTOP_INTEGRATIONS_FILE || join(app.getPath('userData'), 'runtime-integrations.json')
   applyRuntimeIntegrationConfig({ file: integrationConfigFile })
@@ -651,6 +653,7 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
     const result = await dialog.showOpenDialog(senderWindow, { title: '选择要与 Codex 一起工作的项目', properties: ['openDirectory'] })
     if (result.canceled || !result.filePaths[0]) return withIpcTimeout(capabilityClient.request({ operation: 'work.environment' }), IPC_TIMEOUT_MS, 'Trace 本机能力响应超时，请重试。')
     const selected = capabilityClient.setProjectDir(result.filePaths[0])
+    bindNativeAgentProject(result.filePaths[0])
     writeDesktopSettings({ ...readDesktopSettings(), projectDir: result.filePaths[0] })
     return selected
   }
