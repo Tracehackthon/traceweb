@@ -31,6 +31,20 @@ const sourceRole = (source, matter) => {
   return relation ? `作为“${RELATIONS[relation] || relation}”对照` : '保留为原现场';
 };
 
+export function discussionText(discussion={}) {
+  return discussion.text ?? [
+    ...(discussion.cases || []).map(item => item.text),
+    ...(discussion.messages || []).map(item => item.text),
+    discussion.possibility,
+  ].filter(Boolean).join('\n\n');
+}
+
+export function discussionSelectionAttributes(text) {
+  return String(text ?? '').trim()
+    ? 'data-selection="discussion" tabindex="0" aria-label="可选择的讨论正文"'
+    : 'data-selection-placeholder="discussion" aria-label="当前没有讨论"';
+}
+
 /** Presentational module; the reducer owns all domain state. */
 export function mountChainScreen({root, view, onAction, onHome, onMatters, onBack, onWorkspaces, assets={}, services={}, demo=false}) {
   if (!root || typeof onAction !== 'function') throw new TypeError('mountChainScreen requires root and onAction');
@@ -88,8 +102,8 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   }
   function discussion() {
     const d=current.discussion||{};
-    const text=d.text ?? [...(d.cases||[]).map(x=>x.text),...(d.messages||[]).map(x=>x.text),d.possibility].filter(Boolean).join('\n\n');
-    return common(`<div class="chain-panel-scroll"><div class="chain-section-heading"><span class="chain-round">${icon('balance')}</span><h2>${d.cases?.length?'换个情形，自己判断':'围绕这件事继续写'}</h2>${d.cases?.length ? '<span class="chain-amber-label">假设情形 · 不是实际案例</span>' : ''}</div><div class="chain-discussion-text" data-key="discussion-text" data-selection="discussion" tabindex="0" aria-label="可选择的讨论正文">${(text || '当前没有讨论。写下自己的问题即可开始。').split('\n\n').map((part,i)=>`${i?'<span class="chain-text-separator">\n\n</span>':''}<span class="chain-discussion-block">${h(part)}</span>`).join('')}</div>${current.focus?.field==='discussion' ? `<div class="chain-selection-actions" data-key="selection-actions">${btn('focus-ask','围绕这句问','message','compact')}${btn('focus-understanding','接到我的理解','link','compact')}${btn('branch','先留个旁支','branch','compact')}</div>`:''}<p class="chain-footnote">选中一段文字后，可以围绕具体位置继续。${d.possibility ? '这是示例启发，不是模型实时回复。' : ''}</p></div><div class="chain-panel-actions">${btn('comparison','找个对照','balance','subtle',current.selectedId?'':'disabled')}${btn('understanding','写下我的理解','pen','subtle')}</div>`);
+    const text=discussionText(d);
+    return common(`<div class="chain-panel-scroll"><div class="chain-section-heading"><span class="chain-round">${icon('balance')}</span><h2>${d.cases?.length?'换个情形，自己判断':'围绕这件事继续写'}</h2>${d.cases?.length ? '<span class="chain-amber-label">假设情形 · 不是实际案例</span>' : ''}</div><div class="chain-discussion-text" data-key="discussion-text" ${discussionSelectionAttributes(text)}>${(text || '当前没有讨论。写下自己的问题即可开始。').split('\n\n').map((part,i)=>`${i?'<span class="chain-text-separator">\n\n</span>':''}<span class="chain-discussion-block">${h(part)}</span>`).join('')}</div>${current.focus?.field==='discussion' ? `<div class="chain-selection-actions" data-key="selection-actions">${btn('focus-ask','围绕这句问','message','compact')}${btn('focus-understanding','接到我的理解','link','compact')}${btn('branch','先留个旁支','branch','compact')}</div>`:''}<p class="chain-footnote">${text.trim() ? '选中一段文字后，可以围绕具体位置继续。' : '写下自己的问题后，可以围绕具体位置继续。'}${d.possibility ? '这是示例启发，不是模型实时回复。' : ''}</p></div><div class="chain-panel-actions">${btn('comparison','找个对照','balance','subtle',current.selectedId?'':'disabled')}${btn('understanding','写下我的理解','pen','subtle')}</div>`);
   }
   function understanding() {
     const m=current.matter||{}, suggestion=current.suggestion;
@@ -178,6 +192,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   function selectText(element) {
     if (composition) return;
     const name=element?.dataset.selection;if(!name)return;
+    if (name==='discussion'&&!discussionText(current.discussion||{}).trim()) return;
     const selection = element instanceof HTMLTextAreaElement ? {start:element.selectionStart,end:element.selectionEnd,text:element.value.slice(element.selectionStart,element.selectionEnd)} : selectedRange(element);
     if (!selection?.text?.trim()) return;
     if (name==='article') {const source=current.availableSources?.[0];dispatch({type:'CAPTURE_EXCERPT',text:selection.text,sourceId:source?.id});readingOpen=true;render();}

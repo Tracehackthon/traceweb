@@ -16,6 +16,7 @@
 /* First fixture review: expose default controls before long-content scrolling. */
 .chain-stop-editor{white-space:nowrap}.chain-stop-input{white-space:pre-wrap}
 .chain-discussion-text{white-space:normal;font-size:22px;line-height:1.5;padding-bottom:7px}
+.chain-discussion-text[data-selection-placeholder]{color:#607873;user-select:none;cursor:default}
 .chain-discussion-block{display:block;margin:0 0 13px}.chain-text-separator{font-size:0;line-height:0;white-space:pre}
 .chain-selection-actions{padding:4px;margin-bottom:7px}.chain-stage[data-screen="discussion"] .chain-footnote{font-size:14px;line-height:1.35}
 .chain-incoming-input{height:75px;min-height:75px}.chain-observation{padding-top:22px;padding-bottom:15px}.chain-incoming-relation{padding-top:17px}
