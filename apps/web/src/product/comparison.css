@@ -59,6 +59,8 @@
 .compare-root .compare-reading-bird{width:55px;left:787px;top:282px}
 .compare-root .compare-search-form{left:714px;top:257px;width:900px;height:549px;padding:34px 46px 28px;overflow:visible}
 .compare-root .compare-search-form h2{font-size:29px;margin-bottom:11px}
+.compare-root .compare-search-title{display:flex;align-items:baseline;justify-content:space-between;gap:18px}
+.compare-root .compare-search-title>span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#477467;background:#edf7f2;border:1px solid #d5e9df;border-radius:999px;padding:5px 12px;font-size:14px}
 .compare-root input,.compare-root textarea,.compare-root select{min-width:0;border:1px solid #cbdce4;border-radius:15px;background:#ffffffb8;outline:none;padding:16px 19px;line-height:1.5;box-shadow:inset 0 1px 2px #b7c9d10a}
 .compare-root textarea{resize:vertical;max-height:270px;scrollbar-width:thin}
 .compare-root input::placeholder,.compare-root textarea::placeholder{color:#6a7a86;opacity:1}
@@ -249,6 +251,7 @@
 .compare-root.compare-compact .compare-anchor .compare-kicker{margin:0 0 14px;font-size:17px}
 .compare-root.compare-compact .compare-paper{border-radius:27px;padding:25px}
 .compare-root.compare-compact .compare-search-form h2{font-size:24px}
+.compare-root.compare-compact .compare-search-title>span{max-width:48%;font-size:12px;padding:4px 9px}
 .compare-root.compare-compact .compare-question-row{flex-wrap:wrap;padding:4px;min-height:70px}
 .compare-root.compare-compact .compare-question-row input{font-size:19px;flex-basis:100%;padding:12px}
 .compare-root.compare-compact .compare-question-row .compare-button{margin:0 6px 5px auto;font-size:14px;min-height:31px;padding:6px 12px}

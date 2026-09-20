@@ -67,6 +67,30 @@ test('an explicitly selected public search result is kept with provenance but no
   assert.equal(current(h).understanding, '');
 });
 
+test('repeated provider result reuses the first snapshot when only retrieval time changes', () => {
+  let h = captured();
+  const anchor = selectComparisonAnchor(h, ID, { field: 'originalText' });
+  h = openComparison(h, { sessionId: 'repeat-source', matterId: ID, anchor });
+  const material = {
+    id: 'external:zhihu-repeat', provider: 'zhihu', source: 'zhihu', title: '同一份公开内容', author: '答主',
+    excerpt: '可核对的摘要。', context: '本次搜索结果。', url: 'https://www.zhihu.com/question/1/answer/9',
+    contentType: 'answer', contentMode: 'summary', fetchedAt: '2026-09-20T00:00:00.000Z',
+  };
+  h = xd(h, 'IMPORT_MATERIAL', { material }, 'repeat-source');
+  h = xd(h, 'IMPORT_MATERIAL', { material: { ...material, fetchedAt: '2026-09-20T00:01:00.000Z' } }, 'repeat-source');
+
+  const view = selectComparison(h, 'repeat-source');
+  assert.equal(view.candidates.length, 1);
+  assert.equal(view.selectedCandidate.fetchedAt, material.fetchedAt);
+  assert.match(view.notice, /已经在本次对照中/);
+  assert.equal(h.chain.sources.filter((source) => source.id === material.id).length, 1);
+  assert.equal(h.chain.sources.find((source) => source.id === material.id).fetchedAt, material.fetchedAt);
+
+  const conflicted = xd(h, 'IMPORT_MATERIAL', { material: { ...material, excerpt: '相同身份下被改写的摘要。' } }, 'repeat-source');
+  assert.match(selectComparison(conflicted, 'repeat-source').notice, /不同内容/);
+  assert.equal(conflicted.chain.sources.find((source) => source.id === material.id).excerpt, material.excerpt);
+});
+
 test('closed loop calls existing chain/compare reducers: one ID, link is not adoption, receipt, exact return anchor', () => {
   let h = captured();
   assert.equal(current(h).id, ID);

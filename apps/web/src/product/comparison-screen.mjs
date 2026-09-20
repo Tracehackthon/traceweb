@@ -28,7 +28,7 @@ const templates = {
   <svg class="compare-threads compare-search-thread" viewBox="0 0 1672 941" aria-hidden="true"><path d="M539 443 C620 448 628 346 705 346"/><circle cx="539" cy="443" r="8"/><circle cx="705" cy="346" r="9"/></svg>
   <section class="compare-anchor compare-glass-panel"><div class="compare-glass" data-glass></div><div class="compare-anchor-copy"><p class="compare-kicker">正在推敲的一句</p><blockquote data-text="focus"></blockquote></div></section>
   <img class="compare-bird compare-search-bird" data-bird="fly" alt="" aria-hidden="true">
-  <form class="compare-search-form compare-paper" data-form="search"><h2>这次想弄清楚</h2>
+  <form class="compare-search-form compare-paper" data-form="search"><div class="compare-search-title"><h2>这次想弄清楚</h2><span data-search-context>已带入原事项</span></div>
    <div class="compare-question-row"><label class="compare-sr" for="compare-question">这次想弄清楚</label><input id="compare-question" data-field="question" autocomplete="off"><button type="button" data-action="focus-question" class="compare-button compare-quiet">${icon('edit')}修改这一处</button></div>
    <div class="compare-directions" role="group" aria-label="寻找方向"><button type="button" class="compare-button" data-direction="counterexample">${icon('search')}找个反例</button><button type="button" class="compare-button" data-direction="experience">${icon('users')}看看别人怎么做</button><button type="button" class="compare-button" data-direction="condition">${icon('switch')}换一种条件</button></div>
    <label class="compare-sr" for="compare-instructions">补充寻找条件</label><textarea id="compare-instructions" data-field="instructions" rows="3" placeholder="说说你想找的情况……"></textarea>
@@ -301,8 +301,12 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     text('focus',current.matter?.focus?.text);text('question',current.query?.question);
     if(current.isDemo)all('[data-text="focus"]').forEach(el=>emphasizeTerm(el,'必须'));
     text('shortQuestion',current.query?.shortQuestion || current.query?.question);
-    if(screen==='search') {
-      field('question',current.query?.question);field('instructions',current.query?.instructions);
+      if(screen==='search') {
+        const matterContext=asText(current.matter?.title);
+        $('[data-search-context]').hidden=!matterContext;
+        $('[data-search-context]').title=matterContext;
+        $('[data-search-context]').setAttribute('aria-label',matterContext?`搜索会同时带入原事项：${matterContext}`:'');
+        field('question',current.query?.question);field('instructions',current.query?.instructions);
       all('[data-direction]').forEach(el=>{const selected=el.dataset.direction===current.query?.direction;el.classList.toggle('compare-selected',selected);el.setAttribute('aria-pressed',String(selected));});
       const scopes=current.scopeOptions || [{value:'past',label:'既往思考'},{value:'zhihu',label:'知乎公开内容'}];
       const wrap=$('[data-options="scopes"]');

@@ -7,6 +7,7 @@ import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNa
 import { classifyWorkspaceLoadFailure, publicWorkspaceLoadMessage, WORKSPACE_LOAD_STATES, workspaceDataState, workspaceError, withWorkspaceTimeout } from './workspace-load.mjs';
 import { canNavigateWhileSavePending } from './save-navigation.mjs';
 import { existingMatterForHandoff } from './handoff-resolution.mjs';
+import { buildComparisonSearchQuery } from './comparison-search.mjs';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceLoadState, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -807,9 +808,9 @@ export class WebRuntime {
     if (this.busy || !this.host || completeDemoMode) return;
     const current = B.selectComparison(this.host, sessionId, { capabilityAvailable: true, provider: hasNativeCapabilityBridge() ? 'native' : 'web' });
     const question = String(current?.query?.question || '').trim();
-    const instructions = String(current?.query?.instructions || '').trim();
     if (!question) { this.message('先写下这次想弄清楚的问题。'); return; }
-    const query = [question, instructions].filter(Boolean).join('；');
+    const canonicalMatter = this.host.chain?.matters?.find((matter: any) => matter.id === current?.matter?.id);
+    const query = buildComparisonSearchQuery({ ...current, matter: { ...current?.matter, originalText: canonicalMatter?.originalText } });
     this.busy = true;
     this.emit();
     try {
