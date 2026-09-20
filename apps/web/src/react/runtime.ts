@@ -328,10 +328,10 @@ export class WebRuntime {
     return null;
   }
 
-  private async save(value: any, commandId = uid('command'), operations: any[] | null = null): Promise<any> {
+  private async save(value: any, commandId = uid('command'), operations: any[] | null = null, generation = this.dirty): Promise<any> {
     const payload = { expectedRevision: this.revision, host: clone(value), commandId, ...(operations?.length ? { operations: clone(operations) } : {}) };
     this.pendingPayload = payload;
-    this.pendingGeneration = this.dirty;
+    this.pendingGeneration = generation;
     this.setStatus('saving', `正在保存到${storageLabel}…`);
     let response: Response;
     let data: any;
@@ -353,8 +353,7 @@ export class WebRuntime {
     }
     this.revision = Math.max(this.revision, data.revision);
     this.storage = data.storage;
-    this.pendingPayload = null;
-    this.pendingOperations = null;
+    if (this.pendingPayload?.commandId === commandId) this.pendingPayload = null;
     this.setStatus('saved', `已保存在${storageLabel}`);
     this.emit();
     return data;
@@ -368,14 +367,25 @@ export class WebRuntime {
     const generation = this.dirty;
     const snapshot = clone(this.host);
     const operations = this.pendingOperations ? clone(this.pendingOperations) : null;
-    const job = this.tail.then(() => this.save(snapshot, uid('command'), operations)).then(() => { this.saved = Math.max(this.saved, generation); this.emit(); });
+    // This batch now belongs to this save attempt. Drafts created while the
+    // request is in flight start a new batch and must not be cleared by the
+    // older request's success callback.
+    this.pendingOperations = null;
+    const job = this.tail.then(() => this.save(snapshot, uid('command'), operations, generation)).then(() => { this.saved = Math.max(this.saved, generation); this.emit(); });
     this.tail = job.catch(() => undefined);
     await job;
   }
 
   draft(next: any, operation: any | any[] | null = null): void {
     this.host = next;
-    this.pendingOperations = operation ? (Array.isArray(operation) ? clone(operation) : [clone(operation)]) : null;
+    // A selection commonly follows an editor draft in the same debounce
+    // window. Both operations are required: sending only FOCUS makes the
+    // authoritative runtime validate the selection against the older text.
+    // Keep operations in order instead of replacing the earlier draft.
+    if (operation) {
+      const additions = Array.isArray(operation) ? operation : [operation];
+      this.pendingOperations = [...(this.pendingOperations || []), ...clone(additions)];
+    }
     this.dirty += 1;
     if (!this.pendingPayload) this.setStatus('saving', '草稿待保存…');
     if (this.timer) window.clearTimeout(this.timer);
