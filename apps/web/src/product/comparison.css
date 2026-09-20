@@ -349,7 +349,25 @@
 .compare-root .compare-heading{z-index:5;pointer-events:none}
 .compare-root .compare-heading h1,.compare-root .compare-heading p{pointer-events:auto}
 .compare-root .compare-canvas-world .compare-candidate-list{overflow:visible}
-.compare-root .compare-canvas-world .compare-candidate{overflow:hidden}
+.compare-root .compare-canvas-world .compare-candidate{overflow:hidden;cursor:grab;touch-action:none;will-change:transform;transition:filter .16s ease,box-shadow .16s ease,border-color .16s ease}
+.compare-root .compare-canvas-world .compare-candidate :is(button,a,input,textarea,select){cursor:pointer}
+.compare-root .compare-canvas-world .compare-candidate::after{content:"";position:absolute;z-index:3;left:50%;top:11px;width:28px;height:4px;transform:translateX(-50%);border-radius:4px;background:color-mix(in srgb,var(--compare-green) 16%,transparent);box-shadow:0 0 0 1px #ffffff80;opacity:0;transition:opacity .14s ease,transform .14s ease;pointer-events:none}
+.compare-root .compare-canvas-world .compare-candidate:hover::after,.compare-root .compare-canvas-world .compare-candidate:focus-within::after,.compare-root .compare-canvas-world .compare-candidate.has-node-position::after{opacity:.72}
+.compare-root .compare-canvas-world .compare-candidate.is-node-dragging{z-index:9;cursor:grabbing;filter:saturate(1.04);border-color:color-mix(in srgb,var(--compare-green) 45%,white);box-shadow:0 24px 58px color-mix(in srgb,var(--compare-green) 14%,transparent),inset 0 1px 0 #fff}
+.compare-root .compare-canvas-world .compare-candidate.is-node-dragging::after{opacity:1;transform:translateX(-50%) scaleX(1.22);background:color-mix(in srgb,var(--compare-green) 64%,transparent)}
+.compare-root .compare-canvas-world.is-node-dragging,.compare-root .compare-canvas-world.is-node-dragging *{user-select:none}
+.compare-root .compare-candidates-thread{z-index:1}
+.compare-root .compare-candidate-list,.compare-root .compare-query-strip,.compare-root .compare-candidates-footer{z-index:3}
+.compare-root [data-elastic-edge] path{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.compare-root .compare-elastic-underlay{stroke:var(--compare-green);stroke-width:9;opacity:.09;filter:blur(3px)}
+.compare-root .compare-elastic-core{stroke:var(--compare-green);stroke-width:1.8}
+.compare-root .compare-elastic-node{fill:var(--compare-green);stroke:#fff;stroke-width:3;filter:drop-shadow(0 2px 4px color-mix(in srgb,var(--compare-green) 28%,transparent))}
+.compare-root .compare-elastic-node-small{opacity:.78}
+.compare-root .compare-elastic-warm .compare-elastic-underlay,.compare-root .compare-elastic-warm .compare-elastic-core{stroke:var(--compare-amber)}
+.compare-root .compare-elastic-warm .compare-elastic-node{fill:var(--compare-amber)}
+.compare-root [data-elastic-edge].is-tensioned .compare-elastic-underlay{opacity:.2;stroke-width:12}
+.compare-root [data-elastic-edge].is-tensioned .compare-elastic-core{filter:drop-shadow(0 1px 2px #25745e52)}
+.compare-root [data-elastic-edge].is-tensioned .compare-elastic-node{stroke-width:4}
 /* Real public results are often much longer than the authored demo copy.  The
    canvas card is a stable preview, not a second article reader: clamp each
    semantic region and keep the action in flow, then expose the complete title,
@@ -379,7 +397,7 @@
 .compare-root .compare-reader-panel>footer{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;padding:14px 23px 19px;border-top:1px solid #c8ded533;flex:0 0 auto;background:#f6fcf8c9}
 .compare-root .compare-reader-panel>footer .compare-button{min-height:42px;padding:8px 15px;font-size:14px}
 .compare-root .compare-reader-source{margin-right:auto;color:#165b79!important;background:transparent!important;border-color:transparent!important;text-decoration:underline;text-underline-offset:4px}
-@media(prefers-reduced-motion:reduce){.compare-root .compare-canvas-world.is-camera-settling,.compare-root .compare-reader-panel{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.compare-root .compare-canvas-world.is-camera-settling,.compare-root .compare-reader-panel,.compare-root .compare-canvas-world .compare-candidate,.compare-root .compare-canvas-world .compare-candidate::after{transition:none!important}.compare-root .compare-elastic-underlay{filter:none}}
 @media(max-width:999px){
   .compare-root.compare-compact .compare-canvas-viewport{position:relative;inset:auto;width:100%;height:auto;min-height:560px;overflow:visible;touch-action:none}
   .compare-root.compare-compact .compare-canvas-world{position:relative;width:100%;height:auto;min-height:560px;transform-origin:0 0}

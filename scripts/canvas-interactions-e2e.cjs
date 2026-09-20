@@ -529,6 +529,21 @@ async function run() {
   }));
   check('real long candidates keep relation text and actions inside every preview card', cardContainment.every((item) => item.contained), { cardContainment });
 
+  const draggableCard = fixture.locator('.compare-candidate').first();
+  const dragStart = await draggableCard.boundingBox();
+  const elasticBefore = await fixture.locator('[data-elastic-edge]').first().locator('.compare-elastic-core').getAttribute('d');
+  const cameraBeforeNodeDrag = await candidateWorld.evaluate((element) => element.style.transform);
+  await page.mouse.move(dragStart.x + dragStart.width * .5, dragStart.y + 18);
+  await page.mouse.down();
+  await page.mouse.move(dragStart.x + dragStart.width * .5 + 92, dragStart.y + 54, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForTimeout(40);
+  const elasticAfter = await fixture.locator('[data-elastic-edge]').first().locator('.compare-elastic-core').getAttribute('d');
+  check('candidate bubble drag moves one node instead of the whole canvas', await draggableCard.evaluate((element) => element.style.transform.includes('translate3d')) && await candidateWorld.evaluate((element) => element.style.transform) === cameraBeforeNodeDrag);
+  check('candidate bubble drag stretches its attached relationship line', elasticBefore !== elasticAfter, { elasticBefore, elasticAfter });
+  check('node drag does not accidentally open the material reader', !await fixture.locator('[data-reader-panel]').isVisible() && !(await page.evaluate(() => window.__candidateActions.some((action) => action.type === 'OPEN_CANDIDATE'))));
+  await shot(page, 'compare-elastic-drag.png');
+
   await candidateCanvas.locator('[data-canvas-action="zoom-in"]').click();
   check('candidate canvas shares explicit zoom controls', Number(await candidateCanvas.getAttribute('aria-valuenow')) > 100);
   await candidateCanvas.locator('[data-canvas-action="fit"]').click();
