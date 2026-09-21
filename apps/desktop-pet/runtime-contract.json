@@ -1,0 +1,17 @@
+{
+  "schema_version": "trace.desktop-runtime-contract@0.1.0",
+  "repository": "https://github.com/Tracehackthon/trace_backend",
+  "runtime_version": "0.8.0",
+  "source": {
+    "ref": "codex/fix-packaged-codex-qualification-0.8.0",
+    "git_commit": "a088b8658d76d1f825366fa8060712592b6460db"
+  },
+  "required_source_files": [
+    "native/qualify-codex-app-server.mjs"
+  ],
+  "required_materialized_files": [
+    "dist/apps/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js",
+    "dist/apps/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js",
+    "dist/apps/mcp/node_modules/zod/v3/index.js"
+  ]
+}

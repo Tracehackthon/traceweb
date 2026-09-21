@@ -8,10 +8,52 @@ const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const runtimeRoot = path.resolve(process.env.TRACE_RUNTIME_SOURCE || path.join(webRoot, '..', 'trace-runtime'))
 const output = path.join(webRoot, 'apps', 'desktop-pet', 'runtime-dist')
 const packageScript = path.join(runtimeRoot, 'scripts', 'package.mjs')
+const contractPath = path.join(webRoot, 'apps', 'desktop-pet', 'runtime-contract.json')
 const explicitDevelopment = process.env.TRACE_DESKTOP_RUNTIME_MODE === 'development'
   || process.env.TRACE_RUNTIME_ALLOW_DIRTY === '1'
 
 if (!fs.existsSync(packageScript)) throw new Error(`Trace Runtime source was not found at ${runtimeRoot}`)
+if (!fs.existsSync(contractPath)) throw new Error(`Desktop Runtime contract is missing: ${contractPath}`)
+
+function readJsonFile(file, label) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')) } catch (error) {
+    throw new Error(`${label} is missing or invalid: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+const contract = readJsonFile(contractPath, 'Desktop Runtime contract')
+if (contract.schema_version !== 'trace.desktop-runtime-contract@0.1.0') {
+  throw new Error(`Unsupported Desktop Runtime contract: ${contract.schema_version ?? 'unknown'}`)
+}
+if (typeof contract.runtime_version !== 'string' || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(contract.runtime_version)) {
+  throw new Error('Desktop Runtime contract has no valid runtime_version')
+}
+if (typeof contract.source?.git_commit !== 'string' || !/^[0-9a-f]{40}$/.test(contract.source.git_commit)) {
+  throw new Error('Desktop Runtime contract has no immutable source commit')
+}
+if (!Array.isArray(contract.required_source_files) || contract.required_source_files.length === 0) {
+  throw new Error('Desktop Runtime contract has no required source files')
+}
+if (!Array.isArray(contract.required_materialized_files) || contract.required_materialized_files.length === 0) {
+  throw new Error('Desktop Runtime contract has no required materialized dependency files')
+}
+
+function gitHead(directory) {
+  const result = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: directory, encoding: 'utf8' })
+  if (result.error || result.status !== 0) throw new Error(`Trace Runtime source is not a Git checkout: ${directory}`)
+  return result.stdout.trim()
+}
+
+const actualCommit = gitHead(runtimeRoot)
+if (actualCommit !== contract.source.git_commit) {
+  throw new Error(`Trace Runtime source commit ${actualCommit} does not match desktop contract ${contract.source.git_commit} (${contract.source.ref ?? 'pinned source'})`)
+}
+for (const relative of contract.required_source_files) {
+  const source = path.resolve(runtimeRoot, relative)
+  if (!source.startsWith(`${runtimeRoot}${path.sep}`) || !fs.existsSync(source) || !fs.statSync(source).isFile()) {
+    throw new Error(`Trace Runtime source is missing contracted capability: ${relative}`)
+  }
+}
 fs.rmSync(output, { recursive: true, force: true })
 fs.mkdirSync(output, { recursive: true })
 
@@ -21,7 +63,22 @@ function run(command, args, shell = false) {
   if (result.status !== 0) throw new Error(`${command} exited with ${result.status}`)
 }
 
+const workspaceDependencyMarkers = [
+  path.join(runtimeRoot, 'apps', 'mcp', 'node_modules', '@modelcontextprotocol', 'sdk', 'package.json'),
+  path.join(runtimeRoot, 'apps', 'mcp', 'node_modules', 'zod', 'package.json'),
+]
+if (!workspaceDependencyMarkers.every(file => fs.existsSync(file))) {
+  console.log(JSON.stringify({ status: 'runtime-dependencies-missing', action: 'install', runtimeRoot }))
+  run(process.platform === 'win32' ? 'corepack.cmd' : 'corepack', ['pnpm', 'install', '--frozen-lockfile'], process.platform === 'win32')
+}
+
 run(process.platform === 'win32' ? 'corepack.cmd' : 'corepack', ['pnpm', 'build'], process.platform === 'win32')
+for (const relative of contract.required_materialized_files) {
+  const absolute = path.resolve(runtimeRoot, relative)
+  if (!absolute.startsWith(`${runtimeRoot}${path.sep}`) || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
+    throw new Error(`Trace Runtime build did not materialize contracted dependency: ${relative}`)
+  }
+}
 run(process.execPath, [packageScript, '--out', output, ...(explicitDevelopment ? [] : ['--require-clean'])])
 
 function readJson(relative) {
@@ -33,6 +90,9 @@ function readJson(relative) {
 
 const runtime = readJson('runtime.json')
 const releaseManifest = readJson('release-manifest.json')
+if (runtime.runtime_version !== contract.runtime_version) {
+  throw new Error(`Trace Runtime version ${runtime.runtime_version ?? 'unknown'} does not match desktop contract ${contract.runtime_version}`)
+}
 const sourceIdentity = runtime.source_identity
 if (!sourceIdentity || typeof sourceIdentity !== 'object') throw new Error('Trace Runtime package has no source_identity')
 if (!releaseManifest.source_identity || typeof releaseManifest.source_identity !== 'object') {

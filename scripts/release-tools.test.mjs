@@ -14,6 +14,22 @@ const { createPackage } = require('@electron/asar')
 const root = path.resolve(import.meta.dirname, '..')
 const checksum = path.join(root, 'scripts', 'checksum-release.mjs')
 const smoke = path.join(root, 'scripts', 'release-smoke.mjs')
+const runtimeContract = path.join(root, 'apps', 'desktop-pet', 'runtime-contract.json')
+
+test('desktop runtime contract pins the packaged qualifier and MCP dependency materialization', () => {
+  const contract = JSON.parse(fs.readFileSync(runtimeContract, 'utf8'))
+  assert.equal(contract.schema_version, 'trace.desktop-runtime-contract@0.1.0')
+  assert.equal(contract.repository, 'https://github.com/Tracehackthon/trace_backend')
+  assert.equal(contract.source.ref, 'codex/fix-packaged-codex-qualification-0.8.0')
+  assert.match(contract.source.git_commit, /^[0-9a-f]{40}$/)
+  assert.equal(contract.runtime_version, '0.8.0')
+  assert.deepEqual(contract.required_source_files, ['native/qualify-codex-app-server.mjs'])
+  assert.deepEqual(contract.required_materialized_files, [
+    'dist/apps/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js',
+    'dist/apps/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js',
+    'dist/apps/mcp/node_modules/zod/v3/index.js',
+  ])
+})
 
 test('release checksum is deterministic for a directory', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trace-release-checksum-'))

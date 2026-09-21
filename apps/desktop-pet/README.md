@@ -43,6 +43,8 @@ npm run dist:win
 
 产物位于 `release/Trace-Desktop-<version>-Setup.exe`。0.2.0 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
 
+桌面 Runtime 不是任意 `trace-runtime` checkout：`runtime-contract.json` 固定了包含首启 Codex qualifier 的来源 commit `a088b8658d76d1f825366fa8060712592b6460db`（`codex/fix-packaged-codex-qualification-0.8.0`）。发布前将该 commit 放在干净 checkout 中，并通过 `TRACE_RUNTIME_SOURCE` 指向它；staging 会拒绝其他 commit，不会把缺少 qualifier 的 Runtime 伪装成 release-ready。首次准备 checkout 或依赖目录被清理后，先在 Runtime 根目录执行 `corepack pnpm install --frozen-lockfile`；脚本也会在检测到 MCP workspace junction 缺失时以同一锁文件策略恢复依赖，并在 build 后验证 `@modelcontextprotocol/sdk` server paths 与 `zod/v3` 已 materialize。
+
 发布前必须从干净的 `trace-runtime` checkout 重新 stage；脚本会把 Runtime 的版本、commit/tree、内容摘要、API surface 和 Codex host compatibility 写入 `runtime-dist/desktop-runtime-source.json`，并校验 `runtime.json` 与 `release-manifest.json` 的逐文件 SHA-256。正式 staging 默认拒绝 dirty/development Runtime；本地调试若确实需要，可显式使用 `TRACE_DESKTOP_RUNTIME_MODE=development`，该产物会保持 `development-dirty`，不能作为 Release 上传。
 
 可重放检查（不构建、不上传）：
