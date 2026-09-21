@@ -49,8 +49,9 @@ function auditRuntimeIdentity() {
   if (contract.schema_version !== 'trace.desktop-runtime-contract@0.1.0') throw new Error('Unsupported runtime contract schema')
   if (runtimeInfo.runtime_version !== contract.runtime_version) throw new Error('Runtime package version does not match runtime contract')
   if (runtimeInfo.source_identity?.git_commit !== contract.source?.git_commit) throw new Error('Runtime source commit does not match runtime contract')
-  const requiredRuntimeFiles = contract.required_source_files
-  if (!Array.isArray(requiredRuntimeFiles) || requiredRuntimeFiles.length === 0) throw new Error('Runtime contract has no required source files')
+  if (!Array.isArray(contract.required_source_files) || contract.required_source_files.length === 0) throw new Error('Runtime contract has no required source files')
+  if (!Array.isArray(contract.required_materialized_files) || contract.required_materialized_files.length === 0) throw new Error('Runtime contract has no required materialized files')
+  const requiredRuntimeFiles = [...new Set([...contract.required_source_files, ...contract.required_materialized_files])]
   if (!runtimeInfo.source_identity?.content_sha256 || !manifest.source_identity?.content_sha256) throw new Error('Runtime package has no content identity')
   for (const key of ['runtime_version', 'distribution_eligibility']) {
     if (runtimeInfo[key] !== manifest[key]) throw new Error(`Runtime identity mismatch at ${key}`)
