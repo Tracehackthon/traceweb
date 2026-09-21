@@ -46,6 +46,14 @@
 .compare-root .compare-anchor-copy{padding:37px 45px 30px;max-height:251px;overflow:auto;scrollbar-width:thin}
 .compare-root .compare-anchor .compare-kicker{margin:0 0 24px 10px}
 .compare-root .compare-anchor blockquote{font-family:'Trace Compare Serif','Songti SC',SimSun,serif;font-size:30px;font-weight:600;line-height:1.53;overflow-wrap:anywhere}
+.compare-root .compare-anchor-copy{overflow:hidden;display:flex;flex-direction:column;align-items:stretch}
+.compare-root .compare-anchor-preview{max-height:6.1em;overflow:hidden;position:relative}
+.compare-root .compare-anchor-full{margin:14px 0 0 10px;border-top:1px solid #cfe2df;padding-top:8px;font:15px/1.5 'Trace Compare Sans','Microsoft YaHei',sans-serif;color:#236451}
+.compare-root .compare-anchor-full summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px;list-style:none;text-decoration:underline;text-underline-offset:4px}
+.compare-root .compare-anchor-full summary::-webkit-details-marker{display:none}
+.compare-root .compare-anchor-full summary::after{content:'＋';font-size:18px;text-decoration:none}
+.compare-root .compare-anchor-full[open] summary::after{content:'−'}
+.compare-root .compare-anchor-full blockquote{margin:9px 0 0;padding:13px 16px;max-height:128px;overflow:auto;font-size:22px;line-height:1.65;background:#f5fbf8d9;border-left:2px solid #71a995;border-radius:10px}
 .compare-root mark{color:inherit;background:#ffebbb;border-radius:5px;padding:0 3px}
 .compare-root .compare-before s{text-decoration-thickness:1px;text-decoration-color:#6b7e8b}
 .compare-root .compare-threads{position:absolute;inset:0;width:1672px;height:941px;pointer-events:none;overflow:visible;z-index:2}
@@ -249,6 +257,7 @@
 .compare-root.compare-compact .compare-anchor-copy{padding:25px 44px;max-height:350px}
 .compare-root.compare-compact .compare-anchor blockquote{font-size:25px}
 .compare-root.compare-compact .compare-anchor .compare-kicker{margin:0 0 14px;font-size:17px}
+.compare-root.compare-compact .compare-anchor-copy{max-height:none;overflow:visible}.compare-root.compare-compact .compare-anchor-preview{max-height:6.3em}.compare-root.compare-compact .compare-anchor-full{margin-left:0;font-size:14px}.compare-root.compare-compact .compare-anchor-full blockquote{max-height:240px;font-size:20px}
 .compare-root.compare-compact .compare-paper{border-radius:27px;padding:25px}
 .compare-root.compare-compact .compare-search-form h2{font-size:24px}
 .compare-root.compare-compact .compare-search-title>span{max-width:48%;font-size:12px;padding:4px 9px}

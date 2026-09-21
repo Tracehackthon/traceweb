@@ -123,7 +123,11 @@ export function dispatchChain(host, { matterId, action, expectedUnderstandingVer
   if (!current) return failure(host, 'unknown_matter', '没有找到这件事；保持原页面与草稿。');
   if (expectedUnderstandingVersion !== undefined && expectedUnderstandingVersion !== current.understandingVersion)
     return failure(host, 'version_conflict', '理解已有后来修改；未覆盖新版本。');
-  if (!action || ['CAPTURE', 'CAPTURE_DRAFT', 'CAPTURE_EXCERPT', 'TOGGLE_SOURCE'].includes(action.type))
+  // CAPTURE_DRAFT/EXCERPT and source toggles are local capture staging
+  // actions. Reading an existing matter must be able to stage a selection
+  // without routing through the homepage; only CAPTURE itself creates a new
+  // matter and therefore remains homepage-only here.
+  if (!action || action.type === 'CAPTURE')
     return failure(host, 'unsupported_action', '请从首页留下一点。');
   if (action.type === 'OPEN' && action.id !== matterId) return failure(host, 'matter_mismatch', '打开对象与事项 ID 不一致。');
   // Do not let the old chain result/handoff screen create a second work/result owner.

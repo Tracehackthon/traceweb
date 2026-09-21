@@ -67,6 +67,24 @@ test('an explicitly selected public search result is kept with provenance but no
   assert.equal(current(h).understanding, '');
 });
 
+test('reading selection and draft capture actions are accepted for an existing matter', () => {
+  let h = captured();
+  h = cd(h, 'CAPTURE_EXCERPT', { text: '阅读页中选中的原文', sourceId: 'missing' });
+  assert.equal(h.error, null);
+  assert.match(h.chain.notice, /未找到选段来源/);
+  // A user-selected excerpt is validated by the chain reducer against the
+  // currently available source. Add a user source as the reading adapter does
+  // before dispatching the action.
+  h.chain.sources.push({ id: 'reading-source', title: '阅读页原现场', excerpt: '阅读页中选中的原文', kind: 'user' });
+  h = cd(h, 'CAPTURE_EXCERPT', { text: '阅读页中选中的原文', sourceId: 'reading-source' });
+  assert.equal(h.error, null);
+  assert.equal(h.chain.capture.excerpt, '阅读页中选中的原文');
+  assert.equal(h.chain.capture.excerptSourceId, 'reading-source');
+  h = cd(h, 'CAPTURE_DRAFT', { text: '此刻想到的一句附言' });
+  assert.equal(h.error, null);
+  assert.equal(h.chain.capture.text, '此刻想到的一句附言');
+});
+
 test('repeated provider result reuses the first snapshot when only retrieval time changes', () => {
   let h = captured();
   const anchor = selectComparisonAnchor(h, ID, { field: 'originalText' });

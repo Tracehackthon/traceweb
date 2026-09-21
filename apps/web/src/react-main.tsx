@@ -240,7 +240,10 @@ function StatusBar({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   const loadFailed = snapshot.loadState === 'recoverable-error' || snapshot.loadState === 'unrecoverable-error';
   const canRetrySave = snapshot.status.state === 'error' && snapshot.pending;
   const canExport = snapshot.pending || Boolean(snapshot.recoveryDraft);
-  return <aside className="web-status" data-state={snapshot.status.state} data-load-state={snapshot.loadState} data-native={nativeConnected ? 'connected' : undefined} role="status" aria-live="polite" title={nativeConnected ? '桌宠与主窗口正在使用同一份当前会话数据' : undefined}><i /><span>{statusText}</span>{nativeConnected && snapshot.status.state !== 'error' && <button type="button" onClick={() => runtime.profile()}>本机能力</button>}{loadFailed && <RecoveryButton data-retry-load onClick={() => void runtime.retryLoad()}>{snapshot.loadState === 'unrecoverable-error' ? '重新检查' : '重新读取'}</RecoveryButton>}{canRetrySave && <RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton>}{canExport && <RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton>}{loadFailed && <RecoveryButton data-load onClick={() => runtime.confirmLoadSaved()}>载入已保存版本</RecoveryButton>}</aside>;
+  // Load failures have a dedicated recovery surface with one authoritative
+  // copy of each action. Keeping the same buttons in this fixed status bar
+  // produced duplicate "重新读取/载入已保存版本" controls in the 500 path.
+  return <aside className="web-status" data-state={snapshot.status.state} data-load-state={snapshot.loadState} data-native={nativeConnected ? 'connected' : undefined} role="status" aria-live="polite" title={nativeConnected ? '桌宠与主窗口正在使用同一份当前会话数据' : undefined}><i /><span>{statusText}</span>{nativeConnected && snapshot.status.state !== 'error' && <button type="button" onClick={() => runtime.profile()}>本机能力</button>}{!loadFailed && canRetrySave && <RecoveryButton data-retry onClick={() => void runtime.retryPending()}>重试保存</RecoveryButton>}{!loadFailed && canExport && <RecoveryButton data-export onClick={exportRecovery}>导出未保存内容</RecoveryButton>}</aside>;
 }
 
 function returnLabel(route: RouteMemory): string {
@@ -286,11 +289,16 @@ const demoActions = [
 
 function DemoGuide({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
   const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   if (!completeDemoMode || !snapshot.ready) return null;
   const isCurrent = (item: typeof demoActions[number]) => item.route.view === snapshot.route.view
     && (!('screen' in item.route) || item.route.screen === snapshot.route.screen);
-  return <aside className="demo-guide" data-open={open ? 'true' : 'false'} aria-label="完整演示动作清单">
-    <button className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示</span><b>6 / 6</b></button>
+  return <aside className="demo-guide" data-open={open ? 'true' : 'false'} aria-label="完整演示动作清单" onKeyDown={(event) => {
+    if (event.key !== 'Escape' || !open) return;
+    event.preventDefault(); event.stopPropagation(); setOpen(false);
+    window.requestAnimationFrame(() => toggleRef.current?.focus());
+  }}>
+    <button ref={toggleRef} className="demo-guide-toggle" type="button" aria-expanded={open} onClick={() => setOpen(!open)}><span>完整演示</span><b>6 / 6</b></button>
     {open && <div className="demo-guide-body"><div className="demo-guide-source"><i>知</i><span><strong>知乎参与了这条思考链</strong><small>2 份知乎公开内容，分别作为原现场和对照</small></span></div><nav>{demoActions.map((item, index) => <button type="button" key={item.label} aria-current={isCurrent(item) ? 'step' : undefined} onClick={() => { setOpen(false); runtime.navigate(item.route as RouteMemory); }}><span>{index + 1}</span><b>{item.label}</b>{'source' in item && item.source ? <small>{item.source}</small> : null}</button>)}</nav><footer><button type="button" onClick={() => runtime.resetCompleteDemo()}>恢复演示初始状态</button><a href="/app">进入我的空间</a><a href="/">返回产品介绍</a></footer></div>}
   </aside>;
 }
@@ -733,6 +741,17 @@ function DialogHost({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnaps
   const ref = useRef<HTMLDialogElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const dialog = snapshot.dialog;
+  const trapFocus = (event: React.KeyboardEvent<HTMLDialogElement>) => {
+    if (event.key !== 'Tab') return;
+    const element = ref.current;
+    if (!element) return;
+    const focusable = [...element.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter(item => item.getClientRects().length > 0);
+    if (!focusable.length) return;
+    const first = focusable[0]; const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -740,7 +759,7 @@ function DialogHost({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnaps
     if (!dialog && element.open) { element.close(); const target = previousFocus.current; previousFocus.current = null; window.requestAnimationFrame(() => target?.isConnected && target.focus()); }
   }, [dialog]);
   if (!dialog) return <dialog ref={ref} className="web-dialog" />;
-  return <dialog ref={ref} className="web-dialog" aria-labelledby="react-dialog-title" onCancel={(event) => { event.preventDefault(); runtime.closeDialog(); }} onClick={(event) => { if (event.target === event.currentTarget) runtime.closeDialog(); }}><header><h2 id="react-dialog-title">{dialog.title}</h2><button type="button" aria-label="关闭" onClick={() => runtime.closeDialog()}>×</button></header><DialogContent dialog={dialog} snapshot={snapshot} /></dialog>;
+  return <dialog ref={ref} className="web-dialog" aria-labelledby="react-dialog-title" onCancel={(event) => { event.preventDefault(); runtime.closeDialog(); }} onClick={(event) => { if (event.target === event.currentTarget) runtime.closeDialog(); }} onKeyDown={trapFocus}><header><h2 id="react-dialog-title">{dialog.title}</h2><button type="button" aria-label="关闭" onClick={() => runtime.closeDialog()}>×</button></header><DialogContent dialog={dialog} snapshot={snapshot} /></dialog>;
 }
 
 function App() {

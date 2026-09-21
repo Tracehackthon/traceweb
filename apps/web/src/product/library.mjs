@@ -107,6 +107,10 @@ export function mattersView(host) {
 export function mountLibrary({root,host,route,onNavigate,onBack,onProfile}) {
   const control=new AbortController();
   const on=(target,event,fn)=>target.addEventListener(event,fn,{signal:control.signal});
+  // Search focuses its input on mount. Keep the invoking control so Escape
+  // returns keyboard users to the place that opened the library instead of
+  // leaving focus on BODY after the route is replaced.
+  const returnFocus = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
   const works=route.view==='works';
   const heading=works?'工作现场':route.view==='search'?'找回之前的那一点':'全部痕迹';
   let current={...route,kind:works?'work':route.kind||''};
@@ -132,6 +136,11 @@ export function mountLibrary({root,host,route,onNavigate,onBack,onProfile}) {
   on(input,'compositionend',()=>{composing=false;change({q:input.value});});
   on(input,'input',()=>{if(!composing)change({q:input.value});});
   on(root.querySelector('form'),'submit',event=>{event.preventDefault();if(!composing)change({q:input.value});});
+  on(root,'keydown',event=>{
+    if(event.key!=='Escape'||event.isComposing)return;
+    event.preventDefault();event.stopPropagation();onBack();
+    window.requestAnimationFrame(()=>{if(returnFocus?.isConnected)returnFocus.focus();});
+  });
   paint();if(route.view==='search'&&!route.recordId)input.focus();
   return {destroy(){control.abort();},update(nextHost){host=nextHost;paint();}};
 }

@@ -179,9 +179,12 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   }
   function resize() {
     if (disposed) return;
-    const narrowHandoff = current.screen === 'handoff' && root.clientWidth < 760;
-    root.classList.toggle('chain-narrow', narrowHandoff);
-    if (narrowHandoff) stage.style.transform = 'none';
+    // Every chain screen is a real document on a narrow viewport. Previously
+    // only handoff opted out of the 1672px canvas transform, leaving reading,
+    // resume and discussion at roughly 0.23x on a 390px phone.
+    const narrow = root.clientWidth < 760;
+    root.classList.toggle('chain-narrow', narrow);
+    if (narrow) stage.style.transform = 'none';
     else {
       const scale=Math.min(root.clientWidth/1672,root.clientHeight/941);
       stage.style.transform=`translate(-50%, -50%) scale(${scale})`;
