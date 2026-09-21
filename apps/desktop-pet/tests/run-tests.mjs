@@ -3,6 +3,8 @@ import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { once } from 'node:events'
+import net from 'node:net'
 import test from 'node:test'
 import { build } from 'esbuild'
 
@@ -26,6 +28,23 @@ const runtimeIntegrations = await import(pathToFileURL(resolve(root, 'src/deskto
 const projectBinding = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-project-binding.mjs')).href)
 const desktopLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/lifecycle.mjs')).href)
 const storageLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/storage-lifecycle.mjs')).href)
+const portSelection = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-port-selection.mjs')).href)
+
+test('packaged runtime keeps explicit origins loopback-only and migrates occupied ports', async () => {
+  assert.equal(portSelection.isLoopbackHttpOrigin('http://127.0.0.1:4173'), true)
+  assert.equal(portSelection.isLoopbackHttpOrigin('http://localhost:4173'), true)
+  assert.equal(portSelection.isLoopbackHttpOrigin('https://127.0.0.1:4173'), false)
+  assert.equal(portSelection.isLoopbackHttpOrigin('http://example.test:4173'), false)
+
+  const blocker = net.createServer()
+  blocker.listen(0, '127.0.0.1')
+  await once(blocker, 'listening')
+  const occupied = blocker.address().port
+  assert.equal(await portSelection.selectLoopbackPort(occupied), 0)
+  blocker.close()
+  await once(blocker, 'close')
+  assert.equal(await portSelection.selectLoopbackPort(occupied), occupied)
+})
 
 test('desktop upgrades discard version-bound caches while preserving user state and authorization data', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'trace-storage-upgrade-'))
@@ -430,6 +449,9 @@ test('native bridge exposes explicit event, bounds and placement channels', asyn
   assert.match(discussionPreload + main, /trace-native:runtime-status/)
   assert.match(main, /scheduleBundledRuntimeRecovery/)
   assert.match(main, /RUNTIME_RECOVERY_DELAYS_MS/)
+  assert.match(main, /runtime\.heartbeat/)
+  assert.match(main, /selectLoopbackPort/)
+  assert.match(main, /自动避开占用端口/)
   assert.match(main, /WORKSPACE_IPC_TIMEOUT_MS/)
   assert.match(main, /RUNTIME_START_TIMEOUT_MS/)
   assert.match(main, /withIpcTimeout/)

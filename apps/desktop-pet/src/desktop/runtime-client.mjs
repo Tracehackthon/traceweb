@@ -940,6 +940,11 @@ export function createRuntimeCapabilityClient({
       }
     }
     if (request.operation === 'workspace.summary') return readObservationSummary()
+    if (request.operation === 'runtime.heartbeat') {
+      const heartbeat = await runtimeRequest('/api/runtime/heartbeat', undefined, 4_000)
+      if (heartbeat?.status !== 'ok') throw new Error('Trace 本机内容服务心跳无效')
+      return { status: 'ok' }
+    }
     if (request.operation === 'codex.events') return readCodexEvents()
     if (request.operation === 'workspace.capture') return captureObservation(request.text, request.source)
     if (request.operation === 'host.panel.read') return readRuntimePanel()

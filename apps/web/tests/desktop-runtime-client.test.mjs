@@ -39,6 +39,26 @@ test('desktop runtime client retargets the dynamic bundled listener after retry'
   assert.deepEqual(calls, ['http://127.0.0.1:4401/api/web/workspace'])
 })
 
+test('desktop runtime heartbeat stays on the selected loopback origin and fails closed', async () => {
+  const calls = []
+  const client = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4402',
+    fetchImpl: async (url, init) => {
+      calls.push({ url: String(url), init })
+      return response({ status: 'ok' })
+    },
+  })
+  assert.deepEqual(await client.request({ operation: 'runtime.heartbeat' }), { status: 'ok' })
+  assert.equal(new URL(calls[0].url).pathname, '/api/runtime/heartbeat')
+  assert.equal(calls[0].init.headers.origin, 'http://127.0.0.1:4402')
+
+  const unhealthy = createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:4403',
+    fetchImpl: async () => response({ status: 'stale' }),
+  })
+  await assert.rejects(unhealthy.request({ operation: 'runtime.heartbeat' }), /心跳无效/)
+})
+
 test('desktop discovers the Codex App executable outside a stale Explorer PATH', async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), 'trace-codex-discovery-'))
   const executable = path.join(root, 'OpenAI', 'Codex', 'bin', 'release-hash', 'codex.exe')

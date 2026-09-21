@@ -348,13 +348,17 @@ export class WebRuntime {
       throw new Error('保存连接中断');
     }
     if (!response.ok) {
-      const message = response.status === 409 ? '另一处已有更新，未覆盖它。请先导出，再载入新版本。' : `保存失败：${data?.error?.message || response.status}`;
+      const message = response.status === 409 ? '另一处已有更新，未覆盖它。请先保留草稿，再载入已保存版本。' : `保存失败：${data?.error?.message || response.status}`;
+      if (response.status === 409) this.recoveryDraft = { revision: this.revision, host: clone(value) };
       this.setStatus('error', message);
       throw new Error(message);
     }
     this.revision = Math.max(this.revision, data.revision);
     this.storage = data.storage;
     if (this.pendingPayload?.commandId === commandId) this.pendingPayload = null;
+    // A successful retry has reconciled the stale writer; do not keep an old
+    // recovery export/action around after the authoritative save succeeds.
+    if (this.recoveryDraft?.host && sameValue(this.recoveryDraft.host, value)) this.recoveryDraft = null;
     this.setStatus('saved', `已保存在${storageLabel}`);
     this.emit();
     return data;
@@ -643,7 +647,12 @@ export class WebRuntime {
       this.navigate(next.route);
       const source = ['zhihu', 'web'].includes(options.source || '') ? options.source as 'zhihu' | 'web' : 'none';
       const agent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as 'codex-native' | 'codex-harness' | 'custom' : 'none';
-      if (!completeDemoMode && (source !== 'none' || agent !== 'none')) this.showDialog({ type: 'capability', title: '让来源与 Agent 参与', capability: { matterId, query: text, source, agent } });
+      // Agent selection already routed the user to the handoff screen.  Do
+      // not open a second top-layer dialog over its primary “交给 Codex”
+      // action: the handoff button is the one confirmation/dispatch action.
+      // Source-only capture still uses the bounded capability dialog because
+      // there is no competing handoff CTA in that flow.
+      if (!completeDemoMode && source !== 'none' && agent === 'none') this.showDialog({ type: 'capability', title: '让来源参与', capability: { matterId, query: text, source, agent } });
     }, productOperations);
   }
 

@@ -9,6 +9,7 @@ import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
 import { bindNativeAgentProject } from './runtime-project-binding.mjs'
 import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
 import { clearVersionBoundStorage } from './storage-lifecycle.mjs'
+import { isAddressInUse, isLoopbackHttpOrigin, selectLoopbackPort } from './runtime-port-selection.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -38,6 +39,7 @@ let zhihuAuthWindow
 let interactiveBounds = []
 let codexEventPollTimer
 let codexEventPollInFlight = false
+let runtimeHeartbeatFailures = 0
 let overlayReady = false
 const IPC_TIMEOUT_MS = 45_000
 const WORKSPACE_IPC_TIMEOUT_MS = 15_000
@@ -253,11 +255,13 @@ function saveCurrentPlacement(payload) {
 }
 async function runtimeReady() {
   if (!backendOrigin) return false
+  if (app.isPackaged && !isLoopbackHttpOrigin(backendOrigin)) return false
   try {
     // Product Workspace is the content authority. Agent is an optional
     // capability: a broken/legacy agent ledger must not make the saved Trace
     // workspace look disconnected or trigger a second listener.
-    const response = await fetch(new URL('/api/product/workspace', backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
+    const pathname = app.isPackaged ? '/api/runtime/heartbeat' : '/api/product/workspace'
+    const response = await fetch(new URL(pathname, backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json', origin: backendOrigin } })
     return response.ok && (response.headers.get('content-type') || '').includes('application/json')
   } catch { return false }
 }
@@ -267,18 +271,34 @@ function isAgentStartupFailure(error) {
   return code === 'PRODUCT_IDENTITY_UNVERIFIED' || code.startsWith('AGENT_') || code === 'INVALID_WORKSPACE' || code === 'INVALID_INSTALLATION'
 }
 
-async function startBundledRuntime({ agentEnabled, cacheBust = false } = {}) {
+function runtimeOriginForBinding(target, port) {
+  const hostname = target.hostname.toLowerCase() === 'localhost' ? 'localhost' : '127.0.0.1'
+  return `http://${hostname}:${Number(port)}`
+}
+
+async function startBundledRuntime({ agentEnabled, cacheBust = false, port, targetOrigin } = {}) {
   const runtimeRoot = join(process.resourcesPath, 'trace-runtime')
   const server = join(runtimeRoot, 'apps', 'desktop', 'server.mjs')
   const specifier = `${pathToFileURL(server).href}${cacheBust ? `?attempt=${++bundledRuntimeAttempt}` : ''}`
+  if (port !== undefined) process.env.TRACE_DESKTOP_PORT = String(port)
   process.env.TRACE_AGENT_ENABLED = agentEnabled ? '1' : '0'
   let loaded
   try {
     loaded = await withIpcTimeout(import(specifier), RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
     const binding = await withIpcTimeout(loaded.ready, RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
-    if (!bundledRuntime) bundledRuntime = loaded
+    bundledRuntime = loaded
     if (!binding || !Number.isInteger(Number(binding.port)) || Number(binding.port) < 1 || Number(binding.port) > 65_535) throw new Error('Trace 本机内容服务没有返回有效连接')
-    if (!configuredBackendOrigin) backendOrigin = `http://127.0.0.1:${Number(binding.port)}`
+    // Port 0 is resolved by the runtime itself.  Always publish the actual
+    // listener origin so the renderer and subsequent capability requests do
+    // not keep using a stale configured port after collision recovery.
+    const target = targetOrigin ? new URL(targetOrigin) : null
+    const targetHostname = target?.hostname?.toLowerCase()
+    const preservesConfiguredOrigin = configuredBackendOrigin
+      && (targetHostname === 'localhost' || targetHostname === '127.0.0.1')
+      && Number(binding.port) === Number(target?.port || 0)
+    if (!preservesConfiguredOrigin) {
+      backendOrigin = runtimeOriginForBinding(target || new URL(DEFAULT_RUNTIME_ORIGIN), binding.port)
+    }
     capabilityClient?.setRuntimeOrigin?.(backendOrigin)
     return binding
   } catch (error) {
@@ -289,6 +309,13 @@ async function startBundledRuntime({ agentEnabled, cacheBust = false } = {}) {
 }
 
 async function doEnsureBundledRuntime({ retry = false } = {}) {
+  // A packaged build may only own a loopback listener.  An explicitly
+  // configured external origin is not rewritten or contacted; surface a
+  // local repair state instead of silently redirecting the renderer.
+  if (app.isPackaged && backendOrigin && !isLoopbackHttpOrigin(backendOrigin)) {
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务地址不可用，请重新启动 Trace。' })
+    return
+  }
   if (await runtimeReady()) {
     if (bundledRuntimeStatus.state !== 'degraded') setBundledRuntimeStatus({ connected: true, bundled: app.isPackaged, state: 'connected', message: 'Trace 本机内容服务已连接。' })
     return
@@ -298,7 +325,7 @@ async function doEnsureBundledRuntime({ retry = false } = {}) {
     return
   }
   const target = new URL(backendOrigin || DEFAULT_RUNTIME_ORIGIN)
-  if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)) {
+  if (!isLoopbackHttpOrigin(target.href)) {
     setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务地址不可用，请重新启动 Trace。' })
     return
   }
@@ -310,12 +337,26 @@ async function doEnsureBundledRuntime({ retry = false } = {}) {
   }
   const stateRoot = join(app.getPath('userData'), 'state')
   mkdirSync(stateRoot, { recursive: true })
+  // A failed heartbeat can leave the previous module loaded even though its
+  // listener is no longer authoritative. Close it before probing/binding a
+  // replacement so recovery cannot leak a second loopback server.
+  if (bundledRuntime) {
+    try { await bundledRuntime.close?.() } catch { /* recovery will report a fresh failure */ }
+    bundledRuntime = undefined
+  }
   const settings = readDesktopSettings()
   const persistedIdentity = ensureRuntimeIdentity(settings, () => randomBytes(24).toString('hex'))
   if (persistedIdentity.changed) writeDesktopSettings(persistedIdentity.settings)
   process.env.TRACE_RUNTIME_ROOT = runtimeRoot
   process.env.TRACE_BUNDLED_RUNTIME = '1'
-  process.env.TRACE_DESKTOP_PORT = configuredBackendOrigin ? target.port || '80' : '0'
+  const preferredPort = configuredBackendOrigin ? Number(target.port || 80) : 0
+  // An explicit origin is honoured when its loopback port is free.  If it is
+  // occupied, ask the OS for a loopback-only ephemeral port instead of
+  // retrying the same EADDRINUSE failure forever.  The real bind below still
+  // handles a probe race by retrying with port 0.
+  let selectedPort = configuredBackendOrigin ? await selectLoopbackPort(preferredPort) : 0
+  const migratedFromBusyPort = configuredBackendOrigin && preferredPort > 0 && selectedPort === 0
+  process.env.TRACE_DESKTOP_PORT = String(selectedPort)
   process.env.TRACE_WEB_STATE_FILE = join(stateRoot, 'web.sqlite')
   process.env.TRACE_AGENT_STATE_FILE = join(stateRoot, 'agent.sqlite')
   process.env.TRACE_AGENT_RUNTIME_ROOT = join(stateRoot, 'agent-runs')
@@ -336,16 +377,31 @@ async function doEnsureBundledRuntime({ retry = false } = {}) {
   setBundledRuntimeStatus({ connected: false, bundled: true, state: 'starting', message: '正在启动 Trace 本机内容服务…' })
   const requestedAgent = process.env.TRACE_AGENT_ENABLED !== '0'
   try {
-    await startBundledRuntime({ agentEnabled: requestedAgent, cacheBust: retry })
-    setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: 'Trace 本机内容服务已连接。' })
+    await startBundledRuntime({ agentEnabled: requestedAgent, cacheBust: retry, port: selectedPort, targetOrigin: target.href })
+    runtimeHeartbeatFailures = 0
+    setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: migratedFromBusyPort ? 'Trace 本机内容服务已连接（已自动避开占用端口）。' : 'Trace 本机内容服务已连接。' })
   } catch (error) {
+    if (configuredBackendOrigin && isAddressInUse(error) && selectedPort !== 0) {
+      // The availability probe and the bind are necessarily separate.  Do a
+      // single bounded fallback to an OS-selected loopback port; never fall
+      // back to an external origin or keep retrying a known busy port.
+      selectedPort = 0
+      try {
+        await startBundledRuntime({ agentEnabled: requestedAgent, cacheBust: true, port: selectedPort, targetOrigin: target.href })
+        runtimeHeartbeatFailures = 0
+        setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: 'Trace 本机内容服务已连接（已自动避开占用端口）。' })
+        return
+      } catch (fallbackError) {
+        error = fallbackError
+      }
+    }
     // Agent is optional for reading and editing the Product Workspace. If an
     // old agent ledger cannot be opened, retry the same packaged server with
     // Agent disabled rather than leaving the product window without a local
     // listener. Product state remains authoritative and readable.
     if (requestedAgent && isAgentStartupFailure(error)) {
       try {
-        await startBundledRuntime({ agentEnabled: false, cacheBust: true })
+        await startBundledRuntime({ agentEnabled: false, cacheBust: true, port: selectedPort, targetOrigin: target.href })
         setBundledRuntimeStatus({ connected: true, bundled: true, state: 'degraded', message: 'Trace 内容已连接；本机 Agent 暂时不可用，可稍后重试。' })
         return
       } catch (fallbackError) {
@@ -542,13 +598,41 @@ function startCodexEventPolling() {
     if (codexEventPollInFlight || !overlayWindow || overlayWindow.isDestroyed() || !overlayWindow.webContents) return
     codexEventPollInFlight = true
     try {
-      const result = await capabilityClient.request({ operation: 'codex.events' })
-      if (Array.isArray(result?.events)) {
-        for (const event of result.events.slice(0, 128)) sendCodexEvent(event)
+      // Event polling is a projection and may legitimately be empty when
+      // Agent is disabled.  Liveness is checked through a separate
+      // loopback-only endpoint so a 404/Agent failure cannot masquerade as a
+      // healthy desktop runtime.
+      let heartbeatOk = true
+      try {
+        await capabilityClient.request({ operation: 'runtime.heartbeat' })
+      } catch {
+        heartbeatOk = false
+        runtimeHeartbeatFailures += 1
+        // Fail closed after a short consecutive-failure budget.  The last
+        // projection is retained for context, but connected state is no longer
+        // reported as authoritative and recovery is bounded by the existing
+        // retry schedule.
+        if (runtimeHeartbeatFailures >= 3 && app.isPackaged) {
+          setBundledRuntimeStatus({ connected: false, bundled: true, state: 'degraded', message: 'Trace 本机内容服务暂时失去响应，正在尝试恢复…' })
+          scheduleBundledRuntimeRecovery()
+        }
       }
-    } catch {
-      // Runtime startup/disconnect is normal. The pet stays at its last
-      // projection and does not invent a local task to fill the gap.
+      if (heartbeatOk) {
+        runtimeHeartbeatFailures = 0
+        if (!bundledRuntimeStatus.connected && app.isPackaged) {
+          setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: 'Trace 本机内容服务已连接。' })
+          stopBundledRuntimeRecovery()
+        }
+        try {
+          const result = await capabilityClient.request({ operation: 'codex.events' })
+          if (Array.isArray(result?.events)) {
+            for (const event of result.events.slice(0, 128)) sendCodexEvent(event)
+          }
+        } catch {
+          // Event projection is best effort.  Heartbeat remains authoritative
+          // for connection state and independently triggers recovery.
+        }
+      }
     } finally {
       codexEventPollInFlight = false
     }
