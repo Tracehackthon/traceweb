@@ -42,6 +42,33 @@ export function routeForRecord(record) {
   // hits still carry their id so the exact item can be reviewed in context.
   return record.kind === 'work' ? {...record.route} : {...record.route,recordId:record.id};
 }
+
+// A library route replaces the DOM that opened it.  Keep the return target as
+// a semantic route description instead of retaining an element that React may
+// unmount before Escape is handled.
+export function returnFocusSelectors(route) {
+  const target = route?.returnTarget || route || {};
+  if (target.view === 'chain') return [
+    '.web-context-menu button:first-of-type',
+    '.chain-root .chain-heading h1',
+    '.chain-root h1',
+  ];
+  if (target.view === 'home') return [
+    '.home-nav [data-action="search"]',
+    '#home-title',
+    '.home-header button',
+  ];
+  if (target.view === 'matters') return [
+    '.matters-search-input',
+    '.matters-hero h1',
+    '.matters-brand',
+  ];
+  if (target.view === 'worksite') return [
+    '.worksite-root h1',
+    '.worksite-brand',
+  ];
+  return ['[data-route-host] h1', '[data-route-host] button'];
+}
 export function homeEntries(host) {
   return Object.fromEntries([...host.chain.matters].reverse().slice(0,4).map((m,i)=>{
     const sourceIds = [...new Set([...(m.sourceIds || []), ...(m.links || []).map(link => link.sourceId)])];
@@ -107,10 +134,6 @@ export function mattersView(host) {
 export function mountLibrary({root,host,route,onNavigate,onBack,onProfile}) {
   const control=new AbortController();
   const on=(target,event,fn)=>target.addEventListener(event,fn,{signal:control.signal});
-  // Search focuses its input on mount. Keep the invoking control so Escape
-  // returns keyboard users to the place that opened the library instead of
-  // leaving focus on BODY after the route is replaced.
-  const returnFocus = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
   const works=route.view==='works';
   const heading=works?'工作现场':route.view==='search'?'找回之前的那一点':'全部痕迹';
   let current={...route,kind:works?'work':route.kind||''};
@@ -136,10 +159,24 @@ export function mountLibrary({root,host,route,onNavigate,onBack,onProfile}) {
   on(input,'compositionend',()=>{composing=false;change({q:input.value});});
   on(input,'input',()=>{if(!composing)change({q:input.value});});
   on(root.querySelector('form'),'submit',event=>{event.preventDefault();if(!composing)change({q:input.value});});
-  on(root,'keydown',event=>{
+  on(document,'keydown',event=>{
+    if (!root.isConnected || (event.target !== document.body && !root.contains(event.target)) || document.querySelector('dialog[open]')) return;
     if(event.key!=='Escape'||event.isComposing)return;
     event.preventDefault();event.stopPropagation();onBack();
-    window.requestAnimationFrame(()=>{if(returnFocus?.isConnected)returnFocus.focus();});
+    const focusReturnTarget = (attempt=0) => {
+      const selector = returnFocusSelectors(route).find(value => document.querySelector(value));
+      const target = selector ? document.querySelector(selector) : null;
+      if (target instanceof HTMLElement && target !== document.body) {
+        if (!target.matches('a,button,input,select,textarea,[tabindex]:not([tabindex="-1"])')) target.tabIndex=-1;
+        target.focus({preventScroll:true});
+        return;
+      }
+      // The route host and the shell chrome are committed in the same React
+      // update, but route modules can still resolve one frame later on a cold
+      // load. Retry briefly without ever depending on the detached opener.
+      if (attempt < 4) window.requestAnimationFrame(()=>focusReturnTarget(attempt+1));
+    };
+    window.requestAnimationFrame(()=>focusReturnTarget());
   });
   paint();if(route.view==='search'&&!route.recordId)input.focus();
   return {destroy(){control.abort();},update(nextHost){host=nextHost;paint();}};

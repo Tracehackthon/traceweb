@@ -27,7 +27,7 @@ const button = (action,label,cls='',name='') => `<button type="button" class="co
 const templates = {
  search: `<section class="compare-heading"><h1 tabindex="-1">从这一处找</h1><p>不用重新交代背景，就从这句话开始。</p></section>
   <svg class="compare-threads compare-search-thread" viewBox="0 0 1672 941" aria-hidden="true"><path d="M539 443 C620 448 628 346 705 346"/><circle cx="539" cy="443" r="8"/><circle cx="705" cy="346" r="9"/></svg>
-  <section class="compare-anchor compare-glass-panel"><div class="compare-glass" data-glass></div><div class="compare-anchor-copy"><p class="compare-kicker">正在推敲的一句</p><blockquote class="compare-anchor-preview" data-text="focus"></blockquote><details class="compare-anchor-full"><summary>展开完整原话</summary><blockquote data-text="focus"></blockquote></details></div></section>
+  <section class="compare-anchor compare-glass-panel"><div class="compare-glass" data-glass></div><div class="compare-anchor-copy"><p class="compare-kicker">正在推敲的一句</p><blockquote class="compare-anchor-preview" data-text="focus"></blockquote><details class="compare-anchor-full"><summary>展开完整原话</summary><blockquote data-text="originalText"></blockquote></details></div></section>
   <img class="compare-bird compare-search-bird" data-bird="fly" alt="" aria-hidden="true">
   <form class="compare-search-form compare-paper" data-form="search"><div class="compare-search-title"><h2>这次想弄清楚</h2><span data-search-context>已带入原事项</span></div>
    <div class="compare-question-row"><label class="compare-sr" for="compare-question">这次想弄清楚</label><input id="compare-question" data-field="question" autocomplete="off"><button type="button" data-action="focus-question" class="compare-button compare-quiet">${icon('edit')}修改这一处</button></div>
@@ -62,6 +62,13 @@ const templates = {
 const kindLabel = candidate => candidate?.kind === 'hypothetical' ? '假设情形' : candidate?.kind === 'user' ? '用户带入材料' : candidate?.kind === 'external' ? (candidate?.source === 'zhihu' ? '知乎公开内容' : '联网来源') : '演示材料';
 const relationLabels = {limit:'限制',limitation:'限制',supplement:'补充',support:'支持',challenge:'挑战',related:'有关',uncertain:'有关'};
 const asText = value => value == null ? '' : typeof value === 'string' ? value : Array.isArray(value) ? value.join('；') : String(value.text ?? value.label ?? '');
+export function canonicalOriginalText(matter={}) {
+  return asText(matter.originalText)
+    || (matter.basis?.field === 'originalText' ? asText(matter.basis.text) : '')
+    || asText(matter.basis?.text)
+    || asText(matter.focus?.text)
+    || asText(matter.understanding);
+}
 const sourceBadge = candidate => candidate?.kind === 'external' ? [kindLabel(candidate),asText(candidate.author)].filter(Boolean).join(' · ') : `${kindLabel(candidate)} · ${candidate?.sourceType||'自带摘录'}`;
 const safeSourceUrl = value => { try { const url=new URL(value); return url.protocol==='https:'&&!url.username&&!url.password?url.href:null; } catch { return null; } };
 
@@ -319,7 +326,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     $('.compare-top-return span').textContent=screen==='returned'?'全部轨迹':'返回原来的事情';
     $('.compare-demo').textContent=current.isDemo?'演示内容':'本地对照';
     $('.compare-profile').hidden=typeof onProfile!=='function';
-    text('focus',current.matter?.focus?.text);text('question',current.query?.question);
+    text('focus',current.matter?.focus?.text);text('originalText',canonicalOriginalText(current.matter));text('question',current.query?.question);
     if(current.isDemo)all('[data-text="focus"]').forEach(el=>emphasizeTerm(el,'必须'));
     text('shortQuestion',current.query?.shortQuestion || current.query?.question);
       if(screen==='search') {

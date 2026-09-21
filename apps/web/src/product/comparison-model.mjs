@@ -378,7 +378,7 @@ export function selectComparisonView(state) {
   const selectedCandidate = candidates.find((item) => item.id === state.selectedId) || null;
   const basis = basisOf(state.matter);
   return { screen: state.screen, isDemo: state.isDemo, notice: state.notice,
-    matter: { id: state.matter.id, title: state.matter.title, understanding: state.matter.understanding,
+    matter: { id: state.matter.id, title: state.matter.title, originalText: state.matter.originalText, understanding: state.matter.understanding,
       version: state.matter.version, focus: clone(basis.focus), basis: clone(basis), unresolved: clone(state.matter.unresolved ?? '') },
     query: { ...clone(state.query), shortQuestion: state.fixtureQuestion && state.query.question === DEMO_QUESTION ? '不写附言，也能接回来吗？' : state.query.question }, search: clone(state.search), candidates,
     selectedId: state.selectedId, selectedCandidate, comparisonDraft: noteFor(state), savedComparisonNote: entry(state.notes, state.selectedId),

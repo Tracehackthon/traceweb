@@ -163,7 +163,7 @@ export function selectChain(host, matterId) {
 }
 
 function comparisonMatter(current, focus, basis) {
-  return { id: current.id, title: titleOf(current), understanding: current.understanding,
+  return { id: current.id, title: titleOf(current), originalText: current.originalText, understanding: current.understanding,
     version: current.understandingVersion, focus: copy(focus), ...(basis ? { basis: copy(basis) } : {}), unresolved: current.stop,
     links: copy(current.links || []), revisions: copy(current.revisions.filter(r => r.kind === 'comparison')),
     comparisonRequests: copy(current.comparisonRequests || []) };
