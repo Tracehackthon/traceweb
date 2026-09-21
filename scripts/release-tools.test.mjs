@@ -6,6 +6,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
+import { verifyRuntimeBuildDirectory } from './verify-desktop-runtime-imports.mjs'
 
 const require = createRequire(path.join(path.resolve(import.meta.dirname, '..'), 'apps', 'desktop-pet', 'package.json'))
 const { createPackage } = require('@electron/asar')
@@ -60,5 +61,25 @@ test('release smoke rejects a development identity before publishing', async () 
     const result = spawnSync(process.execPath, [smoke, '--unpacked', directory, '--expected-version', '0.2.0'], { encoding: 'utf8' })
     assert.notEqual(result.status, 0)
     assert.match(result.stderr, /asar|non-release runtime|invalid/i)
+  } finally { fs.rmSync(directory, { recursive: true, force: true }) }
+})
+
+test('desktop runtime import verification catches a missing packaged module', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trace-desktop-runtime-imports-'))
+  try {
+    const desktop = path.join(directory, 'lib', 'desktop')
+    fs.mkdirSync(desktop, { recursive: true })
+    fs.writeFileSync(path.join(desktop, 'main.mjs'), "import './runtime-port-selection.mjs'\n")
+    fs.writeFileSync(path.join(desktop, 'preload.cjs'), 'module.exports = {}\n')
+    fs.writeFileSync(path.join(desktop, 'discussion-preload.cjs'), 'module.exports = {}\n')
+    assert.throws(() => verifyRuntimeBuildDirectory(directory), /runtime-port-selection\.mjs/)
+    fs.writeFileSync(path.join(desktop, 'runtime-port-selection.mjs'), 'export const selected = true\n')
+    const verified = verifyRuntimeBuildDirectory(directory)
+    assert.ok(verified.files.includes('lib/desktop/runtime-port-selection.mjs'))
+    assert.deepEqual(verified.edges, [{
+      from: 'lib/desktop/main.mjs',
+      specifier: './runtime-port-selection.mjs',
+      to: 'lib/desktop/runtime-port-selection.mjs',
+    }])
   } finally { fs.rmSync(directory, { recursive: true, force: true }) }
 })

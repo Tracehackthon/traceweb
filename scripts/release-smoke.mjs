@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
+import { verifyRuntimeAsar } from './verify-desktop-runtime-imports.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // electron-builder keeps `@electron/asar` in the desktop package's isolated
@@ -30,9 +31,22 @@ const runtimeManifest = readJson('resources/trace-runtime/release-manifest.json'
 const source = readJson('resources/trace-runtime/desktop-runtime-source.json')
 const appAsar = requireFile('resources/app.asar')
 const asarPaths = new Set(listPackage(appAsar).map(value => value.replaceAll('\\', '/').replace(/^\//, '')))
-for (const required of ['lib/desktop/main.mjs', 'lib/desktop/lifecycle.mjs', 'lib/desktop/storage-lifecycle.mjs', 'lib/desktop/preload.cjs', 'lib/desktop/discussion/index.html']) {
+for (const required of [
+  'lib/desktop/main.mjs',
+  'lib/desktop/runtime-client.mjs',
+  'lib/desktop/runtime-port-selection.mjs',
+  'lib/desktop/runtime-installation-identity.mjs',
+  'lib/desktop/runtime-integrations.mjs',
+  'lib/desktop/runtime-project-binding.mjs',
+  'lib/desktop/lifecycle.mjs',
+  'lib/desktop/storage-lifecycle.mjs',
+  'lib/desktop/preload.cjs',
+  'lib/desktop/discussion-preload.cjs',
+  'lib/desktop/discussion/index.html',
+]) {
   if (!asarPaths.has(required)) throw new Error(`app.asar is missing ${required}`)
 }
+const runtimeImportAudit = verifyRuntimeAsar(appAsar, asarPaths, extractFile)
 const packageInfo = JSON.parse(extractFile(appAsar, 'package.json').toString('utf8'))
 if (packageInfo.version !== expectedVersion) throw new Error(`Desktop package version is ${packageInfo.version}, expected ${expectedVersion}`)
 if (runtime.runtime_version !== source.runtime_version || runtime.runtime_version !== runtimeManifest.runtime_version) throw new Error('Runtime version identity mismatch')
@@ -48,4 +62,4 @@ for (const entry of runtimeManifest.files) {
   const content = fs.readFileSync(absolute)
   if (createHash('sha256').update(content).digest('hex') !== entry.sha256 || content.length !== entry.bytes) throw new Error(`Runtime checksum mismatch: ${entry.path}`)
 }
-process.stdout.write(`${JSON.stringify({ status: 'desktop-release-smoke-passed', unpacked: path.relative(root, unpacked).replaceAll(path.sep, '/'), desktop_version: packageInfo.version, runtime_version: runtime.runtime_version, distribution_eligibility: runtime.distribution_eligibility, runtime_files: runtimeManifest.files.length }, null, 2)}\n`)
+process.stdout.write(`${JSON.stringify({ status: 'desktop-release-smoke-passed', unpacked: path.relative(root, unpacked).replaceAll(path.sep, '/'), desktop_version: packageInfo.version, runtime_version: runtime.runtime_version, distribution_eligibility: runtime.distribution_eligibility, runtime_files: runtimeManifest.files.length, runtime_imports: runtimeImportAudit }, null, 2)}\n`)

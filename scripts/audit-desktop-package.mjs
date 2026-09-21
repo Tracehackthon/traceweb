@@ -2,9 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { verifyRuntimeBuildDirectory } from './verify-desktop-runtime-imports.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const desktop = path.join(root, 'apps', 'desktop-pet', 'lib', 'desktop')
+const desktopPackage = path.join(root, 'apps', 'desktop-pet')
+const desktop = path.join(desktopPackage, 'lib', 'desktop')
 const discussion = path.join(desktop, 'discussion')
 const runtime = path.join(root, 'apps', 'desktop-pet', 'runtime-dist')
 const forbidden = [
@@ -91,6 +93,7 @@ function auditRuntimeIdentity() {
 if (!fs.existsSync(path.join(desktop, 'main.mjs')) || !fs.existsSync(path.join(discussion, 'index.html'))) {
   throw new Error('Desktop build is incomplete')
 }
+const runtimeImportAudit = verifyRuntimeBuildDirectory(desktopPackage)
 const runtimeAudit = auditRuntimeIdentity()
 for (const relative of forbidden) {
   if (fs.existsSync(path.join(discussion, relative))) throw new Error(`Desktop build contains Web-only asset: ${relative}`)
@@ -105,6 +108,7 @@ if (desktopBytes > 14 * 1024 * 1024) throw new Error(`Desktop application exceed
 console.log(JSON.stringify({
   status: 'desktop-package-audited',
   runtime: runtimeAudit,
+  runtimeImports: runtimeImportAudit,
   desktopMiB: Number((desktopBytes / 1024 / 1024).toFixed(2)),
   discussionMiB: Number((discussionBytes / 1024 / 1024).toFixed(2)),
 }))
