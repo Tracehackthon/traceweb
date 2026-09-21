@@ -105,7 +105,7 @@ mount.innerHTML = `
           <button type="button" data-canvas-action="reset" aria-label="复位画布">复位</button>
           ${product?'<button class="trace-roam-entry" type="button" data-action="enter-roam" aria-label="展开脉络">展开脉络</button>':''}
         </div>
-        <span class="trace-canvas-hint" aria-hidden="true">拖动画布 · 滚轮缩放</span>
+        <span class="trace-canvas-hint" aria-hidden="true">拖动画布，看更多事项 · 滚轮缩放</span>
         ${product?'<button class="trace-roam-exit" type="button" data-action="exit-roam" aria-label="回到此刻" hidden>回到此刻</button>':''}
       </div>
       <section class="detail-card${product?' trace-reader-panel':''}" id="detail-card" aria-labelledby="detail-title" hidden><div class="detail-material" aria-hidden="true"></div><div id="detail-content"></div></section>
@@ -140,7 +140,14 @@ const historyLatestCenter = () => {
 }
 const historyDefaultX = scale => (canvasViewport.offsetWidth || 1672) / 2 - historyLatestCenter() * scale
 const historyBounds = ({ camera }) => {
-  if (scene.dataset.viewport === 'compact') return { minX: 0, maxX: 0, minY: 0, maxY: 0 }
+  if (scene.dataset.viewport === 'compact') {
+    // Keep the river at native size on phones, but let a horizontal drag
+    // reveal the authored history instead of trapping every older node beyond
+    // the first 390 CSS pixels.
+    const viewportWidth = canvasViewport.offsetWidth || innerWidth || 390
+    const worldWidth = canvasWorld.offsetWidth || 1672
+    return { minX: Math.min(0, viewportWidth - worldWidth * camera.scale), maxX: 0, minY: -24, maxY: 24 }
+  }
   const scale = Number(camera.scale) || 1
   const baseline = historyDefaultX(scale)
   return {
@@ -551,12 +558,16 @@ function updateRiverFocus() {
     camera.y + (box[1] + box[3] / 2) * camera.scale,
   ]
   const visualRadius = Math.max(viewportCenter[0], viewportCenter[1]) * .82
+  const compact = scene.dataset.viewport === 'compact'
+  const bubbleFloor = compact ? .42 : .16
+  const nodeFloor = compact ? .50 : .2
+  const pathFloor = compact ? .38 : .22
   const mirroredX = point => product && scene.dataset.viewport !== 'compact' ? historyMirrorX(point[0]) : point[0]
   mount.querySelectorAll('[data-entry]').forEach(el => {
     const box = focusWorldBox(el.dataset.entry)
     const screenCenter = screenCenterForWorldBox(box)
     const distance = Math.hypot(screenCenter[0] - viewportCenter[0], screenCenter[1] - viewportCenter[1])
-    const proximity = riverOpacity(distance / Math.max(visualRadius, 1) * 1220, .16)
+    const proximity = riverOpacity(distance / Math.max(visualRadius, 1) * 1220, bubbleFloor)
     const focused = el.dataset.entry === riverFocusId
     const focusBoost = focused ? Math.max(.92, proximity) : proximity
     const opacity = Math.min(1, focusBoost)
@@ -572,27 +583,27 @@ function updateRiverFocus() {
     const point = NODE_POSITIONS.overview[index] || NODE_POSITIONS.overview[0]
     const screenCenter = [camera.x + mirroredX(point) * camera.scale, camera.y + point[1] * camera.scale]
     const distance = Math.hypot(screenCenter[0] - viewportCenter[0], screenCenter[1] - viewportCenter[1])
-    node.style.opacity = riverOpacity(distance / Math.max(visualRadius, 1) * 1220, .2).toFixed(3)
+    node.style.opacity = riverOpacity(distance / Math.max(visualRadius, 1) * 1220, nodeFloor).toFixed(3)
   })
   mount.querySelectorAll('.thread-path').forEach(path => {
     const index = Number(path.dataset.path)
     const point = RIVER_PATH_MIDS[index] || RIVER_PATH_MIDS[0]
     const screenCenter = [camera.x + mirroredX(point) * camera.scale, camera.y + point[1] * camera.scale]
     const distance = Math.hypot(screenCenter[0] - viewportCenter[0], screenCenter[1] - viewportCenter[1])
-    path.style.opacity = (RIVER_PATH_BASE_OPACITY[index] * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, .22)).toFixed(3)
+    path.style.opacity = (RIVER_PATH_BASE_OPACITY[index] * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, pathFloor)).toFixed(3)
   })
   mount.querySelectorAll('.river-understroke:not(.river-buffer-understroke)').forEach(path => {
     const index = Number(path.dataset.underPath)
     const point = RIVER_PATH_MIDS[index] || RIVER_PATH_MIDS[0]
     const screenCenter = [camera.x + mirroredX(point) * camera.scale, camera.y + point[1] * camera.scale]
     const distance = Math.hypot(screenCenter[0] - viewportCenter[0], screenCenter[1] - viewportCenter[1])
-    path.style.opacity = (RIVER_UNDER_OPACITY[index] * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, .35)).toFixed(3)
+    path.style.opacity = (RIVER_UNDER_OPACITY[index] * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, compact ? .45 : .35)).toFixed(3)
   })
   mount.querySelectorAll('.river-buffer-understroke').forEach(path => {
     const point = RIVER_BUFFER_MIDS[path.dataset.riverMid] || [0, 0]
     const screenCenter = [camera.x + mirroredX(point[0]) * camera.scale, camera.y + point[1] * camera.scale]
     const distance = Math.hypot(screenCenter[0] - viewportCenter[0], screenCenter[1] - viewportCenter[1])
-    path.style.opacity = (RIVER_BUFFER_UNDER_OPACITY * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, .3)).toFixed(3)
+    path.style.opacity = (RIVER_BUFFER_UNDER_OPACITY * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, compact ? .42 : .3)).toFixed(3)
   })
   mount.querySelectorAll('.river-buffer-path').forEach(path => {
     const point = RIVER_BUFFER_MIDS[path.dataset.riverMid] || [0, 0]
@@ -602,7 +613,7 @@ function updateRiverFocus() {
     // single-pixel stop before the viewport edge.  The screen-space edge mask
     // supplies the final fade while this floor preserves continuity.
     const bufferBase = path.classList.contains('river-buffer-main') ? .88 : path.classList.contains('river-buffer-branch') ? .48 : .58
-    path.style.opacity = (bufferBase * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, .35)).toFixed(3)
+    path.style.opacity = (bufferBase * riverOpacity(distance / Math.max(visualRadius, 1) * 1220, compact ? .42 : .35)).toFixed(3)
   })
 }
 function setRiverFocus(id = '') {

@@ -2,6 +2,7 @@
 import {registerFont} from './resource-cache.mjs';
 import {createCanvasController} from './canvas-controller.mjs';
 import {createElasticNodeLayout} from './elastic-node-layout.mjs';
+import {mark} from '../home-icons.js';
 /** Trace compare UI. Native DOM; all business decisions belong to the supplied view/host. */
 const GLASS_PATH = 'M 91 14 C 280 -2 705 3 859 17 C 961 28 999 68 992 153 C 986 247 941 286 834 291 C 624 305 263 299 114 287 C 21 279 0 227 9 139 C 14 63 31 26 91 14 Z';
 // Reused and adapted from desktop/src/home-icons.js, local Trace-native icons.
@@ -22,7 +23,6 @@ const paths = {
   folder:'<path d="M3 7V4h7l3 3h8v14H3Z"/>',
 };
 const icon = name => `<svg class="compare-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.file}</svg>`;
-const mark = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 11V7a3 3 0 1 0-3 3h16a3 3 0 1 0-3-3v18a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3V11Z"/></svg>';
 const button = (action,label,cls='',name='') => `<button type="button" class="compare-button ${cls}" data-action="${action}">${name?icon(name):''}<span>${label}</span></button>`;
 const templates = {
  search: `<section class="compare-heading"><h1 tabindex="-1">从这一处找</h1><p>不用重新交代背景，就从这句话开始。</p></section>

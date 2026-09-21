@@ -1,5 +1,6 @@
 // Runtime derivative of artifacts/trace-worksite-v1-20260915/ui; original layout retained.
-import {icon, mark, escapeHTML as esc} from './worksite-icons.mjs';
+import {icon, escapeHTML as esc} from './worksite-icons.mjs';
+import {mark} from '../home-icons.js';
 import {registerFont} from './resource-cache.mjs';
 
 const SCREENS=['overview','intake','impact','finding','results'];

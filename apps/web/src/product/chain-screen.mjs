@@ -1,5 +1,6 @@
 // Runtime derivative of artifacts/trace-one-thing-v1-20260915/ui; original assets/layout retained.
-import {escapeHTML as h, icon, mark, patchDOM, selectedRange} from './chain-helpers.mjs';
+import {escapeHTML as h, icon, patchDOM, selectedRange} from './chain-helpers.mjs';
+import {mark} from '../home-icons.js';
 import {registerFont} from './resource-cache.mjs';
 
 const TITLES = {resume:'接着这里',discussion:'接着这里',understanding:'',reentry:'这次带着新材料回来',revised:'接着这里'};
