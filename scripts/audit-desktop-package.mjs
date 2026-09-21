@@ -9,6 +9,7 @@ const desktopPackage = path.join(root, 'apps', 'desktop-pet')
 const desktop = path.join(desktopPackage, 'lib', 'desktop')
 const discussion = path.join(desktop, 'discussion')
 const runtime = path.join(root, 'apps', 'desktop-pet', 'runtime-dist')
+const runtimeContract = path.join(desktopPackage, 'runtime-contract.json')
 const forbidden = [
   'video/trace-demo.mp4',
   'product/fonts/TraceSans.ttf',
@@ -39,15 +40,17 @@ const requiredApiSurface = {
   zhihu: ['/api/search/capabilities', '/api/search/zhihu', '/api/search/global', '/api/zhihu/status', '/api/zhihu/oauth/start', '/api/zhihu/oauth/check', '/api/zhihu/oauth/disconnect', '/api/zhihu/oauth/connect', '/api/zhihu/oauth/result', '/api/zhihu/search', '/api/zhihu/user/read'],
   host: ['/api/product/host/sessions', '/api/product/host/turns', '/api/product/host/findings', '/api/product/host/session/attach', '/api/product/host/session/pause', '/api/product/host/session/detach', '/api/product/host/event', '/api/product/host/finding', '/api/product/host/sensemaking/jobs', '/api/product/host/sensemaking/results', '/api/product/host/sensemaking/privacy', '/api/product/host/routing/proposals', '/api/product/host/routing/propose', '/api/product/host/routing/decide', '/api/product/host/activation/history', '/api/product/host/activation/mark', '/api/product/host/repository/preflight', '/api/product/host/repository/apply', '/api/product/host/repository/recovery/preview', '/api/product/host/repository/recovery/reconcile', '/api/product/host/repository/recovery/status', '/api/product/host/publication-policies', '/api/product/host/publication-policy/preview', '/api/product/host/publication-policy/adopt', '/api/product/host/publication-policy/revoke', '/api/product/host/capability/orchestrations', '/api/product/host/capability/trials', '/api/product/host/capability/trial/create', '/api/product/host/capability/trial/complete', '/api/product/host/capability/stage', '/api/product/host/capability/validate', '/api/product/host/capability/publish', '/api/product/host/capability/rollback'],
 }
-const requiredRuntimeFiles = [
-  'native/qualify-codex-app-server.mjs',
-]
-
 function auditRuntimeIdentity() {
   if (!fs.existsSync(runtime)) throw new Error('Bundled Trace Runtime is missing; run npm run runtime:stage first')
   const runtimeInfo = readJson(path.join(runtime, 'runtime.json'), 'runtime.json')
   const manifest = readJson(path.join(runtime, 'release-manifest.json'), 'release-manifest.json')
   const sidecar = readJson(path.join(runtime, 'desktop-runtime-source.json'), 'desktop-runtime-source.json')
+  const contract = readJson(runtimeContract, 'runtime-contract.json')
+  if (contract.schema_version !== 'trace.desktop-runtime-contract@0.1.0') throw new Error('Unsupported runtime contract schema')
+  if (runtimeInfo.runtime_version !== contract.runtime_version) throw new Error('Runtime package version does not match runtime contract')
+  if (runtimeInfo.source_identity?.git_commit !== contract.source?.git_commit) throw new Error('Runtime source commit does not match runtime contract')
+  const requiredRuntimeFiles = contract.required_source_files
+  if (!Array.isArray(requiredRuntimeFiles) || requiredRuntimeFiles.length === 0) throw new Error('Runtime contract has no required source files')
   if (!runtimeInfo.source_identity?.content_sha256 || !manifest.source_identity?.content_sha256) throw new Error('Runtime package has no content identity')
   for (const key of ['runtime_version', 'distribution_eligibility']) {
     if (runtimeInfo[key] !== manifest[key]) throw new Error(`Runtime identity mismatch at ${key}`)
