@@ -7,7 +7,8 @@
 - [`pre-fix-ui.png`](pre-fix-ui.png)：同次运行中页面用旧 revision 再写 `RESULT_DRAFT`，报“另一处已有更新”，仍显示“这项工作还未交给 Agent”。这是首次失败，不是验收截图。
 - [`reopen-report.json`](reopen-report.json)、[`reopened-result-ui.png`](reopened-result-ui.png)：修正后以**同一已返回的隔离数据**重新打开候选；点击“结果已回来”后页面展示对应事实，Product revision 保持 `8`，没有第二次结果写入或模型调用。它验证重新接回路径，不等于从空库重新跑通自动回调。
 - [`native-window.png`](native-window.png)：Windows `PrintWindow` 截取产品窗口，顶部已无原来的黑色系统栏；该方法未可靠呈现窗口控制按钮，最小化/最大化/关闭及拖动手感仍待人工确认。
+- [`verified-report.json`](verified-report.json)、[`verified-result-ui.png`](verified-result-ui.png)、[`verified-after-restart.png`](verified-after-restart.png)：C: 后来恢复约 50 MiB 空间且 Codex 登录检查不再提示写入失败；**从另一全新隔离 Trace profile/项目**运行修正候选，复用已按当前 Codex 二进制生成且由本次 `/api/agent/check` 重新核验的 no-model 资格记录。真实 Codex run `ee942866-5584-43ac-b979-cdfc86fa717f` 为 `succeeded`；前台结果字段与 Product return 事实一致，`agent.sqlite` 存在；同路径重启后 Product revision `8`、事项/工作/return ID 和事实均不变，Agent 请求仍为成功。结果处于**待用户复核**，没有自动改写理解。
 
 最终候选（上述重新打开时）`Trace.exe` SHA-256 `67118970529d97844a1d96cef11795a63a0571aef13ca00662447d68ee7420a6`，`app.asar` SHA-256 `e3d6e6a7a441873158fa4d20b575cf7cb62d4e16e0b616758b0bcab84e3bd9f4`；内置 Runtime 仍来自 `a088b8658d76d1f825366fa8060712592b6460db`。原始隔离日志和数据库保留在总控工作区 `.tmp` 任务目录，不在 Git 中上传。
 
-修正后尝试从**全新空库**再次运行真实 Codex：首次资格生成因 C: 无空间失败；在 D: 临时目录重试后曾发生 no-model `initialize` 超时；复用已成功的隔离资格记录后 `/api/agent/check` 返回 `CODEX_DISCONNECTED`。本机 C: 当时空闲空间为 `0`，CLI 也输出无法创建 PATH alias 的空间警告。**因此修正后完整自动回流尚未从空库重验，不得把重新打开成功代替该验收。**
+修正后早先尝试从**全新空库**再次运行真实 Codex：首次资格生成因 C: 无空间失败；在 D: 临时目录重试后曾发生 no-model `initialize` 超时；复用已成功的隔离资格记录后 `/api/agent/check` 返回 `CODEX_DISCONNECTED`。本机 C: 当时空闲空间为 `0`，CLI 也输出无法创建 PATH alias 的空间警告。这些首次失败仍保留；随后另一次全新 Trace profile 的完整重跑通过，**不是**用重新打开旧结果冒充成功。仍未运行 Windows 安装器、验收安装版、真实用户数据库或安装版双库恢复。

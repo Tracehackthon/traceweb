@@ -1,6 +1,6 @@
 # Trace 桌面隔离试用｜2026-10-19
 
-**对象与用途**：供维护者接续本次 Windows 桌面链路修复。这里的成功只表示**隔离运行的解包候选**可用手工结果完成 Product 内容闭环；不代表安装版发布、真实 Agent 执行、自动 Codex 回流或用户数据库恢复验收。
+**对象与用途**：供维护者接续本次 Windows 桌面链路修复。初次隔离验证只完成手工结果；同日续核后来在**另一全新隔离 profile**完成真实 Codex 返回与重启。两次对象及失败记录分开，不代表安装版发布、真实用户数据库恢复或用户验收。
 
 ## 固定对象
 
@@ -55,14 +55,17 @@ node scripts/desktop-isolated-journey.mjs 'D:\your-isolated-output-directory'
 
 当前候选的 Web 测试 **175/176 通过、1 跳过、0 失败**，桌面测试 `21/21`、TypeScript 检查、构建、打包审计和 Windows `dir` 生成通过。首次全 Web 测试因 C: 满导致 SQLite `database or disk is full` 有 `13` 项失败；将测试 TEMP/TMP 置于 D: 任务目录后重跑通过，不改测试断言。最终候选 `Trace.exe` SHA-256 `67118970529d97844a1d96cef11795a63a0571aef13ca00662447d68ee7420a6`、`app.asar` `e3d6e6a7a441873158fa4d20b575cf7cb62d4e16e0b616758b0bcab84e3bd9f4`，仍为未安装、未发布的 `dir` 包。
 
-**尚未通过的完整验收**：修正后尝试从另一全新空库重跑自动 UI→Agent→Product→UI→重启：no-model 资格生成先遇到 C: 空间不足，D: 重试的一次 `initialize` 超时，复用已验证资格记录后 `/api/agent/check` 返回 `CODEX_DISCONNECTED`；当时 C: 空闲 `0`，Codex CLI 亦提示无法创建 PATH alias。失败目录均保留，不用旧返回伪装新实跑。需要先恢复本机 Codex 的可写空间/连接状态，再以新隔离目录运行：
+**此前的完整重跑失败**：修正后尝试从另一全新空库重跑自动 UI→Agent→Product→UI→重启：no-model 资格生成先遇到 C: 空间不足，D: 重试的一次 `initialize` 超时，复用已验证资格记录后 `/api/agent/check` 返回 `CODEX_DISCONNECTED`；当时 C: 空闲 `0`，Codex CLI 亦提示无法创建 PATH alias。失败目录均保留，不用旧返回伪装新实跑。后续 C: 恢复约 50 MiB 空间、Codex 登录检查不再报写入失败，使用另一全新隔离目录运行：
 
 ```powershell
 $env:TRACE_DESKTOP_AGENT_LIVE = '1'
-$env:TEMP = 'D:\<task-owned-temp>'
-$env:TMP = $env:TEMP
+# 本次通过时复用已隔离生成且重新校验的 no-model 资格记录；不存在时可省略，让脚本自行生成。
+$env:TRACE_DESKTOP_AGENT_QUALIFICATION_RECORD = 'D:\AGeneral Workspace\AI-powered\harness\.tmp\trace-desktop-agent-journey-retry-20261019\evidence\codex-qualification.json'
 node scripts/desktop-isolated-agent-journey.mjs 'D:\<new-empty-evidence-dir>'
 Remove-Item Env:TRACE_DESKTOP_AGENT_LIVE
+Remove-Item Env:TRACE_DESKTOP_AGENT_QUALIFICATION_RECORD
 ```
 
-该脚本会生成只限本任务目录的 Codex 资格记录，调用一次真实本机模型，验证前台结果字段、Product/Agent 状态及重启读取；输出目录须事先不存在。不可清理或移动用户 Codex 状态来掩盖 C: 空间问题。即使重跑通过，还需人工确认 Windows 外框控制；安装器、发布身份与 S1 双库恢复是独立验收。
+该脚本默认生成只限本任务目录的 Codex 资格记录；本次成功重跑用 `TRACE_DESKTOP_AGENT_QUALIFICATION_RECORD` 指向此前**隔离生成**、与当前二进制匹配的记录，并由 `/api/agent/check` 重新核验。它调用一次真实本机模型，验证前台结果字段、Product/Agent 状态及重启读取；输出目录须事先不存在。不可清理或移动用户 Codex 状态来掩盖 C: 空间问题。
+
+**修正后完整隔离候选重跑通过**：真实 run `ee942866-5584-43ac-b979-cdfc86fa717f` 为 `succeeded`；页面“结果回来”字段与 Product `codexReturns` 的事实相同，`agent.sqlite` 存在；停止、同路径重启后，Product revision 仍为 `8`，事项 `matter-de35d3d0-159a-48de-902e-e85a12ee8494`、工作 `work-f19537a9-613a-4b1e-af81-866996028132`、return `return:2c53a3e8-72ac-46de-99f9-499f9252b910` 与事实完全一致，Agent 请求仍为成功。结果状态为 `pending`，等待用户复核，理解未自动改写。[最终机器报告](../artifacts/desktop-agent-journey-20261019/verified-report.json)、[运行时结果界面](../artifacts/desktop-agent-journey-20261019/verified-result-ui.png)、[重启后结果界面](../artifacts/desktop-agent-journey-20261019/verified-after-restart.png)。当次候选仍是未安装、未发布的 `dir` 包；Windows 外框控制与拖动手感、安装器、发布身份和 S1 双库恢复仍为独立验收。

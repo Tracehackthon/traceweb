@@ -1,0 +1,46 @@
+{
+  "status": "agent-return-recovered",
+  "warning": "Isolated unpacked candidate, not installed or published",
+  "package": {
+    "exeSha256": "67118970529d97844a1d96cef11795a63a0571aef13ca00662447d68ee7420a6",
+    "appAsarSha256": "e3d6e6a7a441873158fa4d20b575cf7cb62d4e16e0b616758b0bcab84e3bd9f4",
+    "runtimeSource": {
+      "git_commit": "a088b8658d76d1f825366fa8060712592b6460db",
+      "git_tree": "d395eef93addca1225fb705f262bbf45168464f9",
+      "worktree_state": "clean",
+      "clean": true,
+      "content_sha256": "3d41831375e2b54c44d788e6da1de701adf30b90394922bf98e91f1af37ed7b0",
+      "source_file_count": 532,
+      "dirty_path_count": 0
+    }
+  },
+  "qualification": {
+    "version": "0.155.0-alpha.2.6",
+    "schemaFingerprint": "7fb0a4afe41cbd6071084c7febf20fc536dfcd7e2237f637409205bd7b082a59",
+    "recordPath": "D:\\AGeneral Workspace\\AI-powered\\harness\\.tmp\\trace-desktop-agent-journey-retry-20261019\\evidence\\codex-qualification.json"
+  },
+  "before": {
+    "revision": 8,
+    "matterId": "matter-de35d3d0-159a-48de-902e-e85a12ee8494",
+    "workId": "work-f19537a9-613a-4b1e-af81-866996028132",
+    "resultDecision": "pending",
+    "deliveryId": "delivery:a24b76e3-de5e-42ab-bf9a-229682ed02ec",
+    "returnId": "return:2c53a3e8-72ac-46de-99f9-499f9252b910",
+    "fact": "实际读到的合成内容：原话是“隔离桌面试用：本次只验证一条合成工作能否从 Trace 交给 Codex 并返回”；当前理解是“先保存原话和理解，再让 Codex 只根据明确带入的内容报告可核验结果”；当前未决项是“Codex 的回答应保留为待复核结果，不改写我的理解”。仍需确认：本次交接是否已完成从 Trace 到 Codex 并返回的验证。"
+  },
+  "after": {
+    "revision": 8,
+    "matterId": "matter-de35d3d0-159a-48de-902e-e85a12ee8494",
+    "workId": "work-f19537a9-613a-4b1e-af81-866996028132",
+    "resultDecision": "pending",
+    "deliveryId": "delivery:a24b76e3-de5e-42ab-bf9a-229682ed02ec",
+    "returnId": "return:2c53a3e8-72ac-46de-99f9-499f9252b910",
+    "fact": "实际读到的合成内容：原话是“隔离桌面试用：本次只验证一条合成工作能否从 Trace 交给 Codex 并返回”；当前理解是“先保存原话和理解，再让 Codex 只根据明确带入的内容报告可核验结果”；当前未决项是“Codex 的回答应保留为待复核结果，不改写我的理解”。仍需确认：本次交接是否已完成从 Trace 到 Codex 并返回的验证。"
+  },
+  "agent": {
+    "runId": "ee942866-5584-43ac-b979-cdfc86fa717f",
+    "status": "succeeded",
+    "answer": "实际读到的合成内容：原话是“隔离桌面试用：本次只验证一条合成工作能否从 Trace 交给 Codex 并返回”；当前理解是“先保存原话和理解，再让 Codex 只根据明确带入的内容报告可核验结果”；当前未决项是“Codex 的回答应保留为待复核结果，不改写我的理解”。仍需确认：本次交接是否已完成从 Trace 到 Codex 并返回的验证。"
+  },
+  "userData": "D:\\AGeneral Workspace\\AI-powered\\harness\\.tmp\\trace-desktop-agent-journey-after-space-20261019\\user-data"
+}
