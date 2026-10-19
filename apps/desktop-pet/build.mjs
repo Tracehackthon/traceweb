@@ -93,6 +93,7 @@ await Promise.all([
   copyFile(resolve(root, 'src/desktop/index.html'), resolve(desktopOutDir, 'index.html')),
   copyFile(resolve(root, 'src/desktop/main.mjs'), resolve(desktopOutDir, 'main.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-client.mjs'), resolve(desktopOutDir, 'runtime-client.mjs')),
+  copyFile(resolve(root, 'src/desktop/runtime-readiness.mjs'), resolve(desktopOutDir, 'runtime-readiness.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-port-selection.mjs'), resolve(desktopOutDir, 'runtime-port-selection.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-installation-identity.mjs'), resolve(desktopOutDir, 'runtime-installation-identity.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-integrations.mjs'), resolve(desktopOutDir, 'runtime-integrations.mjs')),

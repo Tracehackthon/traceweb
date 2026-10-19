@@ -10,6 +10,7 @@ import { bindNativeAgentProject } from './runtime-project-binding.mjs'
 import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
 import { clearVersionBoundStorage } from './storage-lifecycle.mjs'
 import { isAddressInUse, isLoopbackHttpOrigin, selectLoopbackPort } from './runtime-port-selection.mjs'
+import { probeProductWorkspace } from './runtime-readiness.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -256,14 +257,10 @@ function saveCurrentPlacement(payload) {
 async function runtimeReady() {
   if (!backendOrigin) return false
   if (app.isPackaged && !isLoopbackHttpOrigin(backendOrigin)) return false
-  try {
-    // Product Workspace is the content authority. Agent is an optional
-    // capability: a broken/legacy agent ledger must not make the saved Trace
-    // workspace look disconnected or trigger a second listener.
-    const pathname = app.isPackaged ? '/api/runtime/heartbeat' : '/api/product/workspace'
-    const response = await fetch(new URL(pathname, backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json', origin: backendOrigin } })
-    return response.ok && (response.headers.get('content-type') || '').includes('application/json')
-  } catch { return false }
+  // The Product Workspace is the content authority. The 0.2.11 bundled
+  // Runtime has this route but no /api/runtime/heartbeat; probing the latter
+  // repeatedly replaced a healthy listener and lost the desktop connection.
+  return probeProductWorkspace(backendOrigin)
 }
 
 function isAgentStartupFailure(error) {
@@ -496,6 +493,10 @@ function openDiscussion(rawUrl) {
     minHeight: 620,
     show: false,
     autoHideMenuBar: true,
+    ...(process.platform === 'win32' ? {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { color: '#f3f7f2', symbolColor: '#215b4d', height: 40 },
+    } : {}),
     backgroundColor: '#f3f0e7',
     title: 'Trace · 深度讨论',
     icon: appIconPath,
@@ -508,6 +509,13 @@ function openDiscussion(rawUrl) {
   })
 
   discussionWindows.add(discussionWindow)
+  if (process.platform === 'win32') {
+    discussionWindow.webContents.on('did-finish-load', () => {
+      // Leave the system window controls unobstructed; the empty top edge
+      // remains draggable after removing the dark native title bar.
+      void discussionWindow.webContents.insertCSS('body::before { content: ""; position: fixed; top: 0; left: 0; right: 140px; height: 40px; z-index: 2147483647; -webkit-app-region: drag; }').catch(() => {})
+    })
+  }
   discussionWindow.once('ready-to-show', () => discussionWindow.show())
   discussionWindow.on('closed', () => discussionWindows.delete(discussionWindow))
   discussionWindow.webContents.setWindowOpenHandler(({ url }) => {

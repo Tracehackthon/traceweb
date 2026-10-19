@@ -620,7 +620,7 @@ export class WebRuntime {
     this.nativeWorkReady = environment?.connected === true;
     const selectedAgent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as string : 'none';
     const agentLabel = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[selectedAgent] || 'Codex';
-    const destination = { agent: environment?.connected ? environment.agentLabel : agentLabel, project: environment?.connected ? environment.projectName : '当前项目', task: `接续：${Array.from(text).slice(0, 26).join('')}` };
+    const destination = { agent: environment?.connected ? environment.agentLabel : agentLabel, project: environment?.projectName || '当前项目', task: `接续：${Array.from(text).slice(0, 26).join('')}` };
     const productOperations = [
       { type: 'capture.create', matterId, text },
       ...(selectedAgent !== 'none' ? [
@@ -682,7 +682,7 @@ export class WebRuntime {
       const matterId = this.route.matterId;
       void this.commit((state) => (B.createWorkFromHandoff as any)(state, { matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }), (next) => {
         this.navigate(next.route);
-        if (hasNativeCapabilityBridge() && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
+        if (this.nativeWorkReady && hasNativeCapabilityBridge() && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
       }, [{ type: 'handoff.create', matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }]);
       return;
     }
@@ -708,7 +708,7 @@ export class WebRuntime {
     this.nativeWorkReady = environment?.connected === true;
     const task = current.handoff?.destination?.task || `接续：${Array.from(current.matter?.originalText || current.matter?.title || '这件事').slice(0, 26).join('')}`;
     const agent = current.handoff?.destination?.agent || (environment?.connected ? environment.agentLabel : 'Codex');
-    const project = environment?.connected ? environment.projectName : current.handoff?.destination?.project || '当前项目';
+    const project = environment?.projectName || current.handoff?.destination?.project || '当前项目';
     const next = B.dispatchChain(this.host, { matterId, action: { type: 'HANDOFF_DRAFT', patch: { destination: { agent, project, task } } } });
     if (next.error) { this.message(next.error.message); return; }
     this.draft(next, { type: 'chain.action', matterId, action: { type: 'HANDOFF_DRAFT', patch: { destination: { agent, project, task } } } });
@@ -760,6 +760,8 @@ export class WebRuntime {
         }, () => this.navigate({ view: 'worksite', workId: work.id, matterId, screen: 'results' }), [{ type: 'worksite.action', workId: work.id, action: { type: 'RESULT_DRAFT', patch: { matterId, ...known.result } } }]);
         return;
       }
+      const environment = await nativeWorkEnvironment().catch(() => null);
+      if (!environment?.connected) { this.message('工作准备已保存在本机；Agent 尚未启用，暂不发送。'); return; }
       await this.executeNativeWork(work.id, matterId);
     })();
   };

@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { isReadableProductWorkspace } from './runtime-readiness.mjs'
 
 // Safe fallback for standalone client construction. The packaged desktop
 // host asks the OS for a free loopback port and passes that resolved origin
@@ -941,8 +942,8 @@ export function createRuntimeCapabilityClient({
     }
     if (request.operation === 'workspace.summary') return readObservationSummary()
     if (request.operation === 'runtime.heartbeat') {
-      const heartbeat = await runtimeRequest('/api/runtime/heartbeat', undefined, 4_000)
-      if (heartbeat?.status !== 'ok') throw new Error('Trace 本机内容服务心跳无效')
+      const workspace = await runtimeRequest('/api/product/workspace', undefined, 4_000)
+      if (!isReadableProductWorkspace(workspace)) throw new Error('Trace 本机内容状态无效')
       return { status: 'ok' }
     }
     if (request.operation === 'codex.events') return readCodexEvents()
@@ -1143,11 +1144,18 @@ export function createRuntimeCapabilityClient({
       return { ...run, ...(sources ? { sources: { source: sources.source, items: sources.items } } : {}) }
     }
     if (request.operation === 'work.environment') {
+      let projectName
       try {
-        const { projectName } = currentProject()
-        return { connected: true, projectName, agentLabel: 'Codex', locationLabel: '当前项目' }
+        projectName = currentProject().projectName
       } catch (error) {
         return { connected: false, projectName: '当前项目', agentLabel: 'Codex', locationLabel: '等待识别', error: { message: error instanceof Error ? error.message : '当前项目不可用' } }
+      }
+      try {
+        const capabilities = await runtimeRequest('/api/agent/capabilities', undefined, 4_000)
+        const connected = capabilities?.enabled === true && capabilities?.profiles?.some((profile) => profile.kind === 'codex') === true
+        return { connected, projectName, agentLabel: 'Codex', locationLabel: connected ? '当前项目' : 'Agent 暂不可用' }
+      } catch (error) {
+        return { connected: false, projectName, agentLabel: 'Codex', locationLabel: 'Agent 暂不可用', error: { message: error instanceof Error ? error.message : '本机 Agent 暂不可用' } }
       }
     }
     if (request.operation === 'work.read') {
@@ -1173,7 +1181,22 @@ export function createRuntimeCapabilityClient({
       let workspace = await runtimeRequest('/api/product/workspace')
       const existingWork = workspace.host?.worksite?.works?.[workId]
       const existingMatter = workspace.host?.chain?.matters?.find((item) => item.id === matterId)
-      if (existingMatter && existingMatter.originalText !== text) throw new Error('同一事项已经保存了不同的原话，未覆盖')
+      // The handoff may select the saved understanding rather than the
+      // original capture. Only a *new* work would need to recreate a missing
+      // matter from this text; an existing work owns its selected intake.
+      if (!existingWork && existingMatter && existingMatter.originalText !== text) throw new Error('同一事项已经保存了不同的原话，未覆盖')
+      if (existingWork && (existingWork.project !== projectName || existingWork.agent !== 'Codex')) {
+        throw new Error('这次工作属于另一个执行位置，未重新绑定')
+      }
+      if (existingWork && !workspace.host?.worksite?.sessions?.[workId]?.intake?.some((item) => item.matterId === matterId && item.sourceText === text)) {
+        throw new Error('这次工作带入内容不一致，未发送')
+      }
+      let visible = safeWorkResult(workspace, workId)
+      if (visible?.status === 'returned_for_review' && visible.result) return withWorkThreadId(visible, workId)
+      // Do not create a work or a Codex receive receipt if no Agent can run.
+      // The UI's separate "save work preparation" command remains available.
+      const capabilities = await runtimeRequest('/api/agent/capabilities')
+      if (!capabilities.enabled) throw new Error('本机 Agent 尚未启用')
       if (!existingWork) {
         const operations = []
         if (!existingMatter) operations.push({ type: 'capture.create', matterId, text })
@@ -1188,12 +1211,7 @@ export function createRuntimeCapabilityClient({
           expectedRevision: workspace.revision,
           operations,
         })
-      } else if (existingWork.project !== projectName || existingWork.agent !== 'Codex') {
-        throw new Error('这次工作属于另一个执行位置，未重新绑定')
       }
-
-      let visible = safeWorkResult(workspace, workId)
-      if (visible?.status === 'returned_for_review' && visible.result) return withWorkThreadId(visible, workId)
 
       let delivery = workspace.host?.worksite?.sessions?.[workId]?.codexDelivery
       if (!delivery) {
@@ -1210,8 +1228,6 @@ export function createRuntimeCapabilityClient({
       workspace = await runtimeRequest('/api/product/workspace')
       const matterSession = workspace.host?.chain?.sessions?.[matterId]
       if (!matterSession) throw new Error('本次事项没有可交给 Codex 的上下文')
-      const capabilities = await runtimeRequest('/api/agent/capabilities')
-      if (!capabilities.enabled) throw new Error('本机 Agent 尚未启用')
       const requestedProfile = typeof request.profileId === 'string'
         ? capabilities.profiles?.find((profile) => profile.profileId === request.profileId)
         : null

@@ -29,6 +29,76 @@ const projectBinding = await import(pathToFileURL(resolve(root, 'src/desktop/run
 const desktopLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/lifecycle.mjs')).href)
 const storageLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/storage-lifecycle.mjs')).href)
 const portSelection = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-port-selection.mjs')).href)
+const runtimeReadiness = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-readiness.mjs')).href)
+
+test('packaged desktop probes readable product state without requiring a newer heartbeat route', async () => {
+  const paths = []
+  const workspace = { protocolVersion: 1, revision: 0, storage: { schemaVersion: 1 } }
+  const fetchImpl = async (url) => {
+    paths.push(new URL(url).pathname)
+    return {
+      ok: true,
+      headers: { get: () => 'application/json; charset=utf-8' },
+      json: async () => workspace,
+      text: async () => JSON.stringify(workspace),
+    }
+  }
+  assert.equal(await runtimeReadiness.probeProductWorkspace('http://127.0.0.1:42731', fetchImpl), true)
+  const client = runtimeClient.createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:42731', fetchImpl, cloudFetchImpl: fetchImpl,
+  })
+  assert.deepEqual(await client.request({ operation: 'runtime.heartbeat' }), { status: 'ok' })
+  assert.deepEqual(paths, ['/api/product/workspace', '/api/product/workspace'])
+  assert.equal(runtimeReadiness.isReadableProductWorkspace({ protocolVersion: 1, revision: 0, storage: null }), false)
+  assert.equal(await runtimeReadiness.probeProductWorkspace('http://127.0.0.1:42731', async () => ({ ok: false })), false)
+})
+
+test('existing handoff may carry understanding text without overwriting its original capture', async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), 'trace-handoff-project-'))
+  const workId = 'work-test'
+  const matterId = 'matter-test'
+  const selectedText = 'My saved understanding, not the original capture'
+  const workspace = {
+    revision: 2,
+    host: {
+      chain: { matters: [{ id: matterId, originalText: 'Original capture' }], sessions: { [matterId]: { contextMode: 'default', contextEpoch: 1 } } },
+      worksite: {
+        works: { [workId]: { id: workId, project: projectDir.split(/[\\/]/).at(-1), agent: 'Codex', connected: false } },
+        sessions: { [workId]: { intake: [{ matterId, sourceText: selectedText }], codexDelivery: { status: 'prepared' } } },
+      },
+    },
+  }
+  const paths = []
+  const fetchImpl = async (url) => {
+    const pathname = new URL(url).pathname
+    paths.push(pathname)
+    const value = pathname === '/api/agent/capabilities' ? { enabled: false } : workspace
+    return { ok: true, status: 200, text: async () => JSON.stringify(value) }
+  }
+  const client = runtimeClient.createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:42731', projectDir, fetchImpl, cloudFetchImpl: fetchImpl })
+  const environment = await client.request({ operation: 'work.environment' })
+  assert.equal(environment.connected, false)
+  assert.equal(environment.projectName, projectDir.split(/[\\/]/).at(-1))
+  assert.deepEqual(paths, ['/api/agent/capabilities'])
+  paths.length = 0
+  await assert.rejects(client.request({ operation: 'work.run', workId, matterId, title: 'Test', text: selectedText, role: 'trial', source: 'none' }), /本机 Agent 尚未启用/)
+  assert.deepEqual(paths, ['/api/product/workspace', '/api/agent/capabilities'])
+  assert.equal(paths.includes('/api/agent/runs'), false)
+
+  paths.length = 0
+  const newWork = { ...workspace, host: { ...workspace.host, worksite: { works: {}, sessions: {} } } }
+  const noAgentClient = runtimeClient.createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:42731', projectDir,
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      paths.push(pathname)
+      const value = pathname === '/api/agent/capabilities' ? { enabled: false } : newWork
+      return { ok: true, status: 200, text: async () => JSON.stringify(value) }
+    },
+  })
+  await assert.rejects(noAgentClient.request({ operation: 'work.run', workId: 'new-work', matterId, title: 'Test', text: 'Original capture', role: 'trial', source: 'none' }), /本机 Agent 尚未启用/)
+  assert.deepEqual(paths, ['/api/product/workspace', '/api/agent/capabilities'])
+})
 
 test('packaged runtime keeps explicit origins loopback-only and migrates occupied ports', async () => {
   assert.equal(portSelection.isLoopbackHttpOrigin('http://127.0.0.1:4173'), true)
@@ -450,6 +520,10 @@ test('native bridge exposes explicit event, bounds and placement channels', asyn
   assert.match(main, /scheduleBundledRuntimeRecovery/)
   assert.match(main, /RUNTIME_RECOVERY_DELAYS_MS/)
   assert.match(main, /runtime\.heartbeat/)
+  assert.match(main, /titleBarStyle: 'hidden'/)
+  assert.match(main, /titleBarOverlay:/)
+  const webRuntime = await readFile(resolve(root, '../web/src/react/runtime.ts'), 'utf8')
+  assert.match(webRuntime, /this\.nativeWorkReady && hasNativeCapabilityBridge\(\)/)
   assert.match(main, /selectLoopbackPort/)
   assert.match(main, /自动避开占用端口/)
   assert.match(main, /WORKSPACE_IPC_TIMEOUT_MS/)

@@ -1,0 +1,31 @@
+{
+  "status": "product-manual-result-recovered",
+  "warning": "Agent disabled: no model run or automatic Codex return; unpacked candidate is not an installed release",
+  "package": {
+    "exeSha256": "0e0b7bdf8bc82ea6db171c07f75583104075b8538d298aa9f0972ff545418cda",
+    "appAsarSha256": "82dd654eaaef617d47f94acbe18e7a43d673738c60c441736dc564866f0ab28e",
+    "runtimeSource": {
+      "git_commit": "a088b8658d76d1f825366fa8060712592b6460db",
+      "git_tree": "d395eef93addca1225fb705f262bbf45168464f9",
+      "worktree_state": "clean",
+      "clean": true,
+      "content_sha256": "3d41831375e2b54c44d788e6da1de701adf30b90394922bf98e91f1af37ed7b0",
+      "source_file_count": 532,
+      "dirty_path_count": 0
+    }
+  },
+  "before": {
+    "revision": 8,
+    "matterId": "matter-b048c586-bd06-4981-8b16-ff764ab5772f",
+    "workId": "work-f9c2634e-8629-4fe4-a4fa-755cb0d9e285",
+    "resultId": "result:1"
+  },
+  "after": {
+    "revision": 8,
+    "matterId": "matter-b048c586-bd06-4981-8b16-ff764ab5772f",
+    "workId": "work-f9c2634e-8629-4fe4-a4fa-755cb0d9e285",
+    "resultId": "result:1"
+  },
+  "userData": "D:\\AGeneral Workspace\\AI-powered\\harness\\.tmp\\trace-desktop-journey-smoke-verified-20261019\\user-data",
+  "origin": "http://127.0.0.1:54088/"
+}

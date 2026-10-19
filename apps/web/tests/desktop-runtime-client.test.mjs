@@ -39,24 +39,24 @@ test('desktop runtime client retargets the dynamic bundled listener after retry'
   assert.deepEqual(calls, ['http://127.0.0.1:4401/api/web/workspace'])
 })
 
-test('desktop runtime heartbeat stays on the selected loopback origin and fails closed', async () => {
+test('desktop product readiness stays on the selected loopback origin and fails closed', async () => {
   const calls = []
   const client = createRuntimeCapabilityClient({
     origin: 'http://127.0.0.1:4402',
     fetchImpl: async (url, init) => {
       calls.push({ url: String(url), init })
-      return response({ status: 'ok' })
+      return response({ protocolVersion: 1, revision: 0, storage: {} })
     },
   })
   assert.deepEqual(await client.request({ operation: 'runtime.heartbeat' }), { status: 'ok' })
-  assert.equal(new URL(calls[0].url).pathname, '/api/runtime/heartbeat')
+  assert.equal(new URL(calls[0].url).pathname, '/api/product/workspace')
   assert.equal(calls[0].init.headers.origin, 'http://127.0.0.1:4402')
 
   const unhealthy = createRuntimeCapabilityClient({
     origin: 'http://127.0.0.1:4403',
     fetchImpl: async () => response({ status: 'stale' }),
   })
-  await assert.rejects(unhealthy.request({ operation: 'runtime.heartbeat' }), /心跳无效/)
+  await assert.rejects(unhealthy.request({ operation: 'runtime.heartbeat' }), /内容状态无效/)
 })
 
 test('desktop discovers the Codex App executable outside a stale Explorer PATH', async (t) => {
@@ -501,18 +501,19 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
   assert.equal(returned.result.fact, '已核对条件。')
   assert.equal(JSON.stringify(returned).includes(projectDir), false)
   assert.deepEqual(calls.map((call) => call.pathname), [
+    '/api/agent/capabilities',
     '/api/product/workspace',
+    '/api/agent/capabilities',
     '/api/product/commands',
     '/api/product/codex/receive',
     '/api/product/workspace',
-    '/api/agent/capabilities',
     '/api/agent/runs',
     '/api/product/codex/return',
     '/api/product/workspace',
   ])
-  assert.equal(calls[1].body.operations[1].destination.project, 'traceweb')
-  assert.equal(calls[2].body.projectDir, projectDir)
-  assert.equal(calls[5].body.threadId, 'persisted-codex-thread')
+  assert.equal(calls[3].body.operations[1].destination.project, 'traceweb')
+  assert.equal(calls[4].body.projectDir, projectDir)
+  assert.equal(calls[6].body.threadId, 'persisted-codex-thread')
   assert.deepEqual(savedThreads, [])
-  assert.deepEqual(calls[6].body.result.artifacts, [])
+  assert.deepEqual(calls[7].body.result.artifacts, [])
 })
