@@ -488,6 +488,7 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
       if (url.pathname === '/api/product/commands') { phase = 'created'; return response({ revision: 1, host: baseHost() }) }
       if (url.pathname === '/api/product/codex/receive') { phase = 'received'; return response({ receipt: { deliveryId: 'delivery-1', contextHash: 'a'.repeat(64) }, context: { kind: 'trace.codex-context' } }) }
       if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', label: 'Codex', kind: 'codex' }] })
+      if (url.pathname === '/api/agent/check') return response({ authenticated: true, executionMode: 'native' })
       if (url.pathname === '/api/agent/runs') return response({ run: { runId: 'run-1', status: 'succeeded', profile: { label: 'Codex' }, result: { answer: '已核对条件。', uncertainties: ['仍需用户确认。'] } } }, 202)
       if (url.pathname === '/api/product/codex/return') { phase = 'returned'; return response({ receipt: { status: 'returned_for_review' } }) }
       return response({ error: { message: 'not found' } }, 404)
@@ -502,8 +503,10 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
   assert.equal(JSON.stringify(returned).includes(projectDir), false)
   assert.deepEqual(calls.map((call) => call.pathname), [
     '/api/agent/capabilities',
+    '/api/agent/check',
     '/api/product/workspace',
     '/api/agent/capabilities',
+    '/api/agent/check',
     '/api/product/commands',
     '/api/product/codex/receive',
     '/api/product/workspace',
@@ -511,9 +514,29 @@ test('desktop bridge auto-binds the current project and returns a Codex work res
     '/api/product/codex/return',
     '/api/product/workspace',
   ])
-  assert.equal(calls[3].body.operations[1].destination.project, 'traceweb')
-  assert.equal(calls[4].body.projectDir, projectDir)
-  assert.equal(calls[6].body.threadId, 'persisted-codex-thread')
+  assert.equal(calls[5].body.operations[1].destination.project, 'traceweb')
+  assert.equal(calls[6].body.projectDir, projectDir)
+  assert.equal(calls[8].body.threadId, 'persisted-codex-thread')
   assert.deepEqual(savedThreads, [])
-  assert.deepEqual(calls[7].body.result.artifacts, [])
+  assert.deepEqual(calls[9].body.result.artifacts, [])
+})
+
+test('desktop Codex preflight failure leaves Product work and receive receipts untouched', async (t) => {
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'trace-desktop-preflight-'))
+  const projectDir = path.join(fixtureRoot, 'project')
+  await mkdir(projectDir)
+  t.after(() => rm(fixtureRoot, { recursive: true, force: true }))
+  const calls = []
+  const client = createRuntimeCapabilityClient({ projectDir, fetchImpl: async (url) => {
+    calls.push(url.pathname)
+    if (url.pathname === '/api/product/workspace') return response({ revision: 0, host: { chain: { matters: [] }, worksite: { works: {}, sessions: {} } } })
+    if (url.pathname === '/api/agent/capabilities') return response({ enabled: true, profiles: [{ profileId: 'local-codex', kind: 'codex' }] })
+    if (url.pathname === '/api/agent/check') return response({ error: { code: 'CODEX_DISCONNECTED', message: 'Codex 进程已退出。' } }, 502)
+    throw new Error('No Product mutation should be attempted')
+  } })
+  const environment = await client.request({ operation: 'work.environment' })
+  assert.equal(environment.connected, false)
+  assert.equal(environment.projectName, 'project')
+  await assert.rejects(client.request({ operation: 'work.run', workId: 'work-1', matterId: 'matter-1', title: 'Test', text: 'Synthetic', role: 'reference', source: 'none' }), /Codex 进程已退出/)
+  assert.deepEqual(calls, ['/api/agent/capabilities', '/api/agent/check', '/api/product/workspace', '/api/agent/capabilities', '/api/agent/check'])
 })

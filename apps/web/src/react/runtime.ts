@@ -6,6 +6,7 @@ import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
 import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork, searchPublic } from './capability-client';
 import { classifyWorkspaceLoadFailure, publicWorkspaceLoadMessage, WORKSPACE_LOAD_STATES, workspaceDataState, workspaceError, withWorkspaceTimeout } from './workspace-load.mjs';
 import { canNavigateWhileSavePending } from './save-navigation.mjs';
+import { matchesAuthoritativeWorkReturn } from './native-work-reconcile.mjs';
 import { existingMatterForHandoff } from './handoff-resolution.mjs';
 import { buildComparisonSearchQuery } from './comparison-search.mjs';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceLoadState, WorkspaceSnapshot } from './types';
@@ -722,23 +723,41 @@ export class WebRuntime {
     const intake = session?.intake?.find((item: any) => item.matterId === matterId);
     if (!work || !intake) return;
     this.showDialog({ type: 'message', title: 'Codex 正在处理', message: '这次工作已经交给本机 Codex。你可以关闭提示继续浏览，结果完成后会回到工作现场。' });
+    let agentReturned = false;
     try {
       const matter = this.host.chain.matters.find((item: any) => item.id === matterId);
       const source = matter?.captureIntent?.source === 'web' ? 'global' : matter?.captureIntent?.source || 'none';
       const threadId = typeof work.connection?.threadId === 'string' && work.connection.threadId.trim() ? work.connection.threadId.trim() : undefined;
       const returned = await runNativeWork({ workId, matterId, title: work.title, text: intake.sourceText, role: intake.role, note: intake.note, source, ...(threadId ? { threadId } : {}) });
       if (!returned?.result) throw new Error('Codex 已接收工作，但结果还没有回到 Trace。');
-      this.closeDialog();
-      await this.commit((state) => {
-        let next = B.dispatchWorksite(state, { workId, action: { type: 'RESULT_DRAFT', patch: { matterId, ...returned.result } } });
-        if (next.error) return next;
-        next = clone(next);
-        next.worksite.works[workId].connected = true;
-        next.worksite.works[workId].connection = { hostType: 'codex', status: 'returned_for_review', ...(typeof returned.threadId === 'string' && returned.threadId ? { threadId: returned.threadId } : {}) };
-        return next;
-      }, () => this.navigate({ view: 'worksite', workId, matterId, screen: 'results' }), [{ type: 'worksite.action', workId, action: { type: 'RESULT_DRAFT', patch: { matterId, ...returned.result } } }]);
+      agentReturned = true;
+      await this.reconcileNativeWorkReturn(workId, matterId, returned);
     } catch (cause) {
-      this.message(cause instanceof Error ? cause.message : 'Codex 工作没有完成，可以从工作现场重新接回。');
+      const detail = cause instanceof Error ? cause.message : '请从工作现场重新接回。';
+      this.message(agentReturned ? `Codex 结果已保存在本机，但页面尚未同步：${detail}` : detail);
+    }
+  }
+
+  private async reconcileNativeWorkReturn(workId: string, matterId: string, returned: any): Promise<void> {
+    if (this.busy) throw new Error('当前页面仍在保存；请稍后载入已保存版本。');
+    this.busy = true;
+    this.emit();
+    try {
+      // work.run has already committed receive + return in the Product owner.
+      // A second RESULT_DRAFT with the pre-run revision will always conflict.
+      // Never replace a local draft if the user edited while Codex was away.
+      await this.flush();
+      if (this.pendingPayload || this.dirty > this.saved) throw new Error('请先保留未保存草稿，再载入已保存版本。');
+      const generation = this.dirty;
+      const { data, state } = await this.readWorkspace();
+      if (this.dirty !== generation || this.pendingPayload || this.dirty > this.saved) throw new Error('页面又有新的草稿；请先保留草稿，再载入已保存版本。');
+      if (!matchesAuthoritativeWorkReturn(data, workId, matterId, returned)) throw new Error('本机尚未读到这次 Codex 的对应结果，请稍后重试接回。');
+      this.applyLoadedWorkspace(data, state, 'saved');
+      this.navigate({ view: 'worksite', workId, matterId, screen: 'results' });
+      this.setStatus('saved', 'Codex 结果已回到本机，等待你复核。');
+    } finally {
+      this.busy = false;
+      this.emit();
     }
   }
 
@@ -750,14 +769,8 @@ export class WebRuntime {
     void (async () => {
       const known = await readNativeWork(work.id).catch(() => null);
       if (known?.result) {
-        await this.commit((state) => {
-          let next = B.dispatchWorksite(state, { workId: work.id, action: { type: 'RESULT_DRAFT', patch: { matterId, ...known.result } } });
-          if (next.error) return next;
-          next = clone(next);
-          next.worksite.works[work.id].connected = true;
-          next.worksite.works[work.id].connection = { hostType: 'codex', status: 'returned_for_review', ...(typeof known.threadId === 'string' && known.threadId ? { threadId: known.threadId } : {}) };
-          return next;
-        }, () => this.navigate({ view: 'worksite', workId: work.id, matterId, screen: 'results' }), [{ type: 'worksite.action', workId: work.id, action: { type: 'RESULT_DRAFT', patch: { matterId, ...known.result } } }]);
+        try { await this.reconcileNativeWorkReturn(work.id, matterId, known); }
+        catch (cause) { this.message(cause instanceof Error ? cause.message : '结果已返回，但页面尚未同步。'); }
         return;
       }
       const environment = await nativeWorkEnvironment().catch(() => null);

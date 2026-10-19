@@ -44,3 +44,25 @@ node scripts/desktop-isolated-journey.mjs 'D:\your-isolated-output-directory'
 - Agent 关闭，**没有** `agent.sqlite`、Agent run、真实模型或自动 Codex 返回。手工结果不能冒充 Agent 回执；`codex/receive` 在旧候选的失败路径仅证明中间接收，不是最终执行成功。
 - 没有使用真实用户数据；安装版双库备份/恢复仍须在 Runtime S1 被明确集成后另行验收。
 - 需要对 Windows 外层浅色标题栏、拖动与最小化/最大化/关闭做人工目视确认，并由用户确认是否符合“不要黑框”的预期。
+
+## 续核｜真实 Agent 返回与页面接回（同日）
+
+在上述隔离候选基础上，另建全新合成 Git 项目与桌面 profile，启用内置 Agent。`Codex CLI 0.155.0-alpha.2.6` 已登录；原用户级资格记录指向旧可执行文件而被 `/api/agent/check` 拒绝。随后为**本任务目录**生成 no-model 资格记录，不改用户级记录，`/api/agent/check` 返回已认证的 native profile。第一次直接生成资格记录遇到 C: 临时目录空间不足，改将 TEMP/TMP 放在本任务 D: 目录后通过。正式工作只带入合成文字，并实际发起一次本机 Codex 模型 run。
+
+首次实跑中，Agent run `bbbcca64-710a-402f-9b0f-f4f10a8db405` 为 `succeeded`，Product `codexDelivery` 与 `codexReturns`、待复核结果在同路径重启后均保留；**页面却仍用回写前的 revision 再提交 `RESULT_DRAFT`，出现 `409`，显示“这项工作还未交给 Agent”**。[原始后端报告](../artifacts/desktop-agent-journey-20261019/pre-fix-backend-report.json)与[失败界面](../artifacts/desktop-agent-journey-20261019/pre-fix-ui.png)必须一起看，不能把后端成功冒充 UI 成功。
+
+修正后，页面在 Codex 回写后只读取并核对 Product owner 的对应 return，不再发第二条旧 revision 写入；若用户在等待期间留下未保存草稿，则保持草稿并提示先处理冲突，不静默覆盖。工作入口也在显示“已连接”及发接收回执前执行 no-model `/api/agent/check`，避免仅凭开关和 profile 就宣称 Codex 可用。新增对应正反例测试。使用第一次**已返回的隔离数据**重新打开当前候选，点击“结果已回来”，页面显示相同结果，Product revision 仍为 `8`，没有再次运行模型或写回结果：[重开报告](../artifacts/desktop-agent-journey-20261019/reopen-report.json)、[重开界面](../artifacts/desktop-agent-journey-20261019/reopened-result-ui.png)。Windows [原生窗口截取](../artifacts/desktop-agent-journey-20261019/native-window.png)不再有顶部黑栏；该截取不证明控制按钮及拖动体验。
+
+当前候选的 Web 测试 **175/176 通过、1 跳过、0 失败**，桌面测试 `21/21`、TypeScript 检查、构建、打包审计和 Windows `dir` 生成通过。首次全 Web 测试因 C: 满导致 SQLite `database or disk is full` 有 `13` 项失败；将测试 TEMP/TMP 置于 D: 任务目录后重跑通过，不改测试断言。最终候选 `Trace.exe` SHA-256 `67118970529d97844a1d96cef11795a63a0571aef13ca00662447d68ee7420a6`、`app.asar` `e3d6e6a7a441873158fa4d20b575cf7cb62d4e16e0b616758b0bcab84e3bd9f4`，仍为未安装、未发布的 `dir` 包。
+
+**尚未通过的完整验收**：修正后尝试从另一全新空库重跑自动 UI→Agent→Product→UI→重启：no-model 资格生成先遇到 C: 空间不足，D: 重试的一次 `initialize` 超时，复用已验证资格记录后 `/api/agent/check` 返回 `CODEX_DISCONNECTED`；当时 C: 空闲 `0`，Codex CLI 亦提示无法创建 PATH alias。失败目录均保留，不用旧返回伪装新实跑。需要先恢复本机 Codex 的可写空间/连接状态，再以新隔离目录运行：
+
+```powershell
+$env:TRACE_DESKTOP_AGENT_LIVE = '1'
+$env:TEMP = 'D:\<task-owned-temp>'
+$env:TMP = $env:TEMP
+node scripts/desktop-isolated-agent-journey.mjs 'D:\<new-empty-evidence-dir>'
+Remove-Item Env:TRACE_DESKTOP_AGENT_LIVE
+```
+
+该脚本会生成只限本任务目录的 Codex 资格记录，调用一次真实本机模型，验证前台结果字段、Product/Agent 状态及重启读取；输出目录须事先不存在。不可清理或移动用户 Codex 状态来掩盖 C: 空间问题。即使重跑通过，还需人工确认 Windows 外框控制；安装器、发布身份与 S1 双库恢复是独立验收。

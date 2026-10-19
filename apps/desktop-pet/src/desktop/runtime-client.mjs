@@ -1152,7 +1152,12 @@ export function createRuntimeCapabilityClient({
       }
       try {
         const capabilities = await runtimeRequest('/api/agent/capabilities', undefined, 4_000)
-        const connected = capabilities?.enabled === true && capabilities?.profiles?.some((profile) => profile.kind === 'codex') === true
+        const profile = capabilities?.profiles?.find((item) => item.kind === 'codex')
+        if (capabilities?.enabled !== true || !profile) return { connected: false, projectName, agentLabel: 'Codex', locationLabel: 'Agent 暂不可用' }
+        // The switch/profile alone do not prove that the installed Codex
+        // executable still qualifies or the account can actually connect.
+        const check = await runtimeRequest('/api/agent/check', { profileId: profile.profileId }, 38_000)
+        const connected = check?.authenticated === true
         return { connected, projectName, agentLabel: 'Codex', locationLabel: connected ? '当前项目' : 'Agent 暂不可用' }
       } catch (error) {
         return { connected: false, projectName, agentLabel: 'Codex', locationLabel: 'Agent 暂不可用', error: { message: error instanceof Error ? error.message : '本机 Agent 暂不可用' } }
@@ -1197,6 +1202,15 @@ export function createRuntimeCapabilityClient({
       // The UI's separate "save work preparation" command remains available.
       const capabilities = await runtimeRequest('/api/agent/capabilities')
       if (!capabilities.enabled) throw new Error('本机 Agent 尚未启用')
+      const requestedProfile = typeof request.profileId === 'string'
+        ? capabilities.profiles?.find((profile) => profile.profileId === request.profileId)
+        : null
+      const profile = requestedProfile?.kind === 'codex'
+        ? requestedProfile
+        : capabilities.profiles?.find((item) => item.kind === 'codex')
+      if (!profile) throw new Error('本机没有可用的 Codex 执行器')
+      const check = await runtimeRequest('/api/agent/check', { profileId: profile.profileId }, 38_000)
+      if (check?.authenticated !== true) throw new Error('本机 Codex 尚未连接，工作未发送')
       if (!existingWork) {
         const operations = []
         if (!existingMatter) operations.push({ type: 'capture.create', matterId, text })
@@ -1228,14 +1242,6 @@ export function createRuntimeCapabilityClient({
       workspace = await runtimeRequest('/api/product/workspace')
       const matterSession = workspace.host?.chain?.sessions?.[matterId]
       if (!matterSession) throw new Error('本次事项没有可交给 Codex 的上下文')
-      const requestedProfile = typeof request.profileId === 'string'
-        ? capabilities.profiles?.find((profile) => profile.profileId === request.profileId)
-        : null
-      const profile = requestedProfile?.kind === 'codex'
-        ? requestedProfile
-        : capabilities.profiles?.find((item) => item.kind === 'codex')
-      if (!profile) throw new Error('本机没有可用的 Codex 执行器')
-
       const sources = await remoteSourceContext(source, `${title} ${text}`)
       const submitted = await runtimeRequest('/api/agent/runs', {
         protocolVersion: 1,
