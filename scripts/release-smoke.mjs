@@ -52,11 +52,11 @@ for (const required of [
 const runtimeImportAudit = verifyRuntimeAsar(appAsar, asarPaths, extractFile)
 const localWebOutput = path.join(root, 'apps', 'desktop-pet', 'lib', 'desktop', 'discussion')
 const currentWebBuild = await verifyWebBuildDirectory({ webRoot: path.join(root, 'apps', 'web'), outputDir: localWebOutput })
-const packagedWebBuild = JSON.parse(extractFile(appAsar, 'lib/desktop/discussion/web-build-provenance.json').toString('utf8'))
+const packagedWebBuild = JSON.parse(extractFile(appAsar, path.join('lib', 'desktop', 'discussion', 'web-build-provenance.json')).toString('utf8'))
 if (packagedWebBuild.buildId !== currentWebBuild.buildId || packagedWebBuild.sourceSha256 !== currentWebBuild.sourceSha256) {
   throw new Error('Packaged Web assets do not match the current local Web build')
 }
-const packagedWebAudit = verifyWebBuildAssets(packagedWebBuild, (relative) => extractFile(appAsar, `lib/desktop/discussion/${relative}`))
+const packagedWebAudit = verifyWebBuildAssets(packagedWebBuild, (relative) => extractFile(appAsar, path.join('lib', 'desktop', 'discussion', relative)))
 const packageInfo = JSON.parse(extractFile(appAsar, 'package.json').toString('utf8'))
 if (packageInfo.version !== expectedVersion) throw new Error(`Desktop package version is ${packageInfo.version}, expected ${expectedVersion}`)
 if (runtime.runtime_version !== source.runtime_version || runtime.runtime_version !== runtimeManifest.runtime_version) throw new Error('Runtime version identity mismatch')
