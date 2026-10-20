@@ -58,6 +58,13 @@ npm run release:checksum -- --artifact apps/desktop-pet/release/Trace-Desktop-0.
 
 # 工具自身的离线回归
 npm run test:release-tools
+
+# 仅经过 Mock 的桌面能力契约；不连接真实云端或真实 Agent
+npm run test:desktop-headless-contract
+
+# 使用当前本机 staged Runtime；报告默认写入操作系统临时目录
+npm run test:desktop-headless
+# 如需保留到指定位置，可设置 TRACE_HEADLESS_ARTIFACT_DIR
 ```
 
 `release:smoke` 只把 `--allow-development` 作为明确的本地调试例外；默认拒绝非 `release-ready` identity。上传前还应保留命令输出与安装包 SHA-256，避免把旧版本或未验证的解包目录当成当前 Release。

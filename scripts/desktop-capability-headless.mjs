@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
@@ -10,14 +11,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const runtimeRoot = path.resolve(process.env.TRACE_HEADLESS_RUNTIME_ROOT || path.join(root, 'apps', 'desktop-pet', 'runtime-dist'))
 const liveCloud = process.argv.includes('--live-cloud')
 const keep = process.argv.includes('--keep')
-const tempRoot = path.resolve(root, '.tmp')
-fs.mkdirSync(tempRoot, { recursive: true })
+const tempRoot = os.tmpdir()
 if (!fs.existsSync(path.join(runtimeRoot, 'apps', 'desktop', 'server.mjs'))) {
   throw new Error(`Staged Trace Runtime was not found at ${runtimeRoot}; run runtime staging first or set TRACE_HEADLESS_RUNTIME_ROOT.`)
 }
 const runRoot = fs.mkdtempSync(path.join(tempRoot, 'desktop-capability-headless-'))
 const projectDir = path.join(runRoot, 'selected-project')
-const reportDir = path.join(root, 'artifacts', 'desktop-capability-headless')
+const reportDir = path.resolve(process.env.TRACE_HEADLESS_ARTIFACT_DIR || path.join(os.tmpdir(), 'trace-desktop-capability-headless'))
 fs.mkdirSync(projectDir, { recursive: true })
 fs.mkdirSync(reportDir, { recursive: true })
 
@@ -120,7 +120,7 @@ try {
   try {
     const selected = client.setProjectDir(projectDir)
     const environment = await client.request({ operation: 'work.environment' })
-    if (!selected.connected || !environment.connected || selected.projectName !== path.basename(projectDir)) throw new Error('selected project was not retained')
+    if (!selected.connected || selected.projectName !== path.basename(projectDir) || environment.projectName !== path.basename(projectDir)) throw new Error('selected project was not retained')
     pass('project.select', '显式选择的普通文件夹已成为当前工作目录。', { projectName: selected.projectName, repository: selected.repository })
   } catch (error) { fail('project.select', error) }
 
@@ -268,7 +268,7 @@ try {
     },
     matrix,
   }
-  const reportFile = path.join(reportDir, `run-${Date.now()}.json`)
+  const reportFile = path.join(reportDir, `run-${Date.now()}-${randomUUID().slice(0, 8)}.json`)
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
   console.log(JSON.stringify({ ...report.summary, report: reportFile }))
   for (const item of matrix) console.log(`${item.status.toUpperCase()}\t${item.capability}\t${item.detail}`)
