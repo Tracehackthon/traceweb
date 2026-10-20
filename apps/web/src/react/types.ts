@@ -1,4 +1,4 @@
-export type ViewName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite' | 'works' | 'search' | 'all' | 'discussion';
+export type ViewName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite' | 'works' | 'search' | 'all' | 'projects' | 'discussion';
 
 export interface SelectionAnchor {
   field: string;

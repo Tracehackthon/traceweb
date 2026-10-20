@@ -22,6 +22,7 @@ const routeTitles = {
   works: '工作现场',
   search: '搜索',
   all: '全部痕迹',
+  projects: '项目与文件生命周期',
   discussion: '深度讨论',
 };
 

@@ -86,6 +86,12 @@ npm run video:poster   # 生成播放器封面
 
 启动本机能力后端的环境与 profile 以 [`trace_backend`](https://github.com/Tracehackthon/trace_backend) 的 Runtime 文档为准。桌宠默认只连接 `http://127.0.0.1:4173`；如使用其它本机端口，可设置 `TRACE_BACKEND_ORIGIN`，该值只接受 loopback HTTP origin。
 
+## 项目文件生命周期
+
+在「个人与设置」中打开「管理项目与文件生命周期」，进入与桌宠共用的 Trace Web 管理界面。浏览器只在用户明确选择目录并授权读取后盘点所选项目的 `.trace/`；浏览器端仅只读，不执行移动或删除。桌面端通过受限 IPC 提供项目库、设为当前项目、隔离、恢复和显式永久清除；绝对路径仅保留在桌面主进程，页面显示项目名和 `.trace/` 相对路径。
+
+盘点不会打开 SQLite 内容。项目描述符、`state/` 数据库及 WAL/SHM/owner 家族、采用历史和当前 Runtime 受保护；未知文件只标记为“待确认”，不会按 JSON 扩展名、时间或版本号自动清理。桌面端逐文件进入可恢复隔离区，恢复前校验内容哈希并避免覆盖；永久清除需要页面与原生对话框分别确认。当前桌面安装只管理随应用打包的单一 Runtime，不扫描旧开发 checkout、插件缓存或其他用户目录。
+
 ## 构建桌宠
 
 桌宠使用独立依赖，不进入 Vercel 构建：

@@ -13,7 +13,7 @@ import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor,
 
 const clone = <T>(value: T): T => structuredClone(value);
 const uid = (kind: string) => `${kind}-${crypto.randomUUID()}`;
-const allowed: ViewName[] = ['home', 'matters', 'chain', 'compare', 'worksite', 'works', 'search', 'all', 'discussion'];
+const allowed: ViewName[] = ['home', 'matters', 'chain', 'compare', 'worksite', 'works', 'search', 'all', 'projects', 'discussion'];
 export const completeDemoMode = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 
 type HarnessHandoff = {

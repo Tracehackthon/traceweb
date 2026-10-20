@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, screen, session, shell, Tray } from 'electron'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve, sep } from 'node:path'
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient, resolveCodexExecutable } from './runtime-client.mjs'
 import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
@@ -11,6 +11,7 @@ import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
 import { clearVersionBoundStorage } from './storage-lifecycle.mjs'
 import { isAddressInUse, isLoopbackHttpOrigin, selectLoopbackPort } from './runtime-port-selection.mjs'
 import { probeProductWorkspace } from './runtime-readiness.mjs'
+import { inspectManagedRuntime, inspectProjectTrace, listQuarantinedArtifacts, purgeQuarantinedArtifact, quarantineProjectEntry, restoreQuarantinedArtifact } from './artifact-lifecycle.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -150,6 +151,110 @@ function writeDesktopSettings(value) {
   const file = settingsFile()
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function lifecycleProjectList(settings = readDesktopSettings()) {
+  const projects = Array.isArray(settings.lifecycleProjects) ? settings.lifecycleProjects.filter((item) =>
+    item && typeof item.id === 'string' && /^[a-f0-9-]{12,40}$/i.test(item.id) && typeof item.path === 'string' && resolve(item.path) === item.path,
+  ).map((item) => ({ id: item.id, path: item.path })) : []
+  if (typeof settings.projectDir === 'string' && resolve(settings.projectDir) === settings.projectDir) {
+    const existing = projects.find((item) => process.platform === 'win32' ? item.path.toLowerCase() === settings.projectDir.toLowerCase() : item.path === settings.projectDir)
+    if (!existing) {
+      let valid = false
+      try { const stat = lstatSync(settings.projectDir); valid = stat.isDirectory() && !stat.isSymbolicLink() } catch {}
+      if (valid) {
+        const item = { id: randomBytes(12).toString('hex'), path: settings.projectDir }
+        projects.push(item)
+        const retainedEntries = Array.isArray(settings.lifecycleProjects) ? settings.lifecycleProjects : []
+        writeDesktopSettings({ ...settings, lifecycleProjects: [...retainedEntries, item] })
+      }
+    }
+  }
+  return projects
+}
+
+function registeredLifecycleProject(projectId) {
+  if (typeof projectId !== 'string' || !/^[a-f0-9-]{12,40}$/i.test(projectId)) throw new Error('项目库 ID 无效。')
+  const settings = readDesktopSettings()
+  const project = lifecycleProjectList(settings).find((item) => item.id === projectId)
+  if (!project) throw new Error('该项目不在 Trace 本机项目库中。')
+  const rootPath = resolve(project.path)
+  let stat
+  try { stat = lstatSync(rootPath) } catch { throw new Error('项目目录不可访问；未执行操作。') }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('项目目录不可用或不是普通目录；未执行操作。')
+  return { ...project, path: rootPath }
+}
+
+function readProjectLifecycleLibrary() {
+  const firstSettings = readDesktopSettings()
+  const projects = lifecycleProjectList(firstSettings)
+  const settings = readDesktopSettings()
+  const normalized = projects.map((project) => {
+    let available = false
+    try { const stat = lstatSync(project.path); available = stat.isDirectory() && !stat.isSymbolicLink() } catch {}
+    return { id: project.id, name: basename(project.path) || '未命名项目', available }
+  })
+  const activeProjectId = settings.lifecycleActiveProjectId || projects.find((project) => process.platform === 'win32' ? project.path.toLowerCase() === settings.projectDir?.toLowerCase() : project.path === settings.projectDir)?.id || null
+  const runtime = app.isPackaged
+    ? inspectManagedRuntime(join(process.resourcesPath, 'trace-runtime'))
+    : { scope: 'managed-runtime', state: 'unavailable', complete: true, entries: [], warnings: ['开发模式使用外部 Runtime；开发 checkout 不属于受管 Runtime 清理范围。'] }
+  return { projects: normalized, activeProjectId, runtime }
+}
+
+async function handleProjectLifecycleRequest(senderWindow, request) {
+  const operation = request?.operation
+  if (typeof operation !== 'string' || !operation.startsWith('project.lifecycle.')) return undefined
+  const action = operation.slice('project.lifecycle.'.length)
+  if (action === 'projects.read') return readProjectLifecycleLibrary()
+  if (action === 'project.add') {
+    const result = await dialog.showOpenDialog(senderWindow, { title: '添加要由 Trace 管理的项目目录', properties: ['openDirectory'] })
+    if (result.canceled || !result.filePaths[0]) return { cancelled: true }
+    const projectPath = resolve(result.filePaths[0])
+    let stat
+    try { stat = lstatSync(projectPath) } catch { throw new Error('所选目录不可访问；未添加。') }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('请选择真实的项目目录，而不是符号链接。')
+    const settings = readDesktopSettings()
+    const projects = lifecycleProjectList(settings)
+    const duplicate = projects.find((item) => process.platform === 'win32' ? item.path.toLowerCase() === projectPath.toLowerCase() : item.path === projectPath)
+    if (duplicate) return { id: duplicate.id, name: basename(projectPath), available: true, existing: true }
+    const item = { id: randomBytes(12).toString('hex'), path: projectPath }
+    writeDesktopSettings({ ...readDesktopSettings(), lifecycleProjects: [...projects, item] })
+    return { id: item.id, name: basename(projectPath), available: true }
+  }
+
+  const project = registeredLifecycleProject(request.projectId)
+  if (action === 'project.activate') {
+    const settings = readDesktopSettings()
+    writeDesktopSettings({ ...settings, projectDir: project.path, lifecycleActiveProjectId: project.id })
+    capabilityClient?.setProjectDir?.(project.path)
+    bindNativeAgentProject(project.path)
+    return { activeProjectId: project.id }
+  }
+  if (action === 'inventory') return inspectProjectTrace(project.path, { projectId: project.id, allowQuarantine: true })
+  if (action === 'quarantine.read') return listQuarantinedArtifacts(project.path, { projectId: project.id })
+  if (action === 'quarantine') return quarantineProjectEntry(project.path, { projectId: project.id, entryId: request.entryId })
+  if (action === 'restore') return restoreQuarantinedArtifact(project.path, request.id)
+  if (action === 'purge') {
+    const entry = listQuarantinedArtifacts(project.path, { projectId: project.id }).entries.find((item) => item.id === request.id)
+    if (!entry) throw new Error('该文件不在所选项目的可恢复隔离区。')
+    const confirmation = await dialog.showMessageBox(senderWindow, {
+      type: 'warning', title: '永久清除隔离文件？', message: `永久清除“${entry.name}”？`,
+      detail: `原项目位置：.trace/${entry.originalPath}\n\n此操作不可撤销。Trace 会在清除前再次验证隔离文件的内容校验值。`,
+      buttons: ['永久清除', '取消'], defaultId: 1, cancelId: 1, noLink: true,
+    })
+    if (confirmation.response !== 0) return { cancelled: true }
+    return purgeQuarantinedArtifact(project.path, request.id)
+  }
+  throw new Error('不支持的项目生命周期操作。')
+}
+
+function publicProjectLifecycleError(error) {
+  const raw = error instanceof Error ? error.message : String(error || '')
+  if (typeof error?.code === 'string' || /[A-Za-z]:[\\/]|\\\\|\/(?:Users|home|mnt|Volumes|private|tmp|var|opt)\//i.test(raw)) {
+    const code = typeof error?.code === 'string' ? `（${error.code}）` : ''
+    return `项目文件操作未完成${code}；未继续清除文件。`
+  }
+  return raw.length <= 400 ? raw : '项目文件操作未完成；请重新盘点后重试。'
 }
 
 function prepareVersionedDesktopStorage() {
@@ -819,6 +924,11 @@ ipcMain.on('trace-native:discussion-candidate', (event, payload) => {
 ipcMain.handle('trace-native:capability', async (event, request) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender)
   if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) throw new Error('Capability caller is not a Trace window')
+  if (typeof request?.operation === 'string' && request.operation.startsWith('project.lifecycle.')) {
+    if (!discussionWindows.has(senderWindow)) throw new Error('项目生命周期功能只能由 Trace Web 产品窗口调用')
+    try { return await handleProjectLifecycleRequest(senderWindow, request) }
+    catch (error) { throw new Error(publicProjectLifecycleError(error)) }
+  }
   if (!capabilityClient) throw new Error('Trace 本机能力仍在启动，请稍后再试')
   if (request?.operation === 'work.project.select') {
     const result = await dialog.showOpenDialog(senderWindow, { title: '选择要与 Codex 一起工作的项目', properties: ['openDirectory'] })

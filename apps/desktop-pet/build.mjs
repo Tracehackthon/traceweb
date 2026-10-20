@@ -98,6 +98,7 @@ await Promise.all([
   copyFile(resolve(root, 'src/desktop/runtime-installation-identity.mjs'), resolve(desktopOutDir, 'runtime-installation-identity.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-integrations.mjs'), resolve(desktopOutDir, 'runtime-integrations.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-project-binding.mjs'), resolve(desktopOutDir, 'runtime-project-binding.mjs')),
+  copyFile(resolve(root, 'src/desktop/artifact-lifecycle.mjs'), resolve(desktopOutDir, 'artifact-lifecycle.mjs')),
   copyFile(resolve(root, 'src/desktop/lifecycle.mjs'), resolve(desktopOutDir, 'lifecycle.mjs')),
   copyFile(resolve(root, 'src/desktop/storage-lifecycle.mjs'), resolve(desktopOutDir, 'storage-lifecycle.mjs')),
   copyFile(resolve(root, 'src/desktop/preload.cjs'), resolve(desktopOutDir, 'preload.cjs')),

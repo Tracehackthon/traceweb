@@ -38,6 +38,7 @@ for (const required of [
   'lib/desktop/runtime-installation-identity.mjs',
   'lib/desktop/runtime-integrations.mjs',
   'lib/desktop/runtime-project-binding.mjs',
+  'lib/desktop/artifact-lifecycle.mjs',
   'lib/desktop/lifecycle.mjs',
   'lib/desktop/storage-lifecycle.mjs',
   'lib/desktop/preload.cjs',

@@ -30,6 +30,20 @@ const desktopLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/l
 const storageLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/storage-lifecycle.mjs')).href)
 const portSelection = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-port-selection.mjs')).href)
 const runtimeReadiness = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-readiness.mjs')).href)
+await import('./artifact-lifecycle.test.mjs')
+
+test('project lifecycle is routed from the Trace Web product window to guarded host operations', async () => {
+  const main = await readFile(resolve(root, 'src/desktop/main.mjs'), 'utf8')
+  const build = await readFile(resolve(root, 'build.mjs'), 'utf8')
+  const releaseSmoke = await readFile(resolve(root, '../../scripts/release-smoke.mjs'), 'utf8')
+  assert.match(main, /project\.lifecycle\./)
+  assert.match(main, /!discussionWindows\.has\(senderWindow\).*项目生命周期功能只能由 Trace Web 产品窗口调用/s)
+  assert.match(main, /inspectProjectTrace\(project\.path/)
+  assert.match(main, /dialog\.showMessageBox\(senderWindow,[\s\S]*?永久清除/)
+  assert.match(main, /purgeQuarantinedArtifact\(project\.path, request\.id\)/)
+  assert.match(build, /copyFile\(resolve\(root, 'src\/desktop\/artifact-lifecycle\.mjs'\)/)
+  assert.match(releaseSmoke, /lib\/desktop\/artifact-lifecycle\.mjs/)
+})
 
 test('packaged desktop probes readable product state without requiring a newer heartbeat route', async () => {
   const paths = []

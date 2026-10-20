@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { createRoot } from 'react-dom/client';
 import './product/web.css';
 import './react/settings-disclosure.css';
+import './react/project-lifecycle.css';
 import { routeDocumentTitle, runtimeStatusLabel } from './react/presentation-copy.mjs';
 import * as B from './product/bridge.mjs';
 import { ASSETS } from './product/assets.mjs';
@@ -113,7 +114,8 @@ async function loadRouteResources(view: ViewName): Promise<any> {
       : view === 'chain' ? import('./product/chain-screen.mjs')
         : view === 'compare' ? import('./product/comparison-screen.mjs')
           : view === 'worksite' ? import('./product/worksite-screen.mjs')
-            : ['all', 'search', 'works'].includes(view) ? Promise.resolve({ mountLibrary }) : Promise.resolve(null);
+            : ['all', 'search', 'works'].includes(view) ? Promise.resolve({ mountLibrary })
+              : view === 'projects' ? import('./product/project-lifecycle.mjs') : Promise.resolve(null);
   const styleName = routeStyle(view);
   const criticalPromises: Promise<unknown>[] = [modulePromise];
   if (styleName) criticalPromises.push(style(styleName));
@@ -192,6 +194,9 @@ async function mountRoute(root: HTMLDivElement, route: RouteMemory, module: any)
   }
   if (['all', 'search', 'works'].includes(route.view)) {
     return module.mountLibrary({ root, host, route, onNavigate: (next: RouteMemory, options?: RouteNavigationOptions) => runtime.navigate(next, options), onBack: () => runtime.back(), onProfile: () => runtime.profile() });
+  }
+  if (route.view === 'projects') {
+    return module.mountProjectLifecycle({ root, onNavigate: (next: RouteMemory) => runtime.navigate(next), onBack: () => runtime.back(), onProfile: () => runtime.profile() });
   }
   if (route.view === 'discussion') {
     const url = new URL(location.href); url.pathname = '/legacy.html';
@@ -424,7 +429,7 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   const [reduceMotion, setReduceMotion] = useState(Boolean(snapshot.host?.preferences?.reduceMotion));
   useEffect(() => { setName(snapshot.host?.preferences?.displayName || ''); setReduceMotion(Boolean(snapshot.host?.preferences?.reduceMotion)); }, [dialog.type, snapshot.host]);
   if (dialog.type === 'message') return <><p>{dialog.message}</p><footer><RecoveryButton onClick={() => runtime.closeDialog()}>{dialog.confirm ? '取消' : '回到原处'}</RecoveryButton>{dialog.confirm && <RecoveryButton primary onClick={() => { const action = dialog.confirm?.action; runtime.closeDialog(); action?.(); }}>{dialog.confirm.label}</RecoveryButton>}</footer></>;
-  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示内容与个人空间完全分开，可以随时恢复。' : browserStorage ? '内容只保存在当前浏览器，不上传，也不会跨设备同步。清除浏览器数据前请先导出。' : '内容保存在这台设备的 Trace 中，目前没有云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : browserStorage ? '当前浏览器中的内容' : '这台设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '只保存在当前浏览器' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && hasNativeCapabilityBridge() && <CodexConnectionPanel/>}{!completeDemoMode && <ZhihuAuthorization/>}{!completeDemoMode && hasNativeCapabilityBridge() && <RuntimeSettingsDisclosure/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
+  if (dialog.type === 'profile') return <><p>{completeDemoMode ? '演示内容与个人空间完全分开，可以随时恢复。' : browserStorage ? '内容只保存在当前浏览器，不上传，也不会跨设备同步。清除浏览器数据前请先导出。' : '内容保存在这台设备的 Trace 中，目前没有云同步。'}</p><form onSubmit={(event) => { event.preventDefault(); runtime.updatePreferences(name, reduceMotion); }}><label>怎么称呼你<input name="name" type="text" maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="你的称呼（可不填）" /></label><label><input name="motion" type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> 减少界面动效</label><h3>{completeDemoMode ? '演示内容' : browserStorage ? '当前浏览器中的内容' : '这台设备上的内容'}</h3><p>{completeDemoMode ? '与个人空间分开，可随时恢复' : browserStorage ? '只保存在当前浏览器' : '保存在本机 Trace 中'}</p><p>{snapshot.host?.chain?.matters?.length || 0} 件事 · {snapshot.host?.chain?.sources?.length || 0} 份材料 · {Object.keys(snapshot.host?.worksite?.works || {}).length} 个工作记录</p>{!completeDemoMode && <RecoveryButton type="button" onClick={() => { runtime.closeDialog(); runtime.navigate({ view: 'projects' }); }}>管理项目与文件生命周期</RecoveryButton>}{!completeDemoMode && hasNativeCapabilityBridge() && <CodexConnectionPanel/>}{!completeDemoMode && <ZhihuAuthorization/>}{!completeDemoMode && hasNativeCapabilityBridge() && <RuntimeSettingsDisclosure/>}<footer>{completeDemoMode ? <><RecoveryButton onClick={() => runtime.resetCompleteDemo()}>恢复完整演示</RecoveryButton><a href="/app">进入我的空间</a></> : <RecoveryButton onClick={() => void exportWorkspace().catch((error) => runtime.message(error.message))}>导出全部内容</RecoveryButton>}<RecoveryButton primary type="submit">保存设置</RecoveryButton></footer></form></>;
   if (dialog.type === 'capability' && dialog.capability) return <CapabilityDialog capability={dialog.capability} />;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);

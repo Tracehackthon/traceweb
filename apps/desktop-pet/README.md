@@ -94,6 +94,17 @@ npm run desktop
 
 “继续讨论”会打开插件内置的 Trace Web，不要求另行启动 Web 开发服务器。Renderer 开启 `contextIsolation` 与 sandbox，不直接获得 Node 权限；只有 preload 暴露的白名单能力可以访问本机 Runtime。
 
+### 项目库与文件生命周期
+
+桌面端在个人与设置中进入「管理项目与文件生命周期」。页面仍由 `apps/web` 编译并在桌面宿主内运行，不另建一套管理 UI。桌面主进程只向页面返回项目名称、稳定项目 ID、状态和 `.trace/` 相对条目；绝对项目路径保存在本机 `desktop-settings.json`，由主进程按 ID 重新解析和校验。
+
+- 添加项目只注册目录，不改写项目文件；「设为当前项目」才更新当前 Codex 项目绑定。
+- 盘点范围限于明确选择项目下的 `.trace/`。数据库及其 WAL/SHM/owner、`project.json`、采用历史和无法证明归属的内容只读保留；不扫描数据库正文。
+- 仅普通文件可逐项移入 `.trace/.trace-lifecycle-quarantine/`。操作会重扫并校验源文件，生成恢复清单与 SHA-256；恢复会拒绝覆盖原位置的现有文件。
+- 永久清除只作用于隔离文件，先由 Web 界面确认，再由 Electron 原生对话框再次确认，并在删除前重新校验 SHA-256。目录、符号链接、数据库家族和当前 Runtime 不开放这项操作。
+- Web 版只使用用户授权的目录句柄盘点；浏览器无 File System Access API 时提示改用桌面版。
+- 当前发行版 Runtime 是安装包内的单一受管 Runtime，不存在由 Runtime 管理器登记的多版本目录；旧版本候选仍只读，不扫描开发 checkout、插件缓存或整个用户目录。
+
 ### 连接本机能力
 
 先按 `trace_backend` 的 Runtime 文档启动产品、知乎和 Agent 模块。桌宠默认连接：
