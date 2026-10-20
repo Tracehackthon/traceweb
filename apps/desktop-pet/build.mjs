@@ -3,6 +3,7 @@ import { build as viteBuild } from 'vite'
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createWebBuildProvenance } from '../../scripts/web-build-provenance.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(root, 'lib')
@@ -129,6 +130,9 @@ await Promise.all(desktopPublicAssets.map(async (relative) => {
   await mkdir(dirname(destination), { recursive: true })
   await copyFile(resolve(discussionPublicDir, relative), destination)
 }))
+
+const webBuildProvenance = await createWebBuildProvenance({ webRoot: discussionSourceDir, outputDir: discussionOutDir })
+console.log(`Web build identity ${webBuildProvenance.buildId} · source ${webBuildProvenance.sourceSha256}`)
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 console.log(`Built ${manifest.name}@${manifest.version}`)

@@ -92,6 +92,8 @@ npm run video:poster   # 生成播放器封面
 
 盘点不会打开 SQLite 内容。项目描述符、`state/` 数据库及 WAL/SHM/owner 家族、采用历史和当前 Runtime 受保护；未知文件只标记为“待确认”，不会按 JSON 扩展名、时间或版本号自动清理。桌面端逐文件进入可恢复隔离区，恢复前校验内容哈希并避免覆盖；永久清除需要页面与原生对话框分别确认。当前桌面安装只管理随应用打包的单一 Runtime，不扫描旧开发 checkout、插件缓存或其他用户目录。
 
+桌面构建将 Web 源码指纹和每项 Web 产物 SHA-256 写入 `lib/desktop/discussion/web-build-provenance.json`；`release:smoke` 会比对当前本地 Web 源、桌面构建目录与 `app.asar` 内资源身份，不能只凭安装包生成成功判定 Web-first 边界有效。
+
 ## 构建桌宠
 
 桌宠使用独立依赖，不进入 Vercel 构建：

@@ -105,6 +105,8 @@ npm run desktop
 - Web 版只使用用户授权的目录句柄盘点；浏览器无 File System Access API 时提示改用桌面版。
 - 当前发行版 Runtime 是安装包内的单一受管 Runtime，不存在由 Runtime 管理器登记的多版本目录；旧版本候选仍只读，不扫描开发 checkout、插件缓存或整个用户目录。
 
+每次桌面构建同时写入 `discussion/web-build-provenance.json`。发行 smoke test 对比当前 Web 源码指纹、桌面构建输出和 `app.asar` 中的 Web 资产哈希；不把“安装包打出来了”当作 Web 与 Desktop 同源的证明。
+
 ### 连接本机能力
 
 先按 `trace_backend` 的 Runtime 文档启动产品、知乎和 Agent 模块。桌宠默认连接：

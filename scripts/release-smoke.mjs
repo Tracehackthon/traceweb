@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
 import { verifyRuntimeAsar } from './verify-desktop-runtime-imports.mjs'
+import { verifyWebBuildAssets, verifyWebBuildDirectory } from './web-build-provenance.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // electron-builder keeps `@electron/asar` in the desktop package's isolated
@@ -44,10 +45,18 @@ for (const required of [
   'lib/desktop/preload.cjs',
   'lib/desktop/discussion-preload.cjs',
   'lib/desktop/discussion/index.html',
+  'lib/desktop/discussion/web-build-provenance.json',
 ]) {
   if (!asarPaths.has(required)) throw new Error(`app.asar is missing ${required}`)
 }
 const runtimeImportAudit = verifyRuntimeAsar(appAsar, asarPaths, extractFile)
+const localWebOutput = path.join(root, 'apps', 'desktop-pet', 'lib', 'desktop', 'discussion')
+const currentWebBuild = await verifyWebBuildDirectory({ webRoot: path.join(root, 'apps', 'web'), outputDir: localWebOutput })
+const packagedWebBuild = JSON.parse(extractFile(appAsar, 'lib/desktop/discussion/web-build-provenance.json').toString('utf8'))
+if (packagedWebBuild.buildId !== currentWebBuild.buildId || packagedWebBuild.sourceSha256 !== currentWebBuild.sourceSha256) {
+  throw new Error('Packaged Web assets do not match the current local Web build')
+}
+const packagedWebAudit = verifyWebBuildAssets(packagedWebBuild, (relative) => extractFile(appAsar, `lib/desktop/discussion/${relative}`))
 const packageInfo = JSON.parse(extractFile(appAsar, 'package.json').toString('utf8'))
 if (packageInfo.version !== expectedVersion) throw new Error(`Desktop package version is ${packageInfo.version}, expected ${expectedVersion}`)
 if (runtime.runtime_version !== source.runtime_version || runtime.runtime_version !== runtimeManifest.runtime_version) throw new Error('Runtime version identity mismatch')
@@ -63,4 +72,4 @@ for (const entry of runtimeManifest.files) {
   const content = fs.readFileSync(absolute)
   if (createHash('sha256').update(content).digest('hex') !== entry.sha256 || content.length !== entry.bytes) throw new Error(`Runtime checksum mismatch: ${entry.path}`)
 }
-process.stdout.write(`${JSON.stringify({ status: 'desktop-release-smoke-passed', unpacked: path.relative(root, unpacked).replaceAll(path.sep, '/'), desktop_version: packageInfo.version, runtime_version: runtime.runtime_version, distribution_eligibility: runtime.distribution_eligibility, runtime_files: runtimeManifest.files.length, runtime_imports: runtimeImportAudit }, null, 2)}\n`)
+process.stdout.write(`${JSON.stringify({ status: 'desktop-release-smoke-passed', unpacked: path.relative(root, unpacked).replaceAll(path.sep, '/'), desktop_version: packageInfo.version, web_build_id: currentWebBuild.buildId, web_source_sha256: currentWebBuild.sourceSha256, web_assets: packagedWebAudit.files, runtime_version: runtime.runtime_version, distribution_eligibility: runtime.distribution_eligibility, runtime_files: runtimeManifest.files.length, runtime_imports: runtimeImportAudit }, null, 2)}\n`)
