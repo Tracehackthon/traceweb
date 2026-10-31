@@ -123,3 +123,17 @@ node scripts/expressive-controls-e2e.cjs
 在无描边状态层之上补充指针按钮按下/释放、选中/悬停阴影层透明度、原生弹窗与遮罩进出、Radix菜单/工具提示原点进出、真实保存提示淡入/收起、真实pending图标与进度反馈。复用现有原语，只用CSS transform/opacity与原生WAAPI，没有新增动画依赖。键盘、IME、正文、画布相机/拖动不加装饰延迟；系统/产品减少动态同时生效且可中途结束动画。明确的指针关闭保留退出挂载，保存命令直接卸载不强行等待动画。
 
 18项动效E2E首次通过（最终增加中途减少动态检查）；23项无描边、14项配色回归重试通过。回归脚本原先在关闭动画尚未结束、背景仍inert时fill，或在阴影opacity首帧即时断言；已改为等待实际隐藏/阴影条件，未用固定sleep掩盖。最终报告：`.test-results/workbench-motion/browser-current/report.json`、`.test-results/workbench-shadow-states/motion-current/report.json`、`.test-results/component-prompts/focus-palette/motion-current/report.json`。过程失败保留；视频：`.test-results/workbench-motion/browser-current/video/interaction.webm`。这些不是安装版或全部功能验收。
+
+
+### 信息密度与任务下一步（2026-11-01，0.2.24）
+
+| Before | After | Why |
+| --- | --- | --- |
+| 方法表单连续暴露提示、依据、示例空框 | 方法的补充信息用既有 HaloDisclosure；模板/指令正文仍直接可见 | 先完成核心内容，不把最重要的正文藏起来；折叠保持挂载和原保存 owner |
+| 保存区尝试悬浮，遮住上方字段 | 保存/试用与真实回执回到文档流 | 不用“易达”换输入遮挡；窄窗通过真实滚动到达 |
+| 保存准备与已有回执/执行解释混排 | 准备保存后明确“查看上次保存的任务”；新执行在先，旧回执另行展开 | 导航只指向最后保存项，既不保存新草稿，也不启动模型 |
+| 重复长说明与工程修订编号常驻 | 原文/来源、保存位置用直接文案；页脚只显示内容保存状态和存储位置 | 必要限制保留在相关位置，修订信息留 title，不让内部实现抢过内容 |
+
+固定边界：仍沿用 Halo 材质、现有排版/状态/动效尺度；不新造模拟完成或计时进度。表单折叠不卸载字段，不改变 expectedVersion、步骤/指令/refs 快照、执行权限或明确采纳链。共享提示文案变更时同步现有 E2E 定位，不能删掉保存/重启/失败恢复断言来换通过。
+
+唯一交付与重放证据仍放总控任务 `docs/tasks/trace-frontend-replacement.md` 的 0.2.24 节；独立源/实际包身份见 `.test-results/workbench-visual-ux/accepted-identity.json`，不把本矩阵当业务验收。
