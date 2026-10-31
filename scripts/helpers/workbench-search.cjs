@@ -2,7 +2,8 @@
 // reads. No reducer/unit/component tests, user data, or real model calls.
 const {selectValue}=require('./select-control.cjs');
 const fs=require('node:fs'),path=require('node:path');
-module.exports=async({page,state,saved,check,capture,out,windowSize,restartDesktop,restartBrowser,desktop})=>{
+const {isDeepStrictEqual}=require('node:util');
+module.exports=async({page,state,saved,check,capture,out,windowSize,restartDesktop,restartBrowser,desktop,injectLayoutFailure})=>{
   const button=name=>page.getByRole('button',{name,exact:true}),box=name=>page.getByRole('textbox',{name,exact:true}),nav=name=>page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name,exact:true});
   const host=async()=>(await state()).product.host;
   const dialog=()=>page.getByRole('dialog',{name:'找回内容',exact:true});
@@ -20,6 +21,35 @@ module.exports=async({page,state,saved,check,capture,out,windowSize,restartDeskt
     const prior=await metrics();await page.keyboard.press('Enter');await dialog().waitFor({state:'detached'});await button('返回搜索结果').click();await page.waitForFunction(key=>document.activeElement?.getAttribute('data-search-key')===key,prior.selected);const returned=await metrics();await page.waitForTimeout(250);const settled=await metrics();fs.writeFileSync(path.join(out,'scroll-diagnostic.json'),JSON.stringify({prior,returned,settled},null,2));check('long result return restores the actual previous position',prior.top>0&&Math.abs(settled.top-prior.top)<2);await capture('search-scroll-return');
   };
   if(process.argv.includes('--search-scroll-only')){await nav('能力库').click();await scrollJourney();return;}
+  if(process.argv.includes('--search-placement-only')){
+    await button('写下第一点想法').click();await box('标题').fill('隔离搜索放置恢复');await box('我的表达').fill('原内容保持一份；同一个失败请求只应确认一次。');await button('保存修改').click();await saved();await button('关闭线索详情').click();const baseline=await state();
+    const pending=()=>page.evaluate(()=>localStorage.getItem('trace-workbench-pending:personal'));
+    const place=()=>rows().getByRole('button',{name:'放到画布：隔离搜索放置恢复',exact:true});
+    const recovery=()=>dialog().getByRole('button',{name:'核对并重试原命令',exact:true});
+    const failPlacement=async()=>{await search('隔离搜索放置恢复','expression');await injectLayoutFailure();await place().click();await page.waitForFunction(()=>document.querySelector('.wb-save-status')?.textContent.includes('保存尚未确认'));await recovery().waitFor();};
+    await failPlacement();const failed=await state(),request=JSON.parse(await pending());
+    check('failed search placement changes neither content nor layout',failed.product.revision===baseline.product.revision&&failed.canvases[0].revision===baseline.canvases[0].revision&&failed.canvases[0].nodes.length===baseline.canvases[0].nodes.length);
+    check('one original-command recovery is inside the current dialog with the search owner',await page.locator('[aria-label="未确认操作恢复"]').count()===1&&await recovery().count()===1&&request.owner==='search:placement'&&await place().isDisabled());
+    await recovery().focus();await page.keyboard.press('Tab');check('keyboard remains in the open recovery dialog',await page.evaluate(()=>Boolean(document.activeElement?.closest('dialog[open]'))));await capture('search-placement-failure-current-render');
+    await recovery().click();await saved();let restored=await state();
+    fs.writeFileSync(path.join(out,'placement-first-retry-observation.json'),JSON.stringify({baseline,failed,request,restored,pending:await pending(),recoveryCount:await recovery().count()},null,2));
+    check('in-dialog original-command retry creates exactly one presentation and no new content',restored.product.revision===baseline.product.revision&&restored.canvases[0].nodes.length===baseline.canvases[0].nodes.length+1&&restored.canvases[0].revision===baseline.canvases[0].revision+1&&isDeepStrictEqual(restored.canvases[0].nodes,request.body.scene.nodes)&&await pending()===null&&await recovery().count()===0&&await dialog().isVisible());
+    check('confirmed retry clears stale local error rather than reporting failure again',await dialog().locator('[data-feedback-owner="search:placement"]').innerText()===''&&!await place().isDisabled());
+    await failPlacement();const requestBeforeClose=await pending();await close();const global=button('核对并重试原命令');await global.waitFor();
+    check('closing search transfers the same single pending request to workbench recovery',await global.count()===1&&requestBeforeClose===await pending());
+    if(desktop){page=(await restartDesktop({abrupt:true})).page;}else{const reloadDialogs=[];const confirmReload=dialog=>{reloadDialogs.push({type:dialog.type(),message:dialog.message()});void dialog.accept().catch(error=>reloadDialogs.push({acceptError:error.message}));};page.on('dialog',confirmReload);try{await page.reload();}finally{page.off('dialog',confirmReload);fs.writeFileSync(path.join(out,'pending-reload-dialogs.json'),JSON.stringify(reloadDialogs,null,2));}}await page.locator('[data-workbench-ready=true]').waitFor();await button('核对并重试原命令').waitFor();check((desktop?'desktop process restart':'Browser refresh')+' preserves the exact pending path, command and scene',requestBeforeClose===await pending());
+    await search('隔离搜索放置恢复','expression');await recovery().waitFor();check('reopening search owns the same pending recovery without duplication',await page.locator('[aria-label="未确认操作恢复"]').count()===1&&requestBeforeClose===await pending());
+    await recovery().click();await saved();restored=await state();check('reopened recovery adds only the second requested presentation',restored.product.revision===baseline.product.revision&&restored.canvases[0].nodes.length===baseline.canvases[0].nodes.length+2&&restored.canvases[0].revision===baseline.canvases[0].revision+2);await close();
+    // Delay receipt delivery, not persistence or returned values. The actual IDB
+    // or SQLite command completes; a user may have moved on before its response.
+    const delayReceipt=async()=>page.evaluate(()=>{const original=Response.prototype.json;Response.prototype.json=async function(...args){const result=await Reflect.apply(original,this,args);if(result?.document?.id&&Number.isInteger(result.document.revision)){Response.prototype.json=original;window.__placementReceiptReady=true;await new Promise(resolve=>{window.__releasePlacementReceipt=resolve;});}return result;};});
+    await search('隔离搜索放置恢复','expression');await delayReceipt();await place().click();await page.waitForFunction(()=>window.__placementReceiptReady);await close();await nav('能力库').click();const selectedBefore=await page.evaluate(()=>localStorage.getItem('trace-workbench:personal:resume:selected:canvas-main'));await page.evaluate(()=>{window.__releasePlacementReceipt();delete window.__placementReceiptReady;});await saved();
+    check('completion after closing search preserves the newer workspace and selection',new URL(page.url()).searchParams.get('view')==='capabilities'&&await dialog().count()===0&&selectedBefore===await page.evaluate(()=>localStorage.getItem('trace-workbench:personal:resume:selected:canvas-main')));
+    await search('隔离搜索放置恢复','expression');await delayReceipt();await place().click();await page.waitForFunction(()=>window.__placementReceiptReady);await box('搜索当前内容').fill('正在找另一个内容');await page.evaluate(()=>{window.__releasePlacementReceipt();delete window.__placementReceiptReady;});await saved();
+    check('receipt for a prior result never closes or resets a newer search query',await dialog().isVisible()&&await box('搜索当前内容').inputValue()==='正在找另一个内容'&&new URL(page.url()).searchParams.get('view')==='capabilities');
+    const final=await state();check('all four explicit placements preserve one canonical content body',final.product.revision===baseline.product.revision&&Object.keys(final.product.host.expressions).length===1&&final.canvases[0].nodes.length===baseline.canvases[0].nodes.length+4&&final.canvases[0].revision===baseline.canvases[0].revision+4);
+    fs.writeFileSync(path.join(out,'placement-recovery-final.json'),JSON.stringify({baseline,failed,firstRequest:request,final,personalData:false,modelCalls:0},null,2));return;
+  }
   const before=await state();await search('没有内容');check('empty global search does not invent records',await rows().count()===0&&Object.keys((await host()).capabilities).length===0);await button('清空检索').click();await button('返回画布').click();check('empty search cancellation changes neither content nor layout',JSON.stringify(await state())===JSON.stringify(before));
 
   await button('写下第一点想法').click();await box('标题').fill('跨区找回 木棉');await box('我的表达').fill('历史独有词：枫叶 😀 完整字符；应当保持准确版本。');await button('保存修改').click();await saved();const expression=Object.values((await host()).expressions)[0],oldText=expression.versions[2].text;
