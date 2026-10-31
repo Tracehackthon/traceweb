@@ -5,6 +5,8 @@ import {LiquidButton} from './expressive-controls';
 import {CodeBlock} from './code-block';
 import {ExecutionLog} from './execution-log';
 import {ResultAdoption} from './result-adoption';
+import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
+import {HaloDisclosure} from './halo-disclosure';
 import './task-execution.css';
 
 export type Run={kind?:string;sessionId?:string;messageId?:string;adoptions:any[];id:string;taskId:string;number:number;status:string;mode:string;projectName:string;inputHash:string;scope:Task;runtime:any;events:any[];result:any;resultHash:string;adoption?:any;error:string;review?:{decision:string;note:string};created:string;finished:string};
@@ -47,17 +49,17 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
       {active.includes(run.status)&&<button className="wb-button" disabled={busy||run.status==='cancelling'} onClick={()=>action(()=>call('cancel',{runId:run.id}))}>停止本次执行</button>}
       {interaction&&['waiting_approval','waiting_input'].includes(run.status)&&<section className="wb-execution-interaction" aria-label="运行交互">
         <h4>{run.status==='waiting_input'?'Codex需要补充信息':'Codex请求审批'}</h4><pre>{JSON.stringify(interaction,null,2)}</pre>
-        {run.status==='waiting_input'?(interaction.questions||[]).map(q=><label key={q.id}>{q.question||q.id}<input type={q.isSecret?'password':'text'} value={answers[q.id]||''} onChange={e=>setAnswers({...answers,[q.id]:e.target.value})}/></label>):<p>本版本不授予额外运行权限、联网或MCP授权。项目内写入需提交前明确勾选；此请求可拒绝或停止。</p>}
+        {run.status==='waiting_input'?(interaction.questions||[]).map(q=><HaloField key={q.id} label={q.question||q.id}><HaloInput type={q.isSecret?'password':'text'} value={answers[q.id]||''} onChange={e=>setAnswers({...answers,[q.id]:e.target.value})}/></HaloField>):<p>本版本不授予额外运行权限、联网或MCP授权。项目内写入需提交前明确勾选；此请求可拒绝或停止。</p>}
         <div className="wb-actions">{run.status==='waiting_input'?<button className="wb-button" disabled={busy} onClick={()=>action(()=>call('respond',{runId:run.id,interactionId:interaction.interactionId,requestId:crypto.randomUUID(),answers:Object.fromEntries(Object.entries(answers).map(([id,value])=>[id,{answers:[value]}]))}))}>提交本次回答</button>:null}
           <button className="wb-button" disabled={busy} onClick={()=>action(()=>run.status==='waiting_input'?call('cancel',{runId:run.id}):call('respond',{runId:run.id,interactionId:interaction.interactionId,requestId:crypto.randomUUID(),decision:'decline'}))}>拒绝本次请求</button></div>
       </section>}
-      <details><summary>本次冻结的输入与范围</summary><p>目标：{run.scope.goal}</p><p>输入指纹：{run.inputHash}</p><p>明确引用 {run.scope.refs.length} 项 · 排除 {run.scope.excluded.length} 项 · AI 指令 {run.scope.instructions?.length||0} 项；均取保存的准确版本。</p>{run.scope.plan?.map(step=><p key={step.id}>{step.text}</p>)}</details>
+      <HaloDisclosure title="本次冻结的输入与范围"><p>目标：{run.scope.goal}</p><p>输入指纹：{run.inputHash}</p><p>明确引用 {run.scope.refs.length} 项 · 排除 {run.scope.excluded.length} 项 · AI 指令 {run.scope.instructions?.length||0} 项；均取保存的准确版本。</p>{run.scope.plan?.map(step=><p key={step.id}>{step.text}</p>)}</HaloDisclosure>
       {run.result&&<section aria-label="Agent返回结果" className="wb-execution-result"><h4>{adopted?'返回结果（采用回执已保存）':'返回结果（尚未写入材料或能力）'}</h4><CodeBlock code={run.result.answer} title="执行返回正文（未自动采用）"/>{run.result.citations?.length>0&&<section><h4>本次引用</h4>{run.result.citations.map((c,i)=><blockquote key={i}><small>{c.contextId}</small><p>{c.quote}</p></blockquote>)}</section>}{run.result.uncertainties?.length>0&&<section><h4>仍不确定</h4><ul>{run.result.uncertainties.map((u,i)=><li key={i}>{u}</li>)}</ul></section>}
-        <label>复核备注<textarea aria-label="结果复核备注" value={note} onChange={e=>setNote(e.target.value)} rows={3}/></label>
+        <HaloField label="复核备注"><HaloTextarea aria-label="结果复核备注" value={note} onChange={e=>setNote(e.target.value)} rows={3}/></HaloField>
         <div className="wb-actions">{([['accepted','确认结果，仅保留在任务'],['needs_work','需要继续核对'],['rejected','不采用此结果']]as const).map(([decision,label])=><button key={decision} className="wb-button" disabled={busy||Boolean(adopted)||Boolean(error)} onClick={()=>action(()=>call('review',{runId:run.id,resultHash:run.resultHash,decision,note}))}>{label}</button>)}</div>
         {!adopted&&run.review&&<HaloNotice title="复核已保存" description={`${({accepted:'确认保留',needs_work:'需要继续核对',rejected:'不采用'}as any)[run.review.decision]}。复核本身不改写内容；逐项采纳记录见下方。`}/>} </section>}
       {!error&&run.review?.decision==='accepted'&&run.result&&<ResultAdoption run={run} client={client} refresh={refresh}/>}
-      {history.length>1&&<details><summary>此前运行与回执（{history.length-1}）</summary>{history.slice(0,-1).map(old=><section key={old.id}><strong>第 {old.number} 次：{labels[old.status]}</strong><p>{old.error||old.result?.answer||'没有已确认结果'}</p><small>{old.runtime.threadId||old.id}</small></section>)}</details>}
+      {history.length>1&&<HaloDisclosure title={<>此前运行与回执（{history.length-1}）</>}>{history.slice(0,-1).map(old=><section key={old.id}><strong>第 {old.number} 次：{labels[old.status]}</strong><p>{old.error||old.result?.answer||'没有已确认结果'}</p><small>{old.runtime.threadId||old.id}</small></section>)}</HaloDisclosure>}
       <ExecutionLog events={run.events} title="已记录的执行事件"/>
     </>}
     {error&&<p role="alert">{error} 上次记录仍保留，不代表当前执行状态。<button className="wb-button" onClick={()=>void refresh()}>重新读取执行记录</button></p>}{notice&&<p role="status">{notice}</p>}
@@ -70,5 +72,5 @@ export function ThinkingExecution({session,client,executions}:{session:Thinking;
  const message=session.messages.find(m=>m.id===selected);
  if(!message)return <p className="wb-muted">先留下问题或想法，再明确请AI回应；不会自动发送。</p>;
  const task={id:'thinking-'+session.id+'-'+message.id,title:session.title,goal:message.text,refs:session.refs,excluded:session.excluded,instructions:message.instructions||[],status:'prepared',destination:'Trace 内只读思考',results:[]}as Task;
- return <section aria-label="Trace 内真实AI"><label>回应哪段原话<select aria-label="选择思考消息" value={selected} onChange={e=>setSelected(e.target.value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</select></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} onCancelPreparation={()=>{}}/></section>;
+ return <section aria-label="Trace 内真实AI"><label>回应哪段原话<HaloSelect aria-label="选择思考消息" value={selected} onChange={e=>setSelected(e.target.value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</HaloSelect></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} onCancelPreparation={()=>{}}/></section>;
 }

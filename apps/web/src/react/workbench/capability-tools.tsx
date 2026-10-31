@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import React,{useRef,useState,useSyncExternalStore} from 'react';
 import {WorkbenchClient,makeId,type ContentEntry,type ContentRef,type ContentValue,type StepItem} from './client';
 import {WorkbenchModal} from './modal';
-import {HaloField,HaloInput,HaloTextarea,HaloSearchInput} from './halo-controls';
+import {HaloField,HaloInput,HaloTextarea,HaloSearchInput,HaloSelect} from './halo-controls';
 import {LiquidButton} from './expressive-controls';
 import './capability-tools.css';
 
@@ -36,7 +36,7 @@ function LibraryDialog({client,mode,selected=[],onClose,onInsert,onApply,actionL
   return <WorkbenchModal title={mode==='template'?'模板库':'本次 AI 指令'} onClose={()=>{if(!busy)onClose();}}><div className="wb-library-dialog">
     {creating?<form className="wb-editor" onSubmit={e=>{e.preventDefault();e.stopPropagation();void create();}}><HaloField label={mode==='template'?'模板名称':'指令名称'}><HaloInput autoFocus value={title} onChange={e=>setTitle(e.target.value)}/></HaloField><HaloField label={mode==='template'?'模板正文':'指令正文'} hint="保存在当前能力库，不修改系统指令或全局设置。"><HaloTextarea rows={6} value={prompt} onChange={e=>setPrompt(e.target.value)}/></HaloField><div className="wb-actions"><button type="button" className="wb-button" disabled={busy} onClick={()=>setCreating(false)}>返回列表，保留填写</button><LiquidButton type="submit" className="wb-button" disabled={busy||Boolean(state.pending)}>{busy?'正在保存…':mode==='template'?'保存模板':'保存指令'}</LiquidButton></div></form>:<>
       <HaloSearchInput autoFocus label={mode==='template'?'搜索模板':'搜索指令'} value={query} onValueChange={setQuery} placeholder="按名称、用途或正文搜索"/>
-      {mode==='template'&&<label>模板分组<select aria-label="模板分组" value={group} onChange={e=>setGroup(e.target.value)}><option value="all">全部</option><option value="template">提示模板</option><option value="method">已有方法</option></select></label>}
+      {mode==='template'&&<label>模板分组<HaloSelect aria-label="模板分组" value={group} onChange={e=>setGroup(e.target.value)}><option value="all">全部</option><option value="template">提示模板</option><option value="method">已有方法</option></HaloSelect></label>}
       <p className="wb-halo-hint">{mode==='template'?'选择后先预览；插入只追加到草稿，不会自动发送或覆盖原稿。':'只影响当前讨论的后续记录，或当前任务准备；历史记录和其他讨论不变。最多选择32条。停用指令不可新选，已选项仍可移除。'}</p>
       <div className="wb-library-picker-grid"><section className="wb-template-list" aria-label={mode==='template'?'可用模板':'可用指令'}>{visible.map(entry=>{const v=entry.versions[entry.version],picked=picks.find(ref=>ref.id===entry.id),disabled=entry.status==='disabled'||(mode==='instruction'&&v.usage!=='instruction')||!(mode==='instruction'?(v.prompt||''):templateText(v)).trim();return <div className="wb-template-row" key={entry.id}>
         {mode==='instruction'&&<label className="wb-library-check"><input type="checkbox" aria-label={'选用指令 '+v.title} checked={Boolean(picked)} disabled={!picked&&(disabled||picks.length>=32)} onChange={e=>setPicks(e.target.checked?[...picks,capabilityRef(entry)]:picks.filter(ref=>ref.id!==entry.id))}/></label>}

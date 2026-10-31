@@ -14,11 +14,18 @@ export function HaloField({label, hint, error, children}:{label:string;hint?:str
 }
 export const HaloInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(function HaloInput(props,ref) {
   const field = useContext(FieldContext);
-  return <span className="wb-halo-control" data-invalid={field?.invalid || props['aria-invalid'] || undefined}><input {...props} ref={ref} id={props.id || field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ') || undefined} aria-invalid={props['aria-invalid'] ?? field?.invalid} /></span>;
+  return <span className="wb-halo-control" data-disabled={props.disabled||undefined} data-invalid={field?.invalid || props['aria-invalid'] || undefined}><input {...props} ref={ref} id={props.id || field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ') || undefined} aria-invalid={props['aria-invalid'] ?? field?.invalid} /></span>;
 });
 export const HaloTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(function HaloTextarea(props,ref) {
   const field = useContext(FieldContext);
-  return <span className="wb-halo-control" data-invalid={field?.invalid || props['aria-invalid'] || undefined}><textarea {...props} ref={ref} id={props.id || field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ') || undefined} aria-invalid={props['aria-invalid'] ?? field?.invalid} /></span>;
+  return <span className="wb-halo-control" data-disabled={props.disabled||undefined} data-invalid={field?.invalid || props['aria-invalid'] || undefined}><textarea {...props} ref={ref} id={props.id || field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ') || undefined} aria-invalid={props['aria-invalid'] ?? field?.invalid} /></span>;
+});
+
+// Keep the platform picker, its keyboard behavior and form serialization.
+// Only the closed control uses the shared material; no custom listbox owner.
+export const HaloSelect = forwardRef<HTMLSelectElement,React.SelectHTMLAttributes<HTMLSelectElement>>(function HaloSelect(props,ref){
+  const field=useContext(FieldContext);
+  return <span className="wb-halo-control wb-halo-select" data-disabled={props.disabled||undefined} data-invalid={field?.invalid||props['aria-invalid']||undefined}><select {...props} ref={ref} id={props.id||field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ')||undefined} aria-invalid={props['aria-invalid']??field?.invalid}/><TraceIcon name="down" size={16}/></span>;
 });
 
 // Local, synchronous search: do not invent a waiting state or delay input/deletion.

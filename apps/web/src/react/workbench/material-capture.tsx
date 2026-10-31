@@ -1,3 +1,4 @@
+import {HaloSelect} from './halo-controls';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { makeId, type ContentEntry, type ContentValue, type WorkbenchClient } from './client';
 import { WorkbenchModal } from './modal';
@@ -56,7 +57,7 @@ export function MaterialCapture({ source, draft, onChange, onSave, onClose, clie
     {saved && <p role="status">材料正文已保留，尚未完成放置时只重试原画布布局，不重复创建材料。</p>}
     {pending && <p role="status">上一操作尚未确认。可关闭此窗口保留草稿，在工作台核对原命令后继续。</p>}
     <fieldset disabled={busy || saved || pending}>
-      {!source && <label>材料类型<select aria-label="材料类型" value={draft.kind} onChange={e => field('kind', e.target.value)}><option value="text">文字材料</option><option value="dialogue">对话片段</option><option value="code">代码片段</option><option value="web">网页摘录</option></select></label>}
+      {!source && <label>材料类型<HaloSelect aria-label="材料类型" value={draft.kind} onChange={e => field('kind', e.target.value)}><option value="text">文字材料</option><option value="dialogue">对话片段</option><option value="code">代码片段</option><option value="web">网页摘录</option></HaloSelect></label>}
       <label>材料标题<input aria-label="材料标题" value={draft.title} onChange={e => field('title', e.target.value)} /></label>
       {textual && <>
         <label>{draft.kind === 'web' ? '原网页地址（必填）' : '来源地址（可选）'}<input aria-label="来源地址" value={draft.url} onChange={e => field('url', e.target.value)} placeholder={draft.kind === 'web' ? '网页摘录需提供完整的 https:// 地址' : '没有外部地址也可保留原文'} readOnly={Boolean(source)} /></label>
@@ -71,7 +72,7 @@ export function MaterialCapture({ source, draft, onChange, onSave, onClose, clie
         <div className="wb-locator-grid"><label>开始时间（秒）<input aria-label="开始时间（秒）" inputMode="decimal" value={draft.start} onChange={e => field('start', e.target.value)} /></label><label>结束时间（秒）<input aria-label="结束时间（秒）" inputMode="decimal" value={draft.end} onChange={e => field('end', e.target.value)} /></label></div>
       </>}
       {source && ['pdf', 'image'].includes(draft.kind) && <>
-        {draft.kind === 'pdf' && <div className="wb-locator-grid"><label>PDF 页码<input aria-label="PDF 页码" inputMode="numeric" value={draft.page} onChange={e => field('page', e.target.value)} /></label><label>页面旋转<select aria-label="页面旋转" value={draft.rotation} onChange={e => field('rotation', e.target.value)}>{[0, 90, 180, 270].map(n => <option key={n} value={n}>{n}°</option>)}</select></label></div>}
+        {draft.kind === 'pdf' && <div className="wb-locator-grid"><label>PDF 页码<input aria-label="PDF 页码" inputMode="numeric" value={draft.page} onChange={e => field('page', e.target.value)} /></label><label>页面旋转<HaloSelect aria-label="页面旋转" value={draft.rotation} onChange={e => field('rotation', e.target.value)}>{[0, 90, 180, 270].map(n => <option key={n} value={n}>{n}°</option>)}</HaloSelect></label></div>}
         <p className="wb-muted">区域以所示页面左上角为起点，百分比在 0–100 内；旋转后的页面坐标独立记录。</p>
         <div className="wb-locator-grid">{([['x', '区域左侧（%）'], ['y', '区域顶部（%）'], ['width', '区域宽度（%）'], ['height', '区域高度（%）']] as const).map(([key, label]) => <label key={key}>{label}<input aria-label={label} inputMode="decimal" value={draft[key]} onChange={e => field(key, e.target.value)} /></label>)}</div>
         {url && (draft.kind === 'pdf' ? /^\d+$/.test(draft.page) && Number(draft.page) > 0 ? <Suspense fallback={<p role="status">正在准备 PDF 定位…</p>}><PdfPreview url={url} locator={region || { type: 'pdf', page: Number(draft.page), rotation: [0, 90, 180, 270].includes(Number(draft.rotation)) ? Number(draft.rotation) : 0 }} fullPage onInfo={value => setPages(value.pages)} onDocumentError={setReadError} /></Suspense> : <p role="status">填写有效页码后显示对应原页，不会改跳到其它位置。</p> : <LocalMedia kind="image" url={url} title={draft.title} locator={region} original />)}
