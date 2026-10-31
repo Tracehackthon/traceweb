@@ -4,26 +4,29 @@
 
 ## Windows 桌面端
 
-### 0.2.12 本机工作台更新（2026-11-01）
+### 0.2.13 本机 Agent 执行与回流（2026-11-01）
 
-本次为用户明确要求的本地构建、NSIS更新与安装后复验，未上传公开Release。启动默认打开思考画布、能力库与Agent协作的新工作台；原生受限IPC直接连接固定Product包的SQLite owner，不再将新画布/原件接口转发给旧Runtime。
+本次是用户授权的本机更新，不是公开Release。默认打开新工作台；“Agent 协作 → 外部任务”现在可以提交并执行本机Codex，而不只是保存准备。Trace内思考仍为手动记录，未据此外推为全部AI协作完成。
 
-- 新内容与原件在`userData/state/workbench/`，原`state/web.sqlite`、`agent.sqlite`和设置/草稿不转换、不覆盖。右上角“工作台更多操作 → 打开旧版内容（独立保留）”仍打开旧库；新工作台不宣称已接通真实Agent执行。
-- Windows新工作台使用原生窗口标题栏，避免原先40px拖动遮罩吞掉顶栏搜索/菜单。旧版窗口保留原布局。
-- 构建包含完整未修改MiSans字体/许可、主题预加载、固定本地PDF资源、旧页面入口及`workbench-store-provenance.json`。新store从固定`@trace/product-workspace@0.3.0-frontend.3`打入主进程，原Runtime仍为合约中的0.8.0，不谎报升级了它。
-- 本轮按源码快照打包，原因是现场另有持续变更。源码清单、候选/安装后19项实际桌面流程、SQLite真写锁失败恢复、两次进程重启、安装器与已安装payload哈希、备份及正常用户实例交付回执在仓库`.test-results/desktop-halo-release/`；测试全部使用项目内隔离profile，没有往个人库写入合成材料。
-- 新版已经通过NSIS更新到本机，安装后再次从实际可执行文件重跑19项。个人原有14个备份文件安装后逐字节一致；正常启动后旧内容库仍逐字节不变。正常使用实例已打开空白新画布，仅准备空工作区、未复制测试内容。
-- 本机产物：`release/0.2.12/Trace-Desktop-0.2.12-Setup.exe`，未签名。旧程序、原内容/草稿/设置的可回退副本只在忽略的项目证据目录，禁止提交或上传。
+1. 保存任务准备，确认明确引用和准确版本；选择执行项目，可先检查Codex连接。
+2. 点击“提交并执行”才启动真实模型，可能使用当前Codex额度。默认项目只读；确需修改文件时，在提交前明确勾选项目写入。模型继承本机默认配置，不为产品强选模型。
+3. 执行事件、原生thread/turn和校验后的结果回到同一个任务。结果可确认保留、继续核对或不采用，复核记录绑定结果hash；不会自动改写材料、当前理解或能力。
+4. 失败、中断或超时保留原输入、引用、回执和此前尝试；核对项目现状后明确重试。重试新建原生turn/thread，不冒充继续旧turn，不自动回滚已经发生的文件改动。进程重启不自动执行或重复扣用额度。
 
-验证命令（仓库根目录，针对实际已安装程序，需新运行名）：
+Product `0.3.0-frontend.4`继续拥有内容schema 2与任务准备；`userData/state/workbench/executions/agent.sqlite`只拥有执行尝试、冻结输入、事件、结果和复核，不双写内容。原`state/web.sqlite`、旧`agent.sqlite`和设置/草稿不转换、不覆盖，菜单仍可打开旧内容。无文字摘录的原件不会静默上传，引用失效或禁止使用会拒绝提交。额外运行权限、会话权限、联网和MCP授权请求不在本入口开放；可以拒绝或停止。项目内写入在正常受限执行环境中工作，提权类任务不在本轮范围。
+
+本轮直接复用合约内Runtime `0.8.0`的真实native Codex adapter，没有修改/冒充Runtime版本，也没有用假模型、替代HTTP服务或旧事项伪造新任务回执。冻结来源、真实模型端到端、保存回归、NSIS安装同一payload、个人数据保留和正常实例交付的权威回执均在仓库忽略目录`.test-results/desktop-agent-release/`，详细失败/重试与最终范围见总控任务记录。测试只提交项目内自产随机材料，不使用个人库。
+
+重放实际安装程序的端到端流程（仓库根目录，需新运行名；会调用真实模型）：
 
 ```powershell
 $env:TRACE_DESKTOP_EXE='D:/trace/Trace.exe'
-$env:TRACE_DESKTOP_HALO_RUN='fresh-installed-run'
-node scripts/desktop-halo-e2e.cjs
+$env:TRACE_DESKTOP_AGENT_LIVE='1'
+$env:TRACE_DESKTOP_AGENT_RUN='fresh-installed-run'
+node scripts/desktop-agent-e2e.cjs
 ```
 
-本次发行一致性校验使用冻结快照内的`scripts/release-smoke.mjs --unpacked D:/trace --expected-version 0.2.12`，核验快照来源、原生store、286项Web资产和609项Runtime文件。不能用之后变化的工作树冒充本次安装来源。代码/业务验证不代表15组功能完整验收；实体触屏、物理IME/读屏、其它平台未运行。
+本机安装器为`release/0.2.13/Trace-Desktop-0.2.13-Setup.exe`，尚未代码签名、未上传公开Release。来源一致性须使用本轮冻结快照中的`scripts/release-smoke.mjs --unpacked D:/trace --expected-version 0.2.13`，不能让之后变化的工作树冒充安装来源。原0.2.12保存/标题栏/字体/本地PDF/旧内容接入保留，原验证回执仍归`.test-results/desktop-halo-release/`，不累加为新功能验收。实体设备/读屏、其它平台、额外授权交互、完整15组功能及个人库迁移未在本轮验收。
 
 ### 既有公开发行与旧版Codex入口
 
@@ -64,7 +67,7 @@ npm ci
 npm run dist:win
 ```
 
-产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.12 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.13 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
 
 桌面 Runtime 不是任意 `trace-runtime` checkout：`runtime-contract.json` 固定了包含首启 Codex qualifier 的来源 commit `a088b8658d76d1f825366fa8060712592b6460db`（`codex/fix-packaged-codex-qualification-0.8.0`）。发布前将该 commit 放在干净 checkout 中，并通过 `TRACE_RUNTIME_SOURCE` 指向它；staging 会拒绝其他 commit，不会把缺少 qualifier 的 Runtime 伪装成 release-ready。首次准备 checkout 或依赖目录被清理后，先在 Runtime 根目录执行 `corepack pnpm install --frozen-lockfile`；脚本也会在检测到 MCP workspace junction 缺失时以同一锁文件策略恢复依赖，并在 build 后验证 `@modelcontextprotocol/sdk` server paths 与 `zod/v3` 已 materialize。
 

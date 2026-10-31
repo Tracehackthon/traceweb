@@ -1,0 +1,14 @@
+.wb-execution { display:grid; gap:16px; margin-top:24px; padding-top:24px; border-top:0.5px solid var(--trace-border-subtle); }
+.wb-execution>header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
+.wb-execution h3,.wb-execution h4 { font-size:14px; line-height:24px; margin:0; }
+.wb-execution p { font-size:14px; line-height:24px; margin:0; overflow-wrap:anywhere; }
+.wb-execution-receipt { color:var(--trace-text-secondary); font-variant-numeric:tabular-nums; font-size:12px!important; }
+.wb-execution label { display:grid; gap:8px; font-size:14px; }
+.wb-execution .wb-check { display:flex; align-items:center; gap:8px; }
+.wb-execution input:not([type=checkbox]),.wb-execution textarea { width:100%; padding:12px; color:var(--trace-text-primary); background:var(--trace-surface-muted); border:0.5px solid var(--trace-border-control); border-radius:8px; resize:vertical; }
+.wb-execution-result,.wb-execution-interaction { display:grid; gap:16px; padding:16px; border-radius:12px; background:var(--trace-surface-muted); }
+.wb-execution-result>p,.wb-execution-result li,.wb-execution-result blockquote p { white-space:pre-wrap; }
+.wb-execution blockquote { margin:8px 0; padding-left:12px; border-left:2px solid var(--trace-border-control); }
+.wb-execution pre { margin:0; max-height:240px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
+.wb-execution details { overflow-wrap:anywhere; font-size:12px; color:var(--trace-text-secondary); }
+.wb-execution summary { cursor:pointer; min-height:32px; }

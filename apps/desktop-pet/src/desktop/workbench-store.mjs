@@ -1,5 +1,6 @@
 import {Readable} from 'node:stream'
 import {createProductWorkspace} from '@trace/product-workspace/node'
+import {resolveContentRef,stableWorkbenchJson} from '@trace/product-workspace'
 
 const RESPONSE_KIND = 'trace.native-product-response@1'
 const jsonLimit = 8 * 1024 * 1024
@@ -26,6 +27,24 @@ export function createDesktopWorkbench({file}) {
     return {bytes:new Uint8Array(bytes),mime:headers['content-type']||'application/octet-stream'}
   }
   return {
+    taskSnapshot(id) {
+      const host=workspace().read().host,task=host?.tasks?.[id]
+      if(!task||task.status!=='prepared')throw Error('任务准备不可用或已取消。')
+      if(task.execution)throw Error('任务已绑定其他执行回执，请从原回执入口继续，未重复提交。')
+      const excluded=new Set(task.excluded.map(ref=>stableWorkbenchJson(ref)))
+      const fragments=[]
+      for(const [role,refs] of [['reference',task.refs],['instruction',task.instructions||[]]])for(const ref of refs){
+        if(excluded.has(stableWorkbenchJson(ref)))continue
+        const {item,value}=resolveContentRef(host,ref,{forUse:true})
+        let text=ref.kind==='capability'?JSON.stringify(value):value.text
+        if(ref.anchor?.type==='text')text=text.slice(ref.anchor.start,ref.anchor.end)
+        if(!text?.trim())throw Error('所选材料没有文字摘录，请先摘取文字；不会自动上传原件。')
+        fragments.push({id:`${role}:${fragments.length+1}`,role,revision:ref.version,text,title:item.title,ref:structuredClone(ref)})
+      }
+      const result={task:structuredClone(task),fragments}
+      if(Buffer.byteLength(JSON.stringify(result))>256*1024)throw Error('本次引用超过256 KiB，请缩小文字范围后再提交。')
+      return result
+    },
     async request(request) {
       if(request?.operation==='workbench.request'){
         const p=request.pathname,m=request.method||'GET'

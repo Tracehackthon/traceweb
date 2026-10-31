@@ -9,6 +9,7 @@ import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
 import { bindNativeAgentProject } from './runtime-project-binding.mjs'
 import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
 import { createDesktopWorkbench } from './workbench-store.mjs'
+import { createWorkbenchAgent } from './workbench-agent.mjs'
 import { clearVersionBoundStorage } from './storage-lifecycle.mjs'
 import { isAddressInUse, isLoopbackHttpOrigin, selectLoopbackPort } from './runtime-port-selection.mjs'
 import { probeProductWorkspace } from './runtime-readiness.mjs'
@@ -37,6 +38,7 @@ let tray
 let quitting = false
 let capabilityClient
 let desktopWorkbench
+let workbenchAgent
 let bundledRuntime
 const discussionWindows = new Set()
 let zhihuAuthWindow
@@ -72,12 +74,12 @@ const shutdownController = createDesktopShutdownController({
     stopBundledRuntimeRecovery()
   },
   closeCapability: () => {
-    desktopWorkbench?.close()
-    desktopWorkbench = undefined
     capabilityClient?.close?.()
     capabilityClient = undefined
   },
   closeRuntime: async () => {
+    await workbenchAgent?.close()
+    desktopWorkbench?.close()
     try { await bundledRuntimeStartPromise } catch { /* startup failure has already been reported */ }
     const runtime = bundledRuntime
     bundledRuntime = undefined
@@ -836,6 +838,11 @@ if (!ownsInstance) {
     void (async () => {
       installDiscussionProtocol()
       desktopWorkbench = createDesktopWorkbench({file:join(app.getPath('userData'),'state','workbench','web.sqlite')})
+      workbenchAgent = createWorkbenchAgent({directory:join(app.getPath('userData'),'state','workbench','executions'),
+        runtimeRoot:app.isPackaged?join(process.resourcesPath,'trace-runtime'):resolve(root,'../../runtime-dist'),store:desktopWorkbench,
+        getExecutable:()=>resolveCodexExecutable(),getProject:()=>readDesktopSettings().projectDir||process.env.TRACE_PROJECT_DIR,
+        onChange:()=>{for(const window of discussionWindows)if(!window.isDestroyed())window.webContents.send('trace-native:agent-tasks-changed')},
+      })
       try { await ensureBundledRuntime() }
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
       if (quitting) return
@@ -929,6 +936,16 @@ ipcMain.on('trace-native:discussion-candidate', (event, payload) => {
 ipcMain.handle('trace-native:capability', async (event, request) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender)
   if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) throw new Error('Capability caller is not a Trace window')
+  if(request?.operation==='workbench.agent.project.select'){
+    if(!discussionWindows.has(senderWindow))throw Error('只能在任务工作面选择项目')
+    const result=await dialog.showOpenDialog(senderWindow,{title:'选择本次Agent执行项目',properties:['openDirectory']})
+    if(!result.canceled&&result.filePaths[0]){writeDesktopSettings({...readDesktopSettings(),projectDir:result.filePaths[0]});bindNativeAgentProject(result.filePaths[0]);capabilityClient?.setProjectDir?.(result.filePaths[0])}
+    return workbenchAgent.request({operation:'workbench.agent.status'})
+  }
+  if(typeof request?.operation==='string'&&request.operation.startsWith('workbench.agent.')){
+    if(!discussionWindows.has(senderWindow)||!workbenchAgent)throw Error('本机执行器尚未就绪')
+    return workbenchAgent.request(request)
+  }
   if (request?.operation==='workbench.legacy.open') {
     if(!discussionWindows.has(senderWindow))throw Error('只能从 Trace 工作台打开旧内容')
     openDiscussion(`${discussionOrigin}/?view=home`)
@@ -936,6 +953,7 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
   }
   if (['workbench.request','product.resource.save','product.resource.read'].includes(request?.operation)) {
     if(!discussionWindows.has(senderWindow)||!desktopWorkbench)throw Error('Trace 本机工作区尚未就绪')
+    if(request.operation==='workbench.request'&&request.method==='POST'&&request.body?.operations?.some(op=>['task.cancel','task.execution'].includes(op.type)&&workbenchAgent?.hasAttempt(op.id)))throw Error('任务已有本机执行记录，请在执行面板处理，不能取消准备或改绑另一份回执。')
     return desktopWorkbench.request(request)
   }
   if (typeof request?.operation === 'string' && request.operation.startsWith('project.lifecycle.')) {

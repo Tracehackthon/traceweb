@@ -20,6 +20,11 @@ ipcRenderer.on('trace-native:setup-progress', (_event, payload) => {
 })
 
 contextBridge.exposeInMainWorld('traceNative', {
+  onAgentTasksChanged(listener) {
+    if(typeof listener!=='function')return undefined
+    const handler=()=>listener();ipcRenderer.on('trace-native:agent-tasks-changed',handler)
+    return ()=>ipcRenderer.removeListener('trace-native:agent-tasks-changed',handler)
+  },
   getRuntimeStatus() {
     try { return ipcRenderer.sendSync('trace-native:runtime-status') }
     catch { return null }
