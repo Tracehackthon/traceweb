@@ -57,3 +57,57 @@ html[data-trace-appearance] :is(.wb-liquid-button,.wb-thinking-composer .wb-prim
 
 html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea) { caret-color:var(--trace-material-accent); }
 html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea)::selection { color:var(--trace-text-primary); background:color-mix(in srgb,var(--trace-material-accent) 20%,var(--trace-surface-panel)); }
+
+/* Shared material palette; override these tokens rather than coloring each demo. */
+:root[data-trace-appearance] {
+  --trace-material-surface:#f3f5f7;
+  --trace-material-focus-surface:#e8edf2;
+  --trace-material-edge:#8595a3;
+  --trace-material-accent:#455d72;
+  --trace-material-accent-end:#354b5d;
+  --trace-material-on-accent:#fff;
+  --trace-material-shadow-color:#40566c;
+  --trace-material-shadow:0 3px 10px color-mix(in srgb,var(--trace-material-shadow-color) 12%,transparent);
+  --trace-material-focus-shadow:0 4px 14px color-mix(in srgb,var(--trace-material-shadow-color) 26%,transparent);
+}
+:root[data-trace-appearance=dark] {
+  --trace-material-surface:#28313a;
+  --trace-material-focus-surface:#35434f;
+  --trace-material-edge:#8095a7;
+  --trace-material-accent:#bdcddd;
+  --trace-material-accent-end:#a6bbce;
+  --trace-material-on-accent:#1b2935;
+  --trace-material-shadow-color:#071421;
+}
+
+
+.wb-gooey-surfaces i { position:absolute; inset:0; border-radius:999px; background:var(--trace-material-surface); box-shadow:inset 0 0 0 .5px var(--trace-material-edge); }
+
+.wb-gooey-trigger { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:8px; background:transparent; border:0; border-radius:999px; color:var(--trace-text-primary); cursor:pointer; }
+
+.wb-gooey-search input { width:100%; height:100%; padding:0; border:0; background:transparent; color:var(--trace-text-primary); font:inherit; min-width:0; }
+
+.wb-gooey-search:focus-within { outline:none; border-radius:999px; box-shadow:var(--trace-material-focus-shadow); }
+.wb-gooey-search:focus-within .wb-gooey-surfaces i { background:var(--trace-material-focus-surface); }
+
+html[data-trace-appearance] .wb-shell .wb-liquid-button { position:relative; isolation:isolate; overflow:visible; border-radius:999px; background:color-mix(in srgb,var(--trace-material-surface) 85%,transparent); color:var(--trace-text-primary); border:0.5px solid var(--trace-border-control); box-shadow:var(--trace-material-shadow),inset 1px 1px 1px -.5px var(--trace-material-edge),inset -1px -1px 1px -.5px var(--trace-material-edge); }
+.wb-liquid-surface { position:absolute; inset:0; z-index:-1; border-radius:inherit; overflow:hidden; pointer-events:none; background:linear-gradient(145deg,var(--trace-material-surface),var(--trace-material-focus-surface)); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
+
+html[data-trace-appearance] .wb-thinking-composer { border-radius:20px; padding:16px; background:var(--sand-2); box-shadow:var(--trace-material-shadow),inset 0 1px 0 var(--trace-surface-panel); }
+
+html[data-trace-appearance] .wb-thinking-composer:focus-within { outline:none; border-color:var(--trace-material-edge); background:var(--trace-material-surface); box-shadow:var(--trace-material-focus-shadow); }
+
+html[data-trace-appearance] .wb-thinking-composer .wb-primary { min-height:40px; border-radius:999px; background:linear-gradient(to bottom,var(--trace-material-accent),var(--trace-material-accent-end)); color:var(--trace-material-on-accent); box-shadow:inset 0 1px 0 color-mix(in srgb,var(--trace-material-on-accent) 22%,transparent),var(--trace-material-shadow); border:0.5px solid var(--trace-material-accent-end); }
+
+.wb-gooey-clear { color:var(--trace-text-primary); }
+
+
+/* Local focus treatment: contrast + tinted drop shadow, not a neon outline. */
+html[data-trace-appearance] .wb-gooey-search :is(button,input):focus-visible,
+html[data-trace-appearance] .wb-thinking-composer textarea:focus-visible { outline:none; }
+html[data-trace-appearance] :is(.wb-gooey-search,.wb-thinking-composer):has(:focus-visible) { box-shadow:0 5px 16px color-mix(in srgb,var(--trace-material-shadow-color) 34%,transparent); }
+html[data-trace-appearance] :is(.wb-liquid-button,.wb-thinking-composer .wb-primary):focus-visible { outline:1px solid var(--trace-material-edge); outline-offset:2px; box-shadow:var(--trace-material-focus-shadow); }
+@media (forced-colors:active) { html[data-trace-appearance] :is(.wb-gooey-search,.wb-thinking-composer):focus-within { outline:2px solid Highlight; box-shadow:none; } }
+
+html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea) { caret-color:var(--trace-material-accent); }
+html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea)::selection { color:var(--trace-text-primary); background:color-mix(in srgb,var(--trace-material-accent) 20%,var(--trace-surface-panel)); }

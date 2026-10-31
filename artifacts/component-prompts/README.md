@@ -84,3 +84,10 @@ node scripts/expressive-controls-e2e.cjs
 - **重试通过：14项**，报告 `.test-results/component-prompts/halo-tabs-browser-verified/report.json`，包含真实创建/保存表达→鼠标/方向键/Home/End切栏→来源/正文→刷新恢复、ARIA连接、浅深色、390px/减少动态、44px目标和控制台。截图已目视复查。构建日志 `halo-build.log`。
 - 首次失败：脚本在Radix异步聚焦后过早断言；改为等待选中态。首次重试在窄窗刷新后误点已被详情覆盖的卡片；改为使用已恢复的详情栏目，不强制点击。视觉复查删除旧tab伪元素underline。失败报告保留诊断，不当成当前验收。
 - 未运行：Electron/安装版、实体触屏、物理IME和读屏、Safari/Firefox。其余矩阵项为已分析/待适配或明确不采用，不算已实现。存在其他工作中的Halo输入/导入文件，本轮不覆盖、不代其验收。
+
+
+### 组件颜色与焦点适配（2026-11-01）
+
+用户允许对素材颜色作局部适配，并拒绝突兀高亮。搜索反白黑改为低饱和蓝灰表面；讨论提交从绿改为墨蓝灰；玻璃表面、光标、文本选区、聚焦投影统一使用 `--trace-material-*` token。保留黏液/玻璃结构；搜索和讨论输入不再叠加亮绿外圈/5px光晕，用底色对比与有方向的色阴影反馈，按钮键盘焦点及强制颜色模式仍可辨。
+
+验证：`node scripts/material-palette-e2e.cjs`（已运行环境 `TRACE_PALETTE_RUN=browser-final`，默认URL为当前4326预览），14项端到端重试通过。初次脚本在requestAnimationFrame移焦前即时断言，已改为等待真实焦点条件，不加入固定等待。浅/深色搜索文本对比度13.84/8.74，主操作最弱渐变端点6.86/7.50，均超过4.5:1。报告：`.test-results/component-prompts/focus-palette/browser-final/report.json`。未增加功能或模型调用，未验证安装版/实体触屏/其他浏览器。
