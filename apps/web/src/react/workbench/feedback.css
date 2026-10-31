@@ -9,10 +9,14 @@ html[data-trace-appearance] :is(.wb-shell,.wb-dialog) .wb-halo-notice[data-compa
 .wb-feedback-recovery>.wb-actions { padding:0!important;border:0!important; }
 .wb-feedback-recovery>.wb-halo-disclosure { margin:0; }
 .wb-feedback-detail { white-space:pre-wrap;overflow-wrap:anywhere; }
-.wb-feedback-global { position:absolute;left:24px;right:24px;bottom:88px;z-index:30;max-height:40dvh;overflow:auto;padding:16px;border-radius:16px;background:var(--trace-surface-panel);box-shadow:var(--trace-shadow-menu); }
+.wb-main:has(>.wb-feedback-global) { display:flex;flex-direction:column; }
+.wb-main:has(>.wb-feedback-global)>:is(.wb-canvas-layout,.wb-library-layout,.wb-collaboration,.wb-onboarding) { flex:1;min-height:0;height:auto; }
+.wb-feedback-global { position:relative;order:-1;flex:none;margin:12px 24px;max-height:36dvh;overflow:auto;padding:12px 16px;border-radius:12px;background:var(--trace-surface-panel);box-shadow:var(--trace-state-idle-shadow); }
+.wb-feedback-global>.wb-feedback-recovery { grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 16px; }
+.wb-feedback-global .wb-halo-disclosure { grid-column:1 / -1; }
 .wb-halo-progress[data-indeterminate=true] { display:block; }
 .wb-halo-progress[data-indeterminate=true]>div { display:flex;align-items:center;justify-content:flex-start;gap:8px; }
 .wb-feedback-spinner { flex:none;animation:trace-working 1000ms linear infinite; }
-@media(max-width:767px){.wb-feedback-global { left:12px;right:12px;bottom:140px;max-height:36dvh; }.wb-feedback-recovery .wb-actions { flex-wrap:wrap; }}
+@media(max-width:767px){.wb-feedback-global { margin:8px 12px;padding:12px;max-height:32dvh; }.wb-feedback-global>.wb-feedback-recovery { grid-template-columns:1fr; }.wb-main:has(>.wb-feedback-global) .wb-list-pane { max-height:24dvh; }.wb-feedback-recovery .wb-actions { flex-wrap:wrap; }}
 html[data-reduce-motion=true] :is(.wb-feedback-spinner,.wb-halo-notice[data-pending=true] svg) { animation:none!important; }
 @media(prefers-reduced-motion:reduce){:is(.wb-feedback-spinner,.wb-halo-notice[data-pending=true] svg) { animation:none!important; }}

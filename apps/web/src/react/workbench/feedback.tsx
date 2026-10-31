@@ -15,10 +15,10 @@ export function FeedbackProvider({children}:{children:React.ReactNode}){
   return <FeedbackOwners.Provider value={value}>{children}</FeedbackOwners.Provider>;
 }
 
-function RecoveryFeedback({client,state}:{client:WorkbenchClient;state:WorkbenchState}){
+function RecoveryFeedback({client,state,compact=false}:{client:WorkbenchClient;state:WorkbenchState;compact?:boolean}){
   const exportCommand=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(state.pending,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='Trace-unconfirmed-command.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
   return <section className="wb-feedback-recovery" data-pending-owner={state.pending?.owner||'workspace'} aria-label="未确认操作恢复" aria-busy={state.saving}>
-    <HaloNotice tone={state.saving?'neutral':'error'} pending={state.saving} title={state.saving?'正在核对原命令…':'保存尚未确认'} description="草稿仍保留。核对原命令后再继续，不要重复提交。"/>
+    <HaloNotice compact={compact} tone={state.saving?'neutral':'error'} pending={state.saving} title={state.saving?'正在核对原命令…':'保存尚未确认'} description="草稿仍保留。核对原命令后再继续，不要重复提交。"/>
     <div className="wb-actions"><button type="button" className="wb-button" disabled={state.saving} onClick={()=>void client.retry()}><TraceIcon name="history"/>核对并重试原命令</button></div>
     <HaloDisclosure title="失败详情与其他恢复方式"><p className="wb-feedback-detail">{state.error}</p><div className="wb-actions"><button type="button" className="wb-button" disabled={state.saving} onClick={exportCommand}>导出未确认操作</button><button type="button" className="wb-button" disabled={state.saving} onClick={()=>void client.reloadAfterConflict()}>保留本地草稿，读取当前版本</button></div><p className="wb-halo-hint">重新读取只核对已保存内容，不会自动提交当前编辑。</p></HaloDisclosure>
   </section>;
@@ -36,7 +36,7 @@ export function FormFeedback({client,owner,busy=false,pendingLabel='正在保存
 
 export function GlobalFeedback({client,notice,onDismiss}:{client:WorkbenchClient;notice:string;onDismiss:()=>void}){
   const state=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot),{owners}=useContext(FeedbackOwners);
-  if(state.pending){if(state.pending.owner&&owners.has(state.pending.owner))return null;return <div className="wb-feedback-global"><RecoveryFeedback client={client} state={state}/></div>;}
+  if(state.pending){if(state.pending.owner&&owners.has(state.pending.owner))return null;return <div className="wb-feedback-global"><RecoveryFeedback compact client={client} state={state}/></div>;}
   if(!state.error&&!notice)return null;
   return <div className="wb-feedback-global"><HaloNotice tone="warning" title={state.error||notice} onDismiss={state.error?undefined:onDismiss} actions={state.error?<button type="button" className="wb-button" disabled={state.loading} onClick={()=>void client.reloadAfterConflict()}>重新读取已保存内容</button>:undefined}/></div>;
 }

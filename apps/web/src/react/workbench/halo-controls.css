@@ -26,8 +26,8 @@ html[data-reduce-motion=true] :is(.wb-halo-control,.wb-halo-search,.wb-drop-halo
 @media(prefers-reduced-motion:reduce) { .wb-halo-control,.wb-halo-search,.wb-drop-halo { animation:none!important; transition:none!important; } }
 
 .wb-import-panel>header { position:sticky; top:-16px; z-index:2; padding:8px 0; background:var(--trace-surface-panel); }
-.wb-shell:has(.wb-feedback-global)>.wb-import-panel { bottom:180px; }
-@media(max-width:767px) { .wb-import-panel>header { top:-12px; flex-wrap:wrap; }.wb-shell:has(.wb-feedback-global)>.wb-import-panel { bottom:260px; max-height:28dvh; } }
+
+@media(max-width:767px) { .wb-import-panel>header { top:-12px; flex-wrap:wrap; } }
 
 
 /* Keep the import queue away from the source inspector and its actions. */
