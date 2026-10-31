@@ -1090,6 +1090,11 @@ export function createRuntimeCapabilityClient({
       beginAgentEventSubscription(submitted.run.runId)
       return { ...submitted.run, ...(sources ? { sources: { source: sources.source, items: sources.items } } : {}) }
     }
+    if (request.operation === 'agent.run.receipt') {
+      const runId=requireId(request.runId,'Agent 运行'),after=request.after??0;
+      if(!/^[a-zA-Z0-9-]{1,200}$/.test(runId)||!Number.isSafeInteger(after)||after<0)throw new Error('运行身份或事件游标无效');
+      return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/receipt?after=${after}`,undefined,10_000);
+    }
     if (request.operation === 'agent.run.read') {
       const runId = requireId(request.runId, 'Agent 运行')
       return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}`, undefined, 10_000)
