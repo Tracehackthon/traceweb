@@ -10,6 +10,7 @@
 @import '@radix-ui/colors/tomato-dark.css';
 @import '@radix-ui/colors/black-alpha.css';
 @import './workbench-typography.css';
+@import './workbench-actions.css';
 
 /* Current workbench only; inherited by dialogs and body-mounted Radix portals. */
 :root[data-trace-appearance] {

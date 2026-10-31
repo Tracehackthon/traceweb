@@ -1,14 +1,18 @@
 import {HaloCollapse} from './halo-disclosure';
 import React,{useEffect,useRef} from 'react';
 import {ToggleGroup} from 'radix-ui';
-import {TraceIcon} from '../ui/icon';
+import {TraceIcon,type IconName} from '../ui/icon';
 import type {ContentEntry} from './client';
 import './halo-surfaces.css';
 import {useSurfaceMotion} from './motion';
 
-export type HaloTone='neutral'|'success'|'warning'|'error';
-export function HaloBadge({children,tone='neutral',className=''}:{children:React.ReactNode;tone?:HaloTone;className?:string}){
-  return <span className={'wb-halo-badge '+className} data-tone={tone}>{children}</span>;
+export type HaloTone='neutral'|'accent'|'success'|'warning'|'error';
+export function HaloBadge({children,tone='neutral',className='',icon,...props}:{children:React.ReactNode;tone?:HaloTone;className?:string;icon?:IconName}&React.HTMLAttributes<HTMLSpanElement>){
+  return <span {...props} className={'wb-halo-badge '+className} data-tone={tone}>{icon&&<TraceIcon name={icon} size={16}/>}<span className="wb-badge-label">{children}</span></span>;
+}
+export function HaloEmptyState({title,description,icon='document',kind,compact=false,children}:{title:string;description:string;icon?:IconName;kind:string;compact?:boolean;children?:React.ReactNode}){
+  const id=React.useId();
+  return <section className="wb-empty-state" data-empty-state={kind} data-compact={compact||undefined} aria-labelledby={id}><span className="wb-empty-symbol"><TraceIcon name={icon} size={20}/></span><h3 id={id}>{title}</h3><p>{description}</p>{children&&<div className="wb-actions">{children}</div>}</section>;
 }
 
 // A non-empty single selection. Radix supplies roving keys; selecting the
@@ -63,7 +67,7 @@ export function HaloProgress({value=null,max=1,label,valueText}:{value?:number|n
 
 const stateLabels:Record<string,string>={draft:'草稿',published:'个人库已发布',trial:'试用准备',disabled:'已停用'};
 export function CapabilityStatus({status}:{status:string}){
-  return <HaloBadge tone={status==='published'?'success':status==='disabled'?'warning':'neutral'}>{stateLabels[status]||status}</HaloBadge>;
+  return <HaloBadge data-capability-status={status} icon={status==='published'?'check':status==='disabled'?'idle':status==='trial'?'pending':'pencil'} tone={status==='published'?'success':status==='trial'?'accent':'neutral'}>{stateLabels[status]||status}</HaloBadge>;
 }
 
 // MinimalCard's content hierarchy without a fake image or a nested action.

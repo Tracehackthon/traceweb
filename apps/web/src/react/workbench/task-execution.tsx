@@ -1,6 +1,7 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import type {Task,Thinking,WorkbenchClient} from './client';
-import {HaloBadge,HaloNotice,HaloProgress} from './halo-surfaces';
+import {HaloBadge,HaloNotice,HaloProgress,type HaloTone} from './halo-surfaces';
+import {TraceIcon,type IconName} from '../ui/icon';
 import {LiquidButton} from './expressive-controls';
 import {CodeBlock} from './code-block';
 import {ExecutionLog} from './execution-log';
@@ -22,6 +23,23 @@ export function useAgentRuns(){
 }
 export function agentTaskLabel(task:Task,runs:Run[],ready:boolean,error=''){const run=runs.filter(r=>r.taskId===task.id).at(-1);return error?'读取中断，当前状态未知':run?(run.adoptions?.some(a=>a.status==='committed')?'部分结果已采纳':run.review?'结果已复核':labels[run.status]||run.status):!ready?'读取执行状态…':task.status==='prepared'?'准备已保存，尚未提交':'已取消准备';}
 
+// Presentation only: neither a provider terminal state nor a review is an adoption receipt.
+function agentBadgeAppearance(run:Run|undefined,ready:boolean,error=''):{tone:HaloTone;icon:IconName}{
+  if(error)return{tone:'warning',icon:'error'};
+  if(!ready)return{tone:'neutral',icon:'pending'};
+  if(!run)return{tone:'neutral',icon:'document'};
+  if(run.adoptions?.some(a=>a.status==='committed'))return{tone:'success',icon:'check'};
+  if(run.review)return{tone:'accent',icon:'document'};
+  if(run.status==='failed'||run.status==='timed_out')return{tone:'error',icon:'error'};
+  if(run.status==='succeeded')return{tone:'warning',icon:'document'};
+  if(['waiting_approval','waiting_input','interrupted'].includes(run.status))return{tone:'warning',icon:'pending'};
+  return{tone:active.includes(run.status)?'accent':'neutral',icon:active.includes(run.status)?'pending':'idle'};
+}
+export function AgentTaskBadge({task,runs,ready,error=''}:{task:Task;runs:Run[];ready:boolean;error?:string}){
+  const run=runs.filter(r=>r.taskId===task.id).at(-1);
+  return <HaloBadge {...agentBadgeAppearance(run,ready,error)} data-task-state={task.status} data-run-state={run?.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
+}
+
 export function TaskExecution({task,client,executions,onCancelPreparation,thinking}:{task:Task;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onCancelPreparation:()=>void;thinking?:{sessionId:string;messageId:string}}){
   const {runs,refresh,ready,error}=executions,history=runs.filter(r=>r.taskId===task.id),run=history.at(-1);
   const [setup,setSetup]=useState<any>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[write,setWrite]=useState(false),[note,setNote]=useState(''),[answers,setAnswers]=useState<Record<string,string>>({});
@@ -32,13 +50,13 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
   if(task.execution)return <p className="wb-muted">本任务已有其他执行回执，请从既有回执面板继续核验；不会重复提交。</p>;
   const interaction=run?.runtime?.interaction,adopted=Boolean(run?.adoptions?.some(a=>a.status==='committed'));
   return <section className="wb-execution" aria-label="任务执行与结果复核" data-status={run?.status||'prepared'} data-run-id={run?.id}>
-    <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3><HaloBadge tone={!error&&run?.status==='failed'?'error':!error&&run?.status==='succeeded'?'success':'neutral'}>{error?'读取中断，当前状态未知':run?adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?'尚未提交':'正在核对执行记录'}</HaloBadge></header>
+    <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3><HaloBadge {...agentBadgeAppearance(run,ready,error)} data-execution-status={error?'unknown':run?.status||'prepared'}>{error?'读取中断，当前状态未知':run?adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?'尚未提交':'正在核对执行记录'}</HaloBadge></header>
     {!run&&<>
       <p>{thinking?'仅使用本讨论原话、已选引用和此前AI回复，不读取项目文件。':'项目：'+(setup?.projectName||'尚未选择')+'。'}只有点击提交才会运行模型，可能使用你的 Codex 额度。</p>
       {!thinking&&<div className="wb-actions"><button className="wb-button" disabled={busy} onClick={()=>action(async()=>setSetup(await call('project.select')))}>选择执行项目</button><button className="wb-button" disabled={busy||!setup?.projectSelected} onClick={()=>action(async()=>{await call('check');setNotice('Codex已登录并通过连接检查；尚未执行任务。');})}>检查 Codex 连接</button></div>}
       <p>本次仅带入已保存的任务目标、步骤、选定指令和 {task.refs.length} 项准确版本引用；不自动发送整个画布、其他讨论或原件文件。项目工具限于所选项目。</p>
       {!thinking&&<label className="wb-check"><input type="checkbox" checked={write} onChange={e=>setWrite(e.target.checked)}/>允许本次任务修改所选项目文件（默认只读）</label>}
-      <div className="wb-actions"><LiquidButton className="wb-button wb-primary" disabled={busy||!ready||Boolean(error)||!setup?.available||(!thinking&&!setup?.projectSelected)||task.status!=='prepared'||Boolean(client.getSnapshot().pending)} onClick={()=>action(()=>thinking?call('think',{...thinking,requestId:'submit-'+task.id}):call('submit',{taskId:task.id,requestId:'submit-'+task.id,mode:write?'workspace-write':'read-only'}))}>{thinking?'请 AI 回应这段思考':'提交并执行'}</LiquidButton>{!thinking&&task.status==='prepared'&&<button className="wb-button" disabled={busy} onClick={onCancelPreparation}>取消尚未交接的准备</button>}</div>
+      <div className="wb-actions"><LiquidButton className="wb-button wb-primary" disabled={busy||!ready||Boolean(error)||!setup?.available||(!thinking&&!setup?.projectSelected)||task.status!=='prepared'||Boolean(client.getSnapshot().pending)} onClick={()=>action(()=>thinking?call('think',{...thinking,requestId:'submit-'+task.id}):call('submit',{taskId:task.id,requestId:'submit-'+task.id,mode:write?'workspace-write':'read-only'}))}><TraceIcon name="work"/>{thinking?'请 AI 回应这段思考':'提交并执行'}</LiquidButton>{!thinking&&task.status==='prepared'&&<button className="wb-button" disabled={busy} onClick={onCancelPreparation}>取消尚未交接的准备</button>}</div>
     </>}
     {run&&<>
       <p>第 {run.number} 次运行 · 项目 {run.projectName} · {run.mode==='thinking'?'限本讨论的只读思考':run.mode==='read-only'?'只读':'可修改项目内文件'}。输入与引用已冻结，结果只回到这个任务。</p>
@@ -46,7 +64,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
       {run.runtime.threadId&&<p className="wb-execution-receipt">Codex thread：{run.runtime.threadId}{run.runtime.turnId&&<> / turn：{run.runtime.turnId}</>}</p>}
       {run.error&&<HaloNotice tone="error" title={run.error} description="输入、原引用和已有回执仍保留。先前执行可能已产生项目改动；重试前请核对，不会自动回滚文件。"/>}
       {['failed','interrupted','cancelled','timed_out'].includes(run.status)&&<button className="wb-button" disabled={busy} onClick={()=>action(()=>call('retry',{taskId:task.id,previousId:run.id,requestId:'retry-'+run.id}))}>核对后重试此任务</button>}
-      {active.includes(run.status)&&<button className="wb-button" disabled={busy||run.status==='cancelling'} onClick={()=>action(()=>call('cancel',{runId:run.id}))}>停止本次执行</button>}
+      {active.includes(run.status)&&<button className="wb-button wb-danger" disabled={busy||run.status==='cancelling'} onClick={()=>action(()=>call('cancel',{runId:run.id}))}>停止本次执行</button>}
       {interaction&&['waiting_approval','waiting_input'].includes(run.status)&&<section className="wb-execution-interaction" aria-label="运行交互">
         <h4>{run.status==='waiting_input'?'Codex需要补充信息':'Codex请求审批'}</h4><pre>{JSON.stringify(interaction,null,2)}</pre>
         {run.status==='waiting_input'?(interaction.questions||[]).map(q=><HaloField key={q.id} label={q.question||q.id}><HaloInput type={q.isSecret?'password':'text'} value={answers[q.id]||''} onChange={e=>setAnswers({...answers,[q.id]:e.target.value})}/></HaloField>):<p>本版本不授予额外运行权限、联网或MCP授权。项目内写入需提交前明确勾选；此请求可拒绝或停止。</p>}
