@@ -50,11 +50,11 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
   if(task.execution)return <p className="wb-muted">本任务已有其他执行回执，请从既有回执面板继续核验；不会重复提交。</p>;
   const interaction=run?.runtime?.interaction,adopted=Boolean(run?.adoptions?.some(a=>a.status==='committed'));
   return <section className="wb-execution" aria-label="任务执行与结果复核" data-status={run?.status||'prepared'} data-run-id={run?.id}>
-    <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3><HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-execution-status={error?'unknown':run?.status||task.status}>{error?'读取中断，当前状态未知':run?adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?task.status==='cancelled'?'准备已取消':'尚未提交':'正在核对执行记录'}</HaloBadge></header>
+    <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3>{(run||thinking||error||!ready)&&<HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-execution-status={error?'unknown':run?.status||task.status}>{error?'读取中断，当前状态未知':run?adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?task.status==='cancelled'?'准备已取消':'尚未提交':'正在核对执行记录'}</HaloBadge>}</header>
     {!run&&<>
-      <p>{thinking?'仅使用本讨论原话、已选引用和此前AI回复，不读取项目文件。':'项目：'+(setup?.projectName||'尚未选择')+'。'}只有点击提交才会运行模型，可能使用你的 Codex 额度。</p>
+      <p>{thinking?'仅使用本讨论原话、已选引用和此前AI回复，不读取项目文件。':'执行项目：'+(setup?.projectName||'尚未选择')+'。'}提交后才会运行，并可能使用你的 Codex 额度。</p>
       {!thinking&&<div className="wb-actions"><button className="wb-button" disabled={busy} onClick={()=>action(async()=>setSetup(await call('project.select')))}>选择执行项目</button><button className="wb-button" disabled={busy||!setup?.projectSelected} onClick={()=>action(async()=>{await call('check');setNotice('Codex已登录并通过连接检查；尚未执行任务。');})}>检查 Codex 连接</button></div>}
-      <p>本次仅带入已保存的任务目标、步骤、选定指令和 {task.refs.length} 项准确版本引用；不自动发送整个画布、其他讨论或原件文件。项目工具限于所选项目。</p>
+      <HaloDisclosure title="本次会发送哪些内容？"><p>已保存的目标、步骤、AI 指令，以及 {task.refs.length} 项引用的对应版本。</p><p>不自动发送其他画布、讨论或原件文件。工具访问限于所选项目。</p></HaloDisclosure>
       {!thinking&&<label className="wb-check"><input type="checkbox" checked={write} onChange={e=>setWrite(e.target.checked)}/>允许本次任务修改所选项目文件（默认只读）</label>}
       <div className="wb-actions"><LiquidButton className="wb-button wb-primary" disabled={busy||!ready||Boolean(error)||!setup?.available||(!thinking&&!setup?.projectSelected)||task.status!=='prepared'||Boolean(client.getSnapshot().pending)} onClick={()=>action(()=>thinking?call('think',{...thinking,requestId:'submit-'+task.id}):call('submit',{taskId:task.id,requestId:'submit-'+task.id,mode:write?'workspace-write':'read-only'}))}><TraceIcon name="work"/>{thinking?'请 AI 回应这段思考':'提交并执行'}</LiquidButton>{!thinking&&task.status==='prepared'&&<button className="wb-button" disabled={busy} onClick={onCancelPreparation}>取消尚未交接的准备</button>}</div>
     </>}

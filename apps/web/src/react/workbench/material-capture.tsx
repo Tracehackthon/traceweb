@@ -55,7 +55,7 @@ export function MaterialCapture({ source, draft, onChange, onSave, onClose, clie
   };
   const measured = (element: HTMLMediaElement) => { const value = element.duration; setDuration(value); if (Number.isFinite(value)) setError(''); if (Number.isFinite(value) && !latest.current.draft.end) latest.current.onChange({ ...latest.current.draft, end: String(Math.round(value * 1000) / 1000) }); };
   return <WorkbenchModal title={source ? '从原件摘取线索' : '留下材料'} onClose={onClose}><form className="wb-editor wb-capture" aria-label="材料摘取与来源" onSubmit={event => { void submit(event); }}>
-    <p className="wb-muted">{source ? '只新增一条引用同一原件的摘录，不修改原件，也不替换已有线索。' : '留下原文和来源；可以只取一段。不会自动抓取网页、填充 AI 解释或覆盖你的表达。'}</p><p className="wb-muted">目标画布（准备时名称）：{draft.canvasTitle || draft.canvasId}</p>
+    <p className="wb-muted">{source ? '只新增一条引用同一原件的摘录，不修改原件，也不替换已有线索。' : '保留原文与来源；需要时可选取其中一段。网页链接不会自动抓取内容。'}</p><p className="wb-muted">保存到：{draft.canvasTitle || draft.canvasId}</p>
     {saved && <p role="status">材料正文已保留，尚未完成放置时只重试原画布布局，不重复创建材料。</p>}
     {pending && <p role="status">上一操作尚未确认。请在本窗口核对原命令；关闭后由工作台恢复入口接管，草稿仍保留。</p>}
     <fieldset disabled={busy || saved || pending}>

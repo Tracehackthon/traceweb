@@ -1,0 +1,9 @@
+/* Content first; keep optional inputs mounted and saved by the same owners. */
+.wb-capability-extras>.wb-halo-disclosure-content { display:grid;gap:20px;padding-top:16px; }
+.wb-editor-commit { display:grid;gap:12px;padding-block:12px;background:var(--trace-surface-panel);border-radius:var(--trace-radius-control); }
+.wb-editor-commit>.wb-actions { padding:0;border:0; }
+.wb-editor-commit .wb-feedback-slot:empty { display:none; }
+.wb-storage-location { color:var(--trace-text-secondary); }
+/* Native scrollbars otherwise add large arrow buttons and white gutters on Windows. */
+:is(.wb-shell,.wb-dialog),:is(.wb-shell,.wb-dialog) * { scrollbar-width:thin;scrollbar-color:var(--sand-9) transparent; }
+@media(forced-colors:active){:is(.wb-shell,.wb-dialog),:is(.wb-shell,.wb-dialog) * { scrollbar-color:auto; }}
