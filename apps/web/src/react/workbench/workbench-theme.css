@@ -9,6 +9,7 @@
 @import '@radix-ui/colors/tomato.css';
 @import '@radix-ui/colors/tomato-dark.css';
 @import '@radix-ui/colors/black-alpha.css';
+@import './workbench-typography.css';
 
 /* Current workbench only; inherited by dialogs and body-mounted Radix portals. */
 :root[data-trace-appearance] {
@@ -58,17 +59,15 @@
   --trace-shadow-menu:0 4px 16px var(--black-a6);
 }
 html[data-trace-appearance] .trace-ui { color-scheme:inherit; }
-html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) { font-size:14px; line-height:24px; }
+
 html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) :is(input,textarea,select) { caret-color:var(--trace-focus); accent-color:var(--trace-focus); }
 html[data-trace-appearance] ::selection { color:var(--trace-text-primary); background:var(--teal-5); }
 html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui),
 html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) * { transition:none; animation:none; scroll-behavior:auto; }
-html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) :is(h1,h2) { font-size:20px; line-height:28px; font-weight:600; }
-html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) :is(h3,h4) { font-size:14px; line-height:24px; font-weight:600; }
-html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) small { font-size:12px; line-height:20px; }
+
 html[data-trace-appearance] .wb-wordmark { font-size:20px; }
 html[data-trace-appearance] .wb-page-heading { align-items:center; }
-html[data-trace-appearance] .wb-editor { gap:24px; }
+
 html[data-trace-appearance] .wb-editor :is(input,textarea,select),
 html[data-trace-appearance] .wb-search-input input { background:var(--trace-surface-panel); color:var(--trace-text-primary); }
 html[data-trace-appearance] .wb-button { border-color:var(--trace-border-control); }

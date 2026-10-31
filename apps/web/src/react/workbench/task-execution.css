@@ -1,6 +1,6 @@
 .wb-execution { display:grid; gap:16px; margin-top:24px; padding-top:24px; border-top:0; }
 .wb-execution>header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
-.wb-execution h3,.wb-execution h4 { font-size:14px; line-height:24px; margin:0; }
+.wb-execution h3,.wb-execution h4 { font-size:var(--wb-text-section); line-height:var(--wb-leading-body); margin:0; }
 .wb-execution p { font-size:14px; line-height:24px; margin:0; overflow-wrap:anywhere; }
 .wb-execution-receipt { color:var(--trace-text-secondary); font-variant-numeric:tabular-nums; font-size:12px!important; }
 .wb-execution label { display:grid; gap:8px; font-size:14px; }
