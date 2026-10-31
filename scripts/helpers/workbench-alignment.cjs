@@ -8,6 +8,7 @@ module.exports=async({page,state,saved,check,capture,out,windowSize,baseline})=>
  await page.emulateMedia({reducedMotion:'reduce'});
  await windowSize(1440,940);await page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name:'思考画布',exact:true}).click();
  if(process.env.TRACE_ALIGNMENT_THEME==='dark'){await button('设置').click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),'dark');await button('保存设置').click();await saved();}
+ const closeInspector=button('关闭线索详情');if(await closeInspector.isVisible())await closeInspector.click();
  const revision=(await state()).product.revision;
  for(const width of [1440,1200,900,390]){
   await windowSize(width,940);
