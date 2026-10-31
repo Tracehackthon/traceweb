@@ -13,7 +13,7 @@ export interface CanvasNode { id: string; ref: ContentRef | null; position: { x:
 export interface CanvasEdge { id: string; from: string; to: string; relationId: string | null }
 export interface CanvasScene { nodes: CanvasNode[]; connections: CanvasEdge[] }
 export interface CanvasDocument extends CanvasScene { schemaVersion: 1; id: string; title: string; revision: number; undo: CanvasScene[]; redo: CanvasScene[] }
-export interface WorkbenchState { ready: boolean; host: ContentHost | null; legacy: unknown; revision: number; canvas: CanvasDocument | null; canvases: { id: string; title: string; revision: number }[]; saving: boolean; error: string | null; pending: { path: string; body: unknown } | null }
+export interface WorkbenchState { ready: boolean; loading: boolean; readError: string | null; host: ContentHost | null; legacy: unknown; revision: number; canvas: CanvasDocument | null; canvases: { id: string; title: string; revision: number }[]; saving: boolean; error: string | null; pending: { path: string; body: unknown } | null }
 type NativeBridge = { requestCapability?: (request: Record<string, unknown>) => Promise<any> };
 const native = () => (window as Window & { traceNative?: NativeBridge }).traceNative;
 const pendingKey='trace-workbench-pending:'+(location.pathname.startsWith('/app/demo')?'demo':'personal');
@@ -45,7 +45,7 @@ async function resourceBlob(id: string): Promise<Blob> {
 }
 
 export class WorkbenchClient {
-  private state: WorkbenchState = { ready: false, host: null, legacy: null, revision: 0, canvas: null, canvases: [], saving: false, error: null, pending: null };
+  private state: WorkbenchState = { ready: false, loading: false, readError: null, host: null, legacy: null, revision: 0, canvas: null, canvases: [], saving: false, error: null, pending: null };
   private listeners = new Set<() => void>();
   private queue: Promise<unknown> = Promise.resolve();
   private urls = new Map<string, Promise<string>>();
@@ -57,12 +57,17 @@ export class WorkbenchClient {
   private set(patch: Partial<WorkbenchState>) { this.state = { ...this.state, ...patch }; for (const fn of this.listeners) fn(); }
   async load(canvasId = this.id) {
     const sequence=++this.loadSequence;
+    this.set({ loading: true, readError: null });
     try {
       const result = await jsonRequest('/api/product/workspace');
-      if (result.host?.schemaVersion !== 2) { if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, host: null, legacy: result.host, revision: result.revision }); return true; }
+      if (result.host?.schemaVersion !== 2) { if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, loading: false, readError: null, host: null, legacy: result.host, revision: result.revision }); return true; }
       const [layout, list] = await Promise.all([jsonRequest('/api/product/canvases/' + canvasId), jsonRequest('/api/product/canvases')]);
-      if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, host: result.host, legacy: null, revision: result.revision, canvas: layout.document, canvases: list.items });return true;
-    } catch (error) { if(sequence===this.loadSequence)this.set({ ready: false, error: error instanceof Error ? error.message : '读取失败；没有创建空画布。' });return false; }
+      if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, loading: false, readError: null, host: result.host, legacy: null, revision: result.revision, canvas: layout.document, canvases: list.items });return true;
+    } catch (error) {
+      // A failed refresh is not a first load. Keep the mounted editors and
+      // last verified document; do not acknowledge or clear a pending write.
+      if(sequence===this.loadSequence)this.set({ loading: false, readError: error instanceof Error ? error.message : '读取失败；没有创建空画布。' });return false;
+    }
   }
   private enqueue<T>(action: () => Promise<T>):Promise<T> {
     const result = this.queue.then(action); this.queue = result.catch(() => {}); return result;
