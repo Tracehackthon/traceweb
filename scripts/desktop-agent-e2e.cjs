@@ -2,7 +2,7 @@
 // user-data directory. No replacement server, renderer store or fake receipts.
 const fs=require('node:fs'),path=require('node:path'),net=require('node:net'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {execFileSync,spawn}=require('node:child_process'),{once}=require('node:events'),{chromium}=require('playwright'),{DatabaseSync}=require('node:sqlite');
-const root=path.resolve(__dirname,'..'),exe=path.resolve(process.env.TRACE_DESKTOP_EXE||path.join(root,'apps/desktop-pet/release/0.2.13/win-unpacked/Trace.exe'));
+const root=path.resolve(__dirname,'..'),exe=path.resolve(process.env.TRACE_DESKTOP_EXE||path.join(root,'apps/desktop-pet/release/0.2.14/win-unpacked/Trace.exe'));
 const out=path.join(root,'.test-results/desktop-agent-release',process.env.TRACE_DESKTOP_AGENT_RUN||'candidate-01');
 assert(!fs.existsSync(path.join(out,'report.json')),'Use a fresh run identity');fs.mkdirSync(out,{recursive:true});
 const profile=path.join(out,'profile'),project=path.join(out,'project'),tmp=path.join(out,'tmp');for(const p of [profile,project,tmp])fs.mkdirSync(p,{recursive:true});

@@ -4,29 +4,30 @@
 
 ## Windows 桌面端
 
-### 0.2.13 本机 Agent 执行与回流（2026-11-01）
+### 0.2.14 内思考与逐项采纳（2026-11-01）
 
-本次是用户授权的本机更新，不是公开Release。默认打开新工作台；“Agent 协作 → 外部任务”现在可以提交并执行本机Codex，而不只是保存准备。Trace内思考仍为手动记录，未据此外推为全部AI协作完成。
+本机已更新到0.2.14，不是公开Release。外部任务真实执行继续保留；“Agent协作 → Trace内思考”现在也可以明确请AI回应、延续同一讨论，复核后逐项采纳到材料摘记与能力草稿。
 
-1. 保存任务准备，确认明确引用和准确版本；选择执行项目，可先检查Codex连接。
-2. 点击“提交并执行”才启动真实模型，可能使用当前Codex额度。默认项目只读；确需修改文件时，在提交前明确勾选项目写入。模型继承本机默认配置，不为产品强选模型。
-3. 执行事件、原生thread/turn和校验后的结果回到同一个任务。结果可确认保留、继续核对或不采用，复核记录绑定结果hash；不会自动改写材料、当前理解或能力。
-4. 失败、中断或超时保留原输入、引用、回执和此前尝试；核对项目现状后明确重试。重试新建原生turn/thread，不冒充继续旧turn，不自动回滚已经发生的文件改动。进程重启不自动执行或重复扣用额度。
+1. 选定材料开始共同思考，或直接新建讨论，写下问题并“留下这段思考”。保存不自动调用模型；再点“请AI回应这段思考”才执行，使用本机Codex默认模型与额度。
+2. 内思考冻结本讨论截至所选消息的原话、明确版本引用、该消息的指令及此前本讨论AI回复；不带入其它讨论，不要求选择用户项目。使用应用自有空目录、真实native资格检查及Runtime的BOUNDED_CONFIG关闭shell/apps/plugins/网络等功能，不通过跳过版本检查开启执行。模型返回原稿和引用验证后才展示。
+3. 确认结果后，按原稿段落逐项核对、手动调整采纳正文和选择位置；预览保留正文与新版本，再明确“确认采纳本项”。也可仅保留或不采纳；不是AI自动拆卡或整段自动覆盖。
+4. 材料原文和原件不覆盖，采纳生成关联的用户摘记及后续版本；能力可新建草稿或追加方法生成新版本，保留旧版，不自动发布。AI全文另存不可覆盖原稿，实际采用引用指向它。
+5. 写入失败保留准确采纳请求、正文和Product命令；退出重启后“重试原采纳请求”继续确认，同命令幂等，不重复写入。目标版本冲突须重新读取/比较后明确采纳，不自动换版本覆盖。执行失败/中断同样保留冻结输入，重启不自动运行；重试建立新turn，不冒充续跑旧turn。
 
-Product `0.3.0-frontend.4`继续拥有内容schema 2与任务准备；`userData/state/workbench/executions/agent.sqlite`只拥有执行尝试、冻结输入、事件、结果和复核，不双写内容。原`state/web.sqlite`、旧`agent.sqlite`和设置/草稿不转换、不覆盖，菜单仍可打开旧内容。无文字摘录的原件不会静默上传，引用失效或禁止使用会拒绝提交。额外运行权限、会话权限、联网和MCP授权请求不在本入口开放；可以拒绝或停止。项目内写入在正常受限执行环境中工作，提权类任务不在本轮范围。
+Product `0.3.0-frontend.5`拥有材料/表达/能力内容与版本；`state/workbench/executions/agent.sqlite`拥有运行与逐项决定、采纳写入日志和Product回执。AI原稿留存和目标内容写入在同一个Product事务中；执行账本不充当第二份内容目录。旧`state/web.sqlite`、旧Agent库不转换、不双写，仍可从菜单打开。主进程不开放另一个整段采用入口，不允许renderer直接调用旧task.result.adopt；额外授权仍只能拒绝/停止。
 
-本轮直接复用合约内Runtime `0.8.0`的真实native Codex adapter，没有修改/冒充Runtime版本，也没有用假模型、替代HTTP服务或旧事项伪造新任务回执。冻结来源、真实模型端到端、保存回归、NSIS安装同一payload、个人数据保留和正常实例交付的权威回执均在仓库忽略目录`.test-results/desktop-agent-release/`，详细失败/重试与最终范围见总控任务记录。测试只提交项目内自产随机材料，不使用个人库。
+本轮候选23项、实际安装程序25项真实模型端到端（范围重叠，后者增加受限工具与逐项拒绝）、同产物外部任务冻结指令/取消20项、保存回归19项分别记录，计数不相加。首次bounded-analysis模式因固定旧静态版本门禁拒绝当前CLI，未启动模型；改用已有真实native资格与受限配置后通过，不改Runtime合约，不放宽结果引用验证。包内Runtime仍为`0.8.0`/固定a088b865…，不是新的Runtime发行。
 
-重放实际安装程序的端到端流程（仓库根目录，需新运行名；会调用真实模型）：
+重放实际安装程序（仓库根目录，新运行名；会真实调用模型）：
 
 ```powershell
 $env:TRACE_DESKTOP_EXE='D:/trace/Trace.exe'
 $env:TRACE_DESKTOP_AGENT_LIVE='1'
-$env:TRACE_DESKTOP_AGENT_RUN='fresh-installed-run'
-node scripts/desktop-agent-e2e.cjs
+$env:TRACE_THINKING_RUN='fresh-installed-run'
+node scripts/desktop-thinking-e2e.cjs
 ```
 
-本机安装器为`release/0.2.13/Trace-Desktop-0.2.13-Setup.exe`，尚未代码签名、未上传公开Release。来源一致性须使用本轮冻结快照中的`scripts/release-smoke.mjs --unpacked D:/trace --expected-version 0.2.13`，不能让之后变化的工作树冒充安装来源。原0.2.12保存/标题栏/字体/本地PDF/旧内容接入保留，原验证回执仍归`.test-results/desktop-halo-release/`，不累加为新功能验收。实体设备/读屏、其它平台、额外授权交互、完整15组功能及个人库迁移未在本轮验收。
+本机安装器`release/0.2.14/Trace-Desktop-0.2.14-Setup.exe`。冻结来源、候选/已安装真实E2E、安装身份、数据保留和正常实例回执在项目忽略目录`.test-results/desktop-thinking-release/`；测试只提交自产随机材料，未给个人库写测试任务。发行一致性使用本轮冻结快照内`scripts/release-smoke.mjs --unpacked D:/trace --expected-version 0.2.14`，不能用后续变化的HEAD冒充安装来源。原0.2.13证据继续保留为历史，旧生成release移入回退备份。未签名、未上传；整产品15组、旧库迁移、分享/发布、其它平台和物理设备/读屏不由本轮代证。
 
 ### 既有公开发行与旧版Codex入口
 
@@ -67,7 +68,7 @@ npm ci
 npm run dist:win
 ```
 
-产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.13 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.14 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
 
 桌面 Runtime 不是任意 `trace-runtime` checkout：`runtime-contract.json` 固定了包含首启 Codex qualifier 的来源 commit `a088b8658d76d1f825366fa8060712592b6460db`（`codex/fix-packaged-codex-qualification-0.8.0`）。发布前将该 commit 放在干净 checkout 中，并通过 `TRACE_RUNTIME_SOURCE` 指向它；staging 会拒绝其他 commit，不会把缺少 qualifier 的 Runtime 伪装成 release-ready。首次准备 checkout 或依赖目录被清理后，先在 Runtime 根目录执行 `corepack pnpm install --frozen-lockfile`；脚本也会在检测到 MCP workspace junction 缺失时以同一锁文件策略恢复依赖，并在 build 后验证 `@modelcontextprotocol/sdk` server paths 与 `zod/v3` 已 materialize。
 

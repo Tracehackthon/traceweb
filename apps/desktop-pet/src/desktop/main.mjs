@@ -953,6 +953,7 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
   }
   if (['workbench.request','product.resource.save','product.resource.read'].includes(request?.operation)) {
     if(!discussionWindows.has(senderWindow)||!desktopWorkbench)throw Error('Trace 本机工作区尚未就绪')
+    if(request.operation==='workbench.request'&&request.method==='POST'&&request.body?.operations?.some(op=>op.type==='task.result.adopt'))throw Error('采用运行结果必须先经过原生结果预览与核验。')
     if(request.operation==='workbench.request'&&request.method==='POST'&&request.body?.operations?.some(op=>['task.cancel','task.execution'].includes(op.type)&&workbenchAgent?.hasAttempt(op.id)))throw Error('任务已有本机执行记录，请在执行面板处理，不能取消准备或改绑另一份回执。')
     return desktopWorkbench.request(request)
   }

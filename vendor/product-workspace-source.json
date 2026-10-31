@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.4",
+  "version": "0.3.0-frontend.5",
   "recordedAt": "2026-11-01",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.4.tgz",
-    "sha256": "832fe10ae454388fe404e3c5a4a2f214790cc595578003c2eb95fd74857a4cf2",
-    "integrity": "sha512-ohZhDq0+5xQRhyDCpazOKIhWjL4c8yQp7S1GmIQHcSuUxktU1+ig13mi89mfj7bqUTtUpANUpXxAWui8wFJRsg=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.5.tgz",
+    "sha256": "eadec0573c1398b8bcb8ff8511daa192e866c56b2451a21cfb8971c9e9b4a895",
+    "integrity": "sha512-GJJ5wBUuSalR5gINRKrHmDNnIt+Nim2ypXvLmj8EJavVQa20qNVg9xLidyTmI/U8TI9lA5UNo0Yjp3kESlMEaw=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "27c97595d508943b5b989e66c646949e27e3f06f",
+    "head": "d8a190a30a08952ae5f46228fcd637e688935b64",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
@@ -23,7 +23,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "663a0fb310a5aeee0525746f10c44c4ba9c7722d53f05af4aa27577ab4307140"
+        "sha256": "412dfe532db11dcdc4550a7f712c2c846718cea4b0b17ea957231ba33c138243"
       },
       {
         "path": "src/bridge.mjs",
@@ -79,7 +79,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "c431af9d7446995e1b7a723ff4def3723fab1cf5be996c398018af5e1c659871"
+        "sha256": "860ab99a9173334cf29d8beee16bb2a4e243150c3911b1d602b3bf0ef1948cb1"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -136,10 +136,10 @@
     ]
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
-  "verification": "Domain/type build and artifact identity passed; real application execution receipt E2E tracked under .test-results/execution-view/.",
-  "revisionReason": "frontend.3 remains immutable. frontend.4 records explicit run identity separately from prepared task state; execution authority remains Agent store.",
+  "verification": "Domain/type build and artifact identity; native task execution and explicit adoption E2E under .test-results/task-execution-return.",
+  "revisionReason": "frontend.4 remains immutable; frontend.5 adds atomic explicit result adoption receipts independent of runtime status.",
   "supersedes": {
-    "version": "0.3.0-frontend.3",
-    "reason": "Optional explicit immutable execution reference; no task completion mutation or copied execution status."
+    "version": "0.3.0-frontend.4",
+    "reason": "Task adoption receipts and content mutations share a single Product transaction."
   }
 }

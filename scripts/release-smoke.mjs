@@ -55,7 +55,8 @@ for (const required of [
   if (!asarPaths.has(required)) throw new Error(`app.asar is missing ${required}`)
 }
 const runtimeImportAudit = verifyRuntimeAsar(appAsar, asarPaths, extractFile)
-if(!extractFile(appAsar,path.join('lib','desktop','workbench-agent.mjs')).equals(fs.readFileSync(path.join(root,'apps','desktop-pet','src','desktop','workbench-agent.mjs'))))throw Error('Packaged native Agent controller differs from its source')
+if(!extractFile(appAsar,path.join('lib','desktop','workbench-agent.mjs')).equals(Buffer.from(fs.readFileSync(path.join(root,'apps','desktop-pet','src','desktop','workbench-agent.mjs'),'utf8').replace("'../../../../shared/workbench-result-items.mjs'","'./workbench-result-items.mjs'"))))throw Error('Packaged native Agent controller differs from its source')
+if(!extractFile(appAsar,path.join('lib','desktop','workbench-result-items.mjs')).equals(fs.readFileSync(path.join(root,'shared','workbench-result-items.mjs'))))throw Error('Packaged result review units differ from source');
 const storeProvenance=JSON.parse(extractFile(appAsar,path.join('lib','desktop','workbench-store-provenance.json')).toString('utf8'))
 const expectedProductSource=JSON.parse(fs.readFileSync(path.join(root,'vendor/product-workspace-source.json'),'utf8'))
 if(storeProvenance.schema!=='trace.desktop-workbench-store@1'
