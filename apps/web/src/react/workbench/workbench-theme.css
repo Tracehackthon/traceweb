@@ -17,7 +17,9 @@
   --trace-surface-panel:var(--sand-2);
   --trace-surface-muted:var(--sage-3);
   --trace-text-primary:var(--sand-12);
-  --trace-text-secondary:var(--sand-11);
+  /* Reading/support/meta are distinct; enabled content must not look disabled. */
+  --trace-text-secondary:color-mix(in srgb,var(--sand-12) 72%,var(--sand-11));
+  --trace-text-muted:color-mix(in srgb,var(--sand-12) 40%,var(--sand-11));
   --trace-text-disabled:var(--sand-11);
   --trace-border-subtle:var(--sand-6);
   --trace-border-control:var(--sand-9);

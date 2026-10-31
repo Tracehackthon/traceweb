@@ -45,8 +45,10 @@ html[data-trace-appearance] .wb-capture :is(input,textarea):focus-visible { outl
    Reserve the indicator slot even when unselected; no baseline or state drift. */
 .wb-halo-control { width:100%; }
 .wb-halo-control>:is(input,textarea,select) { font:inherit; line-height:24px; padding:12px; min-height:44px; }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) .wb-halo-control>:is(input,textarea,.wb-select-trigger) { font-weight:400; }
 .wb-halo-control>textarea { resize:vertical; }
-.wb-select-trigger { width:100%; min-width:0; display:grid; grid-template-columns:minmax(0,1fr) 24px; align-items:center; gap:8px; padding:12px; min-height:48px; box-sizing:border-box; border:0; border-radius:inherit; background:transparent; color:inherit; font:inherit; line-height:24px; text-align:left; cursor:pointer; }
+.wb-halo-control :is(input,textarea)::placeholder,.wb-halo-search input::placeholder { color:var(--trace-text-muted); opacity:1; }
+.wb-select-trigger { width:100%; min-width:0; display:grid; grid-template-columns:minmax(0,1fr) 24px; align-items:center; gap:8px; padding:12px; min-height:48px; box-sizing:border-box; border:0; border-radius:inherit; background:transparent; color:inherit; font:inherit; font-weight:400; line-height:24px; text-align:left; cursor:pointer; }
 .wb-select-trigger>span:first-child { display:block; line-height:24px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .wb-control-icon { display:grid; place-items:center; width:24px; height:24px; flex:none; }
 .wb-control-icon>span { display:grid; place-items:center; }
@@ -70,7 +72,7 @@ html[data-trace-appearance] .wb-thinking-composer .wb-composer-control::before,h
 .wb-halo-control[data-disabled=true] { opacity:.7; }
 .wb-halo-disclosure { min-width:0; }
 .wb-halo-disclosure[data-animating] { overflow:clip; }
-.wb-halo-disclosure>summary { display:grid; grid-template-columns:minmax(0,1fr) 24px; align-items:center; gap:8px; min-height:44px; padding:8px 0; color:var(--trace-text-secondary); cursor:pointer; list-style:none; }
+.wb-halo-disclosure>summary { display:grid; grid-template-columns:minmax(0,1fr) 24px; align-items:center; gap:8px; min-height:44px; padding:8px 0; color:var(--trace-text-primary); font-weight:500; cursor:pointer; list-style:none; }
 .wb-halo-disclosure>summary::-webkit-details-marker { display:none; }
 .wb-halo-disclosure>summary>.wb-disclosure-label { min-width:0; line-height:24px; }
 .wb-halo-disclosure>summary>.wb-control-icon { justify-self:end; }
