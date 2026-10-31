@@ -27,5 +27,8 @@ html[data-trace-appearance] .wb-shell .wb-collection-compact>button.wb-collectio
 .wb-collection-switch>svg { flex:none; }
 .wb-collection-compact>.wb-icon-button { flex:none; }
 .wb-collection-modal .wb-list-pane { padding:0;max-height:none;overflow:visible;border:0; }
-.wb-collection-modal .wb-page-heading { margin-bottom:16px; }
-.wb-collection-modal .wb-item-list { max-height:min(52dvh,440px); }
+.wb-collection-modal .wb-page-heading { display:none; }
+.wb-collection-modal .wb-item-list { max-height:min(42dvh,360px); }
+
+.wb-collection-create { margin-top:20px; }
+.wb-collection-create>.wb-button { width:100%; }
