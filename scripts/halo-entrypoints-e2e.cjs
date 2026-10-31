@@ -1,7 +1,7 @@
 // Full production bundle -> native controls -> IndexedDB -> reload verification.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {chromium}=require('playwright');
-const root=path.resolve(__dirname,'..'),dist=path.join(root,'apps/web/dist'),out=path.join(root,'.test-results/halo-entrypoints',process.env.TRACE_HALO_RUN||'browser-01');
+const root=path.resolve(__dirname,'..'),dist=path.resolve(process.env.TRACE_E2E_DIST_DIR||path.join(root,'apps/web/dist')),out=path.join(root,'.test-results/halo-entrypoints',process.env.TRACE_HALO_RUN||'browser-01');
 assert(!fs.existsSync(path.join(out,'report.json')),'Use a fresh run identity');fs.mkdirSync(out,{recursive:true});
 for(const k of ['TMP','TEMP','TMPDIR'])process.env[k]=path.join(out,'tmp');fs.mkdirSync(process.env.TMP,{recursive:true});
 let server,browser,page;const checks=[],errors=[],injectedFaults=[];const check=(name,ok)=>{assert(ok,name);checks.push(name);console.log('PASS '+name);};

@@ -1,7 +1,7 @@
 // Full built app, isolated browser storage, authoritative IndexedDB verification.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {chromium}=require('playwright');
-const root=path.resolve(__dirname,'..'),dist=path.join(root,'apps/web/dist');
+const root=path.resolve(__dirname,'..'),dist=path.resolve(process.env.TRACE_E2E_DIST_DIR||path.join(root,'apps/web/dist'));
 const out=path.join(root,'.test-results/component-prompts',process.env.TRACE_EXPRESSIVE_RUN||'browser');
 assert(!fs.existsSync(path.join(out,'report.json')),'Choose a new run identity');fs.mkdirSync(out,{recursive:true});
 const temp=path.join(out,'tmp');fs.mkdirSync(temp,{recursive:true});for(const k of ['TEMP','TMP','TMPDIR'])process.env[k]=temp;
