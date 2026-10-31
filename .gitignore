@@ -25,3 +25,5 @@ artifacts/desktop-capability-headless/
 video-source/
 .impeccable/
 .research/
+
+.cache/electron-builder/

@@ -2,13 +2,36 @@
 
 同一套 Trace 体验有两个本机入口：DeepSeek Harness Web profile 插件，以及独立运行的原生桌面悬浮插件。原生 Electron 入口通过受限 IPC 连接本机 `trace-runtime`，把最新 Trace Web 中准备好的工作真正交给 Codex，并把结果带回 Trace 复核区。
 
-## Windows 桌面端 0.2.0
+## Windows 桌面端
 
-始终从 [Trace Desktop 最新 Release](https://github.com/Tracehackthon/traceweb/releases/latest) 下载；不要保存或传播带固定旧版本号的安装包链接。
+### 0.2.12 本机工作台更新（2026-11-01）
+
+本次为用户明确要求的本地构建、NSIS更新与安装后复验，未上传公开Release。启动默认打开思考画布、能力库与Agent协作的新工作台；原生受限IPC直接连接固定Product包的SQLite owner，不再将新画布/原件接口转发给旧Runtime。
+
+- 新内容与原件在`userData/state/workbench/`，原`state/web.sqlite`、`agent.sqlite`和设置/草稿不转换、不覆盖。右上角“工作台更多操作 → 打开旧版内容（独立保留）”仍打开旧库；新工作台不宣称已接通真实Agent执行。
+- Windows新工作台使用原生窗口标题栏，避免原先40px拖动遮罩吞掉顶栏搜索/菜单。旧版窗口保留原布局。
+- 构建包含完整未修改MiSans字体/许可、主题预加载、固定本地PDF资源、旧页面入口及`workbench-store-provenance.json`。新store从固定`@trace/product-workspace@0.3.0-frontend.3`打入主进程，原Runtime仍为合约中的0.8.0，不谎报升级了它。
+- 本轮按源码快照打包，原因是现场另有持续变更。源码清单、候选/安装后19项实际桌面流程、SQLite真写锁失败恢复、两次进程重启、安装器与已安装payload哈希、备份及正常用户实例交付回执在仓库`.test-results/desktop-halo-release/`；测试全部使用项目内隔离profile，没有往个人库写入合成材料。
+- 新版已经通过NSIS更新到本机，安装后再次从实际可执行文件重跑19项。个人原有14个备份文件安装后逐字节一致；正常启动后旧内容库仍逐字节不变。正常使用实例已打开空白新画布，仅准备空工作区、未复制测试内容。
+- 本机产物：`release/0.2.12/Trace-Desktop-0.2.12-Setup.exe`，未签名。旧程序、原内容/草稿/设置的可回退副本只在忽略的项目证据目录，禁止提交或上传。
+
+验证命令（仓库根目录，针对实际已安装程序，需新运行名）：
+
+```powershell
+$env:TRACE_DESKTOP_EXE='D:/trace/Trace.exe'
+$env:TRACE_DESKTOP_HALO_RUN='fresh-installed-run'
+node scripts/desktop-halo-e2e.cjs
+```
+
+本次发行一致性校验使用冻结快照内的`scripts/release-smoke.mjs --unpacked D:/trace --expected-version 0.2.12`，核验快照来源、原生store、286项Web资产和609项Runtime文件。不能用之后变化的工作树冒充本次安装来源。代码/业务验证不代表15组功能完整验收；实体触屏、物理IME/读屏、其它平台未运行。
+
+### 既有公开发行与旧版Codex入口
+
+已公开发布的安装包从 [Trace Desktop 最新 Release](https://github.com/Tracehackthon/traceweb/releases/latest) 下载；不要保存或传播带固定旧版本号的安装包链接。
 
 首版 Windows x64 安装包把 Trace Web、桌宠和本机 Runtime 一起打包。普通用户不需要先克隆 `trace_backend`、安装 Node.js 或手动启动服务：安装后打开 Trace，会同时出现桌宠与主界面。
 
-首次接入 Codex：
+在“打开旧版内容”后，首次接入旧版 Codex：
 
 1. 先安装并登录 Codex CLI。
 2. 打开 Trace，点顶部的「Codex 设置」。
@@ -41,7 +64,7 @@ npm ci
 npm run dist:win
 ```
 
-产物位于 `release/Trace-Desktop-<version>-Setup.exe`。0.2.0 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.12 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
 
 桌面 Runtime 不是任意 `trace-runtime` checkout：`runtime-contract.json` 固定了包含首启 Codex qualifier 的来源 commit `a088b8658d76d1f825366fa8060712592b6460db`（`codex/fix-packaged-codex-qualification-0.8.0`）。发布前将该 commit 放在干净 checkout 中，并通过 `TRACE_RUNTIME_SOURCE` 指向它；staging 会拒绝其他 commit，不会把缺少 qualifier 的 Runtime 伪装成 release-ready。首次准备 checkout 或依赖目录被清理后，先在 Runtime 根目录执行 `corepack pnpm install --frozen-lockfile`；脚本也会在检测到 MCP workspace junction 缺失时以同一锁文件策略恢复依赖，并在 build 后验证 `@modelcontextprotocol/sdk` server paths 与 `zod/v3` 已 materialize。
 

@@ -8,6 +8,7 @@ import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
 import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
 import { bindNativeAgentProject } from './runtime-project-binding.mjs'
 import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
+import { createDesktopWorkbench } from './workbench-store.mjs'
 import { clearVersionBoundStorage } from './storage-lifecycle.mjs'
 import { isAddressInUse, isLoopbackHttpOrigin, selectLoopbackPort } from './runtime-port-selection.mjs'
 import { probeProductWorkspace } from './runtime-readiness.mjs'
@@ -35,6 +36,7 @@ let overlayWindow
 let tray
 let quitting = false
 let capabilityClient
+let desktopWorkbench
 let bundledRuntime
 const discussionWindows = new Set()
 let zhihuAuthWindow
@@ -70,6 +72,8 @@ const shutdownController = createDesktopShutdownController({
     stopBundledRuntimeRecovery()
   },
   closeCapability: () => {
+    desktopWorkbench?.close()
+    desktopWorkbench = undefined
     capabilityClient?.close?.()
     capabilityClient = undefined
   },
@@ -581,7 +585,7 @@ function parseDiscussionQuery(rawUrl) {
   // The native window hosts the current Trace product shell. Explicitly pin
   // its route so legacy observation query keys do not send file:// builds to
   // the removed /legacy.html absolute path.
-  query.view = 'home'
+  query.view = url.searchParams.get('view') === 'home' ? 'home' : 'canvas'
   query.from = 'trace-native'
   return query
 }
@@ -598,12 +602,12 @@ function openDiscussion(rawUrl) {
     minHeight: 620,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'win32' ? {
+    ...(process.platform === 'win32' && query.view === 'home' ? {
       titleBarStyle: 'hidden',
       titleBarOverlay: { color: '#f3f7f2', symbolColor: '#215b4d', height: 40 },
     } : {}),
     backgroundColor: '#f3f0e7',
-    title: 'Trace · 深度讨论',
+    title: query.view === 'home' ? 'Trace · 旧版内容' : 'Trace',
     icon: appIconPath,
     webPreferences: {
       preload: join(root, 'discussion-preload.cjs'),
@@ -614,7 +618,7 @@ function openDiscussion(rawUrl) {
   })
 
   discussionWindows.add(discussionWindow)
-  if (process.platform === 'win32') {
+  if (process.platform === 'win32' && query.view === 'home') {
     discussionWindow.webContents.on('did-finish-load', () => {
       // Leave the system window controls unobstructed; the empty top edge
       // remains draggable after removing the dark native title bar.
@@ -831,6 +835,7 @@ if (!ownsInstance) {
   app.whenReady().then(() => {
     void (async () => {
       installDiscussionProtocol()
+      desktopWorkbench = createDesktopWorkbench({file:join(app.getPath('userData'),'state','workbench','web.sqlite')})
       try { await ensureBundledRuntime() }
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
       if (quitting) return
@@ -870,7 +875,7 @@ if (!ownsInstance) {
       createOverlayWindow()
       createTray()
       startCodexEventPolling()
-      if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=home`)
+      if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=canvas`)
       // Runtime startup can briefly race an updater, antivirus scanner or a
       // previous instance finishing its shutdown.  Do not leave the product
       // window on a permanent recovery screen: retry a few times in the same
@@ -924,6 +929,15 @@ ipcMain.on('trace-native:discussion-candidate', (event, payload) => {
 ipcMain.handle('trace-native:capability', async (event, request) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender)
   if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) throw new Error('Capability caller is not a Trace window')
+  if (request?.operation==='workbench.legacy.open') {
+    if(!discussionWindows.has(senderWindow))throw Error('只能从 Trace 工作台打开旧内容')
+    openDiscussion(`${discussionOrigin}/?view=home`)
+    return {opened:true}
+  }
+  if (['workbench.request','product.resource.save','product.resource.read'].includes(request?.operation)) {
+    if(!discussionWindows.has(senderWindow)||!desktopWorkbench)throw Error('Trace 本机工作区尚未就绪')
+    return desktopWorkbench.request(request)
+  }
   if (typeof request?.operation === 'string' && request.operation.startsWith('project.lifecycle.')) {
     if (!discussionWindows.has(senderWindow)) throw new Error('项目生命周期功能只能由 Trace Web 产品窗口调用')
     try { return await handleProjectLifecycleRequest(senderWindow, request) }

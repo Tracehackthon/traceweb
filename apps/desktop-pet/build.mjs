@@ -1,6 +1,7 @@
 import { build } from 'esbuild'
 import { build as viteBuild } from 'vite'
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createWebBuildProvenance } from '../../scripts/web-build-provenance.mjs'
@@ -11,8 +12,10 @@ const desktopOutDir = resolve(outDir, 'desktop')
 const discussionSourceDir = resolve(root, '../web')
 const discussionPublicDir = resolve(discussionSourceDir, 'public')
 const packageId = 'dsh-trace'
+await import('../../scripts/verify-product-workspace.mjs')
 const desktopPublicAssets = [
   'favicon.ico',
+  'workbench-appearance.js',
   'site.webmanifest',
   'brand/trace-app-icon-16.png',
   'brand/trace-app-icon-32.png',
@@ -76,6 +79,20 @@ const clientBundle = `window.__ModuleLoader__.load({\n\tid: ${JSON.stringify(pac
 await writeFile(resolve(outDir, 'client.js'), clientBundle, 'utf8')
 
 await mkdir(desktopOutDir, { recursive: true })
+// Bundle the pinned Product package into the desktop main-process store. No
+// source checkout, loopback listener or renderer Node access is needed at runtime.
+await build({
+  absWorkingDir: root,
+  entryPoints: ['src/desktop/workbench-store.mjs'],
+  outfile: resolve(desktopOutDir, 'workbench-store.mjs'),
+  bundle: true, format: 'esm', platform: 'node', target: 'node22',
+  legalComments: 'none',
+})
+await writeFile(resolve(desktopOutDir,'workbench-store-provenance.json'),JSON.stringify({
+  schema:'trace.desktop-workbench-store@1',
+  product:JSON.parse(await readFile(resolve(root,'../../vendor/product-workspace-source.json'),'utf8')),
+  bundleSha256:createHash('sha256').update(await readFile(resolve(desktopOutDir,'workbench-store.mjs'))).digest('hex'),
+},null,2))
 await build({
   absWorkingDir: root,
   entryPoints: ['src/desktop/renderer.tsx'],
@@ -121,7 +138,7 @@ await viteBuild({
     outDir: discussionOutDir,
     emptyOutDir: true,
     manifest: false,
-    rollupOptions: { input: resolve(discussionSourceDir, 'index.html') },
+    rollupOptions: { input: {index:resolve(discussionSourceDir, 'index.html'),legacy:resolve(discussionSourceDir,'legacy.html')} },
   },
 })
 
@@ -130,6 +147,8 @@ await Promise.all(desktopPublicAssets.map(async (relative) => {
   await mkdir(dirname(destination), { recursive: true })
   await copyFile(resolve(discussionPublicDir, relative), destination)
 }))
+await cp(resolve(discussionPublicDir,'fonts'),resolve(discussionOutDir,'fonts'),{recursive:true})
+await cp(resolve(discussionPublicDir,'licenses'),resolve(discussionOutDir,'licenses'),{recursive:true})
 
 const webBuildProvenance = await createWebBuildProvenance({ webRoot: discussionSourceDir, outputDir: discussionOutDir })
 console.log(`Web build identity ${webBuildProvenance.buildId} · source ${webBuildProvenance.sourceSha256}`)

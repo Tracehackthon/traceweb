@@ -106,8 +106,10 @@ if (fs.existsSync(path.join(desktop, 'renderer.js.map'))) throw new Error('Deskt
 
 const discussionBytes = bytes(discussion)
 const desktopBytes = bytes(desktop)
-if (discussionBytes > 8 * 1024 * 1024) throw new Error(`Desktop discussion assets exceed 8 MiB: ${discussionBytes}`)
-if (desktopBytes > 14 * 1024 * 1024) throw new Error(`Desktop application exceeds 14 MiB before packaging: ${desktopBytes}`)
+// MiSans's four unmodified licensed weights alone occupy about 20 MiB. The
+// current workbench also ships the pinned local PDF assets instead of a CDN.
+if (discussionBytes > 36 * 1024 * 1024) throw new Error(`Desktop discussion assets exceed 36 MiB: ${discussionBytes}`)
+if (desktopBytes > 42 * 1024 * 1024) throw new Error(`Desktop application exceeds 42 MiB before packaging: ${desktopBytes}`)
 
 console.log(JSON.stringify({
   status: 'desktop-package-audited',

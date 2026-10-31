@@ -46,10 +46,19 @@ for (const required of [
   'lib/desktop/discussion-preload.cjs',
   'lib/desktop/discussion/index.html',
   'lib/desktop/discussion/web-build-provenance.json',
+  'lib/desktop/workbench-store.mjs',
+  'lib/desktop/workbench-store-provenance.json',
+  'lib/desktop/discussion/workbench-appearance.js',
+  'lib/desktop/discussion/fonts/MiSans-Regular.woff2',
 ]) {
   if (!asarPaths.has(required)) throw new Error(`app.asar is missing ${required}`)
 }
 const runtimeImportAudit = verifyRuntimeAsar(appAsar, asarPaths, extractFile)
+const storeProvenance=JSON.parse(extractFile(appAsar,path.join('lib','desktop','workbench-store-provenance.json')).toString('utf8'))
+const expectedProductSource=JSON.parse(fs.readFileSync(path.join(root,'vendor/product-workspace-source.json'),'utf8'))
+if(storeProvenance.schema!=='trace.desktop-workbench-store@1'
+  ||createHash('sha256').update(extractFile(appAsar,path.join('lib','desktop','workbench-store.mjs'))).digest('hex')!==storeProvenance.bundleSha256
+  ||JSON.stringify(storeProvenance.product)!==JSON.stringify(expectedProductSource))throw Error('Packaged workbench store does not match its pinned Product provenance')
 const localWebOutput = path.join(root, 'apps', 'desktop-pet', 'lib', 'desktop', 'discussion')
 const currentWebBuild = await verifyWebBuildDirectory({ webRoot: path.join(root, 'apps', 'web'), outputDir: localWebOutput })
 const packagedWebBuild = JSON.parse(extractFile(appAsar, path.join('lib', 'desktop', 'discussion', 'web-build-provenance.json')).toString('utf8'))
