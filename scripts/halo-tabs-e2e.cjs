@@ -17,7 +17,7 @@ const check=(name,value)=>{assert(value,name);checks.push(name);console.log('PAS
   await page.getByRole('button',{name:'写下第一点想法',exact:true}).click();
   const body=page.getByRole('textbox',{name:'我的表达',exact:true});await body.fill('Halo 栏目切换不改变当前表达');await page.getByRole('button',{name:'保存修改',exact:true}).click();await page.getByText('修改已保存',{exact:true}).waitFor();
   const list=page.getByRole('tablist',{name:'详情栏目'}),tab=name=>list.getByRole('tab',{name,exact:true});
-  await tab('来源').click();await page.getByRole('button',{name:'保存摘记',exact:true}).waitFor();check('pointer selects real source panel',await tab('来源').getAttribute('aria-selected')==='true');
+  await tab('来源').click();await page.getByRole('button',{name:'写一条摘记',exact:true}).click();await page.getByRole('button',{name:'保存摘记',exact:true}).waitFor();check('pointer selects real source panel',await tab('来源').getAttribute('aria-selected')==='true');
   await tab('来源').press('End');await list.locator('[data-state=active]').filter({hasText:'演变'}).waitFor();
   check('End selects last tab and moves focus',await tab('演变').getAttribute('aria-selected')==='true'&&await tab('演变').evaluate(e=>e===document.activeElement));
   await tab('演变').press('Home');await body.waitFor();check('Home selects content with unchanged persisted body',await body.inputValue()==='Halo 栏目切换不改变当前表达');
