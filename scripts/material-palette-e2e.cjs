@@ -1,3 +1,4 @@
+const {selectValue}=require('./helpers/select-control.cjs');
 // Real served app + independent browser storage, no isolated component tests.
 const {chromium}=require('playwright');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
@@ -13,7 +14,7 @@ const check=(name,ok)=>{assert(ok,name);checks.push(name);console.log('PASS '+na
   await page.goto(base+'/app?view=collaboration');await page.getByRole('button',{name:'开始画布',exact:true}).click();await page.getByRole('button',{name:'开始一段共同思考',exact:true}).click();
   const input=page.getByRole('textbox',{name:'继续共同思考'}),quick=page.getByRole('searchbox',{name:'快速搜索当前资料'});
   for(const mode of ['light','dark']){
-    await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('combobox',{name:'外观',exact:true}).selectOption(mode);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
+    await page.getByRole('button',{name:'设置',exact:true}).click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),mode);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();await page.getByRole('dialog').waitFor({state:'hidden'});
     await input.fill('配色检视：只留在草稿，不发送。');await input.click();
     check(mode+' composer focus has no bright outline',await input.evaluate(e=>getComputedStyle(e).outlineStyle==='none'&&getComputedStyle(e.closest('form')).outlineStyle==='none'));
     check(mode+' composer has tinted focus shadow',await input.evaluate(e=>getComputedStyle(e.closest('form')).boxShadow!=='none'));

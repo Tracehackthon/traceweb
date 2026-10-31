@@ -1,3 +1,4 @@
+const {selectValue}=require('./select-control.cjs');
 // Replays the formal UI through its real Browser/SQLite owner. Every input is
 // authored here; no product-reference images, remote fetch or Agent output.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto'), assert = require('node:assert/strict'), { spawnSync } = require('node:child_process');
@@ -45,7 +46,7 @@ module.exports = async function materials({ page, state, saved, check, capture, 
   };
   console.log('MATERIALS: manual text, original and cancel/continue');
   const beforeCapture = await state(), original = '\ufeff前文 😀\nconst 答案 = 42;\n<script>globalThis.fixtureShouldNotRun = true</script>\n后文', start = original.indexOf('const'), end = original.indexOf('\n<script>');
-  let dialog = await leave(); await dialog.getByRole('combobox', { name: '材料类型', exact: true }).selectOption('code'); await dialog.getByRole('textbox', { name: '材料标题', exact: true }).fill('代码原话与准确来源'); await dialog.getByRole('textbox', { name: '完整原文', exact: true }).fill(original);
+  let dialog = await leave(); await selectValue(dialog.getByRole('combobox', { name: '材料类型', exact: true }),'code'); await dialog.getByRole('textbox', { name: '材料标题', exact: true }).fill('代码原话与准确来源'); await dialog.getByRole('textbox', { name: '完整原文', exact: true }).fill(original);
   await dialog.getByRole('textbox', { name: '完整原文', exact: true }).evaluate((element, range) => element.setSelectionRange(range.start, range.end), { start, end }); await dialog.getByRole('button', { name: '使用原文中的选段', exact: true }).click();
   await dialog.getByRole('textbox',{name:'完整原文',exact:true}).evaluate(el=>el.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true,data:'zhong'})));await dialog.getByRole('textbox',{name:'完整原文',exact:true}).press('Escape');await page.waitForTimeout(100);
   check('capture dialog keeps its draft when native Escape arrives during composition',await dialog.count()===1&&(await state()).product.revision===beforeCapture.product.revision);
@@ -59,9 +60,9 @@ module.exports = async function materials({ page, state, saved, check, capture, 
   await page.getByRole('button', { name: '查看原始材料', exact: true }).click(); const originalDialog = dialogs('原件与摘取位置'); await originalDialog.getByLabel('完整原文与摘取位置').waitFor();
   check('returning to text original highlights the recorded selection and preserves surrounding raw text safely', await originalDialog.getByLabel('完整原文与摘取位置').textContent() === original && await originalDialog.locator('mark').textContent() === codeValue.text && await page.evaluate(() => globalThis.fixtureShouldNotRun === undefined)); await capture('current-code-original'); await originalDialog.getByRole('button', { name: '返回线索', exact: true }).click();
   console.log('MATERIALS: dialogue and web source, no background fetch');
-  dialog = await leave(); await dialog.getByRole('combobox', { name: '材料类型', exact: true }).selectOption('dialogue'); await dialog.getByRole('textbox', { name: '材料标题', exact: true }).fill('讨论片段的原话'); await dialog.getByRole('textbox', { name: '完整原文', exact: true }).fill('甲：这只是一个观察。\n乙：先保留不同解释。'); await commit(dialog);
+  dialog = await leave(); await selectValue(dialog.getByRole('combobox', { name: '材料类型', exact: true }),'dialogue'); await dialog.getByRole('textbox', { name: '材料标题', exact: true }).fill('讨论片段的原话'); await dialog.getByRole('textbox', { name: '完整原文', exact: true }).fill('甲：这只是一个观察。\n乙：先保留不同解释。'); await commit(dialog);
   check('dialogue is retained as source material without claiming an Agent message', (await material('讨论片段的原话')).kind === 'dialogue');
-  dialog = await leave(); await dialog.getByRole('combobox', { name: '材料类型', exact: true }).selectOption('web'); await dialog.getByRole('textbox', { name: '材料标题', exact: true }).fill('网页手动摘录'); await dialog.getByRole('textbox', { name: '完整原文', exact: true }).fill('只保留用户摘取的网页文字，不抓整站。'); const webBase = (await state()).product.revision;
+  dialog = await leave(); await selectValue(dialog.getByRole('combobox', { name: '材料类型', exact: true }),'web'); await dialog.getByRole('textbox', { name: '材料标题', exact: true }).fill('网页手动摘录'); await dialog.getByRole('textbox', { name: '完整原文', exact: true }).fill('只保留用户摘取的网页文字，不抓整站。'); const webBase = (await state()).product.revision;
   await dialog.getByRole('textbox', { name: '来源地址', exact: true }).fill('javascript:alert(1)'); await dialog.getByRole('button', { name: '保存材料并放到画布', exact: true }).click(); await dialog.getByRole('alert').filter({ hasText: 'http' }).waitFor();
   check('invalid source URL is rejected before any resource/content mutation', (await state()).product.revision === webBase);
   await dialog.getByRole('textbox', { name: '来源地址', exact: true }).fill('https://example.test/research#local-excerpt'); await commit(dialog); const web = await material('网页手动摘录');

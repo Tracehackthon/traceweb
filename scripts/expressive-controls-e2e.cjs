@@ -1,3 +1,4 @@
+const {selectValue}=require('./helpers/select-control.cjs');
 // Full built app, isolated browser storage, authoritative IndexedDB verification.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {chromium}=require('playwright');
@@ -23,7 +24,7 @@ const check=(name,value)=>{assert(value,name);checks.push(name);console.log('PAS
   await input.fill(Array(14).fill('长中文输入自适应高度').join('\n'));check('multiline composer stays bounded',await input.evaluate(e=>e.getBoundingClientRect().height<=innerHeight*.24+2));
   await input.fill('');
   for(const theme of ['light','dark']){
-    await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('combobox',{name:'外观',exact:true}).selectOption(theme);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();await page.reload();await page.locator('.wb-list-row').filter({hasText:'围绕当前内容继续思考'}).click();await input.waitFor();
+    await page.getByRole('button',{name:'设置',exact:true}).click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),theme);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();await page.reload();await page.locator('.wb-list-row').filter({hasText:'围绕当前内容继续思考'}).click();await input.waitFor();
     check(theme+' theme restores',await page.evaluate(()=>document.documentElement.dataset.traceAppearance)===theme);
     await page.screenshot({path:path.join(out,theme+'-composer.png')});
     await page.getByRole('button',{name:'能力库',exact:true}).click();await page.getByRole('button',{name:'新建能力',exact:true}).click();await page.getByRole('textbox',{name:'名称',exact:true}).fill('玻璃按钮保存-'+theme);await page.getByRole('button',{name:'保存草稿版本',exact:true}).scrollIntoViewIfNeeded();await page.getByRole('button',{name:'保存草稿版本',exact:true}).click();await page.getByText('草稿已保存',{exact:true}).waitFor();await page.screenshot({path:path.join(out,theme+'-glass.png')});

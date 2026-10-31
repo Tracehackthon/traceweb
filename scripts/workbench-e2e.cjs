@@ -141,6 +141,7 @@ async function runMaterials(){await require('./helpers/workbench-materials.cjs')
   await page.getByRole('button',{name:'重试读取，不丢当前草稿',exact:true}).click();await saved();await page.getByText('读取未完成，当前工作面已保留',{exact:true}).waitFor({state:'detached'});
   check('successful read retry keeps the same unsaved draft instead of replacing it',await readEditor.inputValue()===readDraft&&await readEditor.getAttribute('data-recovery-probe')==='same-mounted-editor'&&(await state()).product.revision===beforeReadFailure.product.revision);await capture('current-read-recovery');
   if(process.argv.includes('--materials'))await runMaterials();
+  if(process.argv.includes('--wide-polish'))await require('./helpers/workbench-wide-polish.cjs')({page,state,saved,check,capture});
   if(process.argv.includes('--ui-refinement'))await require('./helpers/workbench-ui-refinement.cjs')({page,state,saved,check,capture,out,desktop,app,windowSize,base,restartDesktop,restartBrowser});
   check('the tested build stayed unchanged throughout the scenario',identity.entrySha256===hash(path.join(dist,'index.html'))&&identity.manifestSha256===hash(path.join(dist,'.vite/manifest.json')));
   check('no renderer JavaScript exceptions',pageErrors.length===0);check('no HTTP or console errors during the verified current path',httpErrors.length===0&&consoleErrors.length===0);check('no external requests or model calls',external.length===0);

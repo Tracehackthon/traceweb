@@ -1,3 +1,4 @@
+import {HaloCollapse} from './halo-disclosure';
 import React,{useEffect,useRef} from 'react';
 import {ToggleGroup} from 'radix-ui';
 import {TraceIcon} from '../ui/icon';
@@ -34,7 +35,7 @@ export function HaloAnnotationSurface({children,preview}:{children:React.ReactNo
       <TraceIcon name="pencil" size={18}/><span>{open?'收起摘记':preview?'编辑我的摘记':'写一条摘记'}</span><TraceIcon name={open?'down':'plus'} size={16}/>
     </button>
     {!open&&preview&&<p className="wb-halo-annotation-preview">{preview}</p>}
-    <div ref={panel} id={id} hidden={!open} onKeyDown={event=>{if(event.key==='Escape'&&!composing.current&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();event.stopPropagation();close();}}}>{children}</div>
+    <HaloCollapse ref={panel} id={id} open={open} onKeyDown={event=>{if(event.key==='Escape'&&!composing.current&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();event.stopPropagation();close();}}}>{children}</HaloCollapse>
   </section>;
 }
 

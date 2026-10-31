@@ -1,3 +1,4 @@
+const {selectValue}=require('./helpers/select-control.cjs');
 const {chromium}=require('playwright');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const base='http://127.0.0.1:4326',out=path.resolve(__dirname,'../.test-results/workbench-shadow-states',process.env.TRACE_SHADOW_RUN||'browser');
@@ -9,7 +10,7 @@ const shaded=e=>{const s=getComputedStyle(e);return s.outlineStyle==='none'&&(s.
   browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1440,height:940}});page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/app?view=canvas');await page.getByRole('button',{name:'开始画布',exact:true}).click();await page.getByRole('button',{name:'写下第一点想法',exact:true}).click();await page.locator('.wb-node[data-selected]').waitFor();
   for(const theme of ['light','dark']){
-    await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('combobox',{name:'外观',exact:true}).selectOption(theme);const name=page.getByRole('textbox',{name:'显示名称',exact:true});await name.focus();
+    await page.getByRole('button',{name:'设置',exact:true}).click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),theme);const name=page.getByRole('textbox',{name:'显示名称',exact:true});await name.focus();
     check(theme+' settings input uses a shaded surface, not an outline',await name.evaluate(e=>{const p=e.closest('.wb-halo-control'),s=getComputedStyle(p||e);return getComputedStyle(e).outlineStyle==='none'&&s.outlineStyle==='none'&&s.boxShadow!=='none';}));
     check(theme+' dialog has no visible frame',await page.getByRole('dialog').evaluate(e=>getComputedStyle(e).borderTopColor==='rgba(0, 0, 0, 0)'));
     await page.screenshot({path:path.join(out,theme+'-settings.png')});await page.getByRole('button',{name:'关闭对话框',exact:true}).click();

@@ -72,5 +72,5 @@ export function ThinkingExecution({session,client,executions}:{session:Thinking;
  const message=session.messages.find(m=>m.id===selected);
  if(!message)return <p className="wb-muted">先留下问题或想法，再明确请AI回应；不会自动发送。</p>;
  const task={id:'thinking-'+session.id+'-'+message.id,title:session.title,goal:message.text,refs:session.refs,excluded:session.excluded,instructions:message.instructions||[],status:'prepared',destination:'Trace 内只读思考',results:[]}as Task;
- return <section aria-label="Trace 内真实AI"><label>回应哪段原话<HaloSelect aria-label="选择思考消息" value={selected} onChange={e=>setSelected(e.target.value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</HaloSelect></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} onCancelPreparation={()=>{}}/></section>;
+ return <section aria-label="Trace 内真实AI"><label>回应哪段原话<HaloSelect aria-label="选择思考消息" value={selected} onValueChange={value=>setSelected(value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</HaloSelect></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} onCancelPreparation={()=>{}}/></section>;
 }

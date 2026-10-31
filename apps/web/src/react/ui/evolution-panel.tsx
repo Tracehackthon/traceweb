@@ -1,3 +1,4 @@
+import {HaloCollapse} from '../workbench/halo-disclosure';
 /* Timeline/expanded comparison structure adapted from EasyUI RecoveryLedger,
  * MIT, copyright (c) 2026 Suraj Maurya, commit 7c106d4a195f9ce566ffbbc672fc48bed68d30bd.
  * No upstream restore handler, fabricated timestamps, Motion or theme retained.
@@ -22,7 +23,7 @@ export function EvolutionPanel({ entries, selectedId }: { entries: EvolutionEntr
           <span className="tu-history-heading"><strong>{entry.action}{entry.afterVersion != null ? ` · v${entry.afterVersion}` : ''}</strong><span className="tu-badge" data-tone={entry.state === 'current' ? 'positive' : 'neutral'}>{labels[entry.state] || '记录'}</span></span>
           <span className="tu-history-description">{entry.description || '内容为空'}</span><TraceIcon name={isExpanded ? 'down' : 'right'} size={16} />
         </button>
-        <div className="tu-history-detail" id={panelId} hidden={!isExpanded}>
+        <HaloCollapse className="tu-history-detail" id={panelId} open={isExpanded}>
           {entry.before !== null ? <div className="tu-revision-compare" aria-label="本次修订前后对照"><section><h4>修改前{entry.beforeVersion != null ? ` · v${entry.beforeVersion}` : ''}</h4><p>{entry.before || '当时为空'}</p></section><section><h4>修改后{entry.afterVersion != null ? ` · v${entry.afterVersion}` : ''}</h4><p>{entry.after || '当时为空'}</p></section></div> : <p className="tu-preserve">{entry.after || '内容为空'}</p>}
           <small>回看不会产生修订，也不会重新启用历史内容。</small>
         </div>

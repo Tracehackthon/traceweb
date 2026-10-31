@@ -1,4 +1,5 @@
-import React, {createContext, forwardRef, useContext, useId, useRef} from 'react';
+import React, {createContext, forwardRef, useContext, useId, useRef, useState} from 'react';
+import {Select} from 'radix-ui';
 import {TraceIcon} from '../ui/icon';
 import './halo-controls.css';
 
@@ -16,17 +17,22 @@ export const HaloInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<
   const field = useContext(FieldContext);
   return <span className="wb-halo-control" data-disabled={props.disabled||undefined} data-invalid={field?.invalid || props['aria-invalid'] || undefined}><input {...props} ref={ref} id={props.id || field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ') || undefined} aria-invalid={props['aria-invalid'] ?? field?.invalid} /></span>;
 });
-export const HaloTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(function HaloTextarea(props,ref) {
+export const HaloTextarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>&{surfaceClassName?:string}>(function HaloTextarea({surfaceClassName,...props},ref) {
   const field = useContext(FieldContext);
-  return <span className="wb-halo-control" data-disabled={props.disabled||undefined} data-invalid={field?.invalid || props['aria-invalid'] || undefined}><textarea {...props} ref={ref} id={props.id || field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ') || undefined} aria-invalid={props['aria-invalid'] ?? field?.invalid} /></span>;
+  return <span className={'wb-halo-control '+(surfaceClassName||'')} data-disabled={props.disabled||undefined} data-invalid={field?.invalid || props['aria-invalid'] || undefined}><textarea {...props} ref={ref} id={props.id || field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ') || undefined} aria-invalid={props['aria-invalid'] ?? field?.invalid} /></span>;
 });
 
-// Keep the platform picker, its keyboard behavior and form serialization.
-// Only the closed control uses the shared material; no custom listbox owner.
-export const HaloSelect = forwardRef<HTMLSelectElement,React.SelectHTMLAttributes<HTMLSelectElement>>(function HaloSelect(props,ref){
-  const field=useContext(FieldContext);
-  return <span className="wb-halo-control wb-halo-select" data-disabled={props.disabled||undefined} data-invalid={field?.invalid||props['aria-invalid']||undefined}><select {...props} ref={ref} id={props.id||field?.id} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ')||undefined} aria-invalid={props['aria-invalid']??field?.invalid}/><TraceIcon name="down" size={16}/></span>;
-});
+// Radix owns popup focus, typeahead, Escape and the hidden form control.
+// The existing controlled values and explicit setters remain the data owner.
+type HaloSelectProps={children:React.ReactNode;value?:string|number;defaultValue?:string|number;onValueChange?:(value:string)=>void;name?:string;disabled?:boolean;required?:boolean;id?:string;'aria-label'?:string;'aria-describedby'?:string;'aria-invalid'?:React.AriaAttributes['aria-invalid']};
+export function HaloSelect(props:HaloSelectProps){
+  const field=useContext(FieldContext),generated=useId(),trigger=useRef<HTMLButtonElement>(null),[container,setContainer]=useState<HTMLElement|null>(null),[open,setOpen]=useState(false);
+  const options:{value:string;label:string;disabled:boolean}[]=[];
+  const label=(x:React.ReactNode):string=>React.Children.toArray(x).map(n=>React.isValidElement<{children?:React.ReactNode}>(n)?label(n.props.children):String(n)).join('');
+  const collect=(nodes:React.ReactNode)=>React.Children.forEach(nodes,node=>{if(!React.isValidElement<{children?:React.ReactNode;value?:string|number;disabled?:boolean}>(node))return;if(node.type==='option')options.push({value:String(node.props.value??label(node.props.children)),label:label(node.props.children),disabled:Boolean(node.props.disabled)});else collect(node.props.children);});collect(props.children);
+  const invalid=props['aria-invalid']??field?.invalid,value=props.value===undefined?undefined:String(props.value);
+  return <span className="wb-halo-control wb-halo-select" data-disabled={props.disabled||undefined} data-invalid={invalid||undefined}><Select.Root value={value} defaultValue={props.defaultValue===undefined?undefined:String(props.defaultValue)} name={props.name} disabled={props.disabled} required={props.required} onValueChange={props.onValueChange} open={open} onOpenChange={next=>{if(next)setContainer(trigger.current?.closest('dialog')||document.body);setOpen(next);}}><Select.Trigger ref={trigger} type="button" className="wb-select-trigger" id={props.id||field?.id||generated} aria-label={props['aria-label']} aria-invalid={invalid} aria-describedby={[field?.description,props['aria-describedby']].filter(Boolean).join(' ')||undefined} data-selected-value={value}><Select.Value placeholder="请选择"/><Select.Icon><TraceIcon name="down" size={16}/></Select.Icon></Select.Trigger><Select.Portal container={container}><Select.Content className="trace-ui wb-select-content" position="popper" sideOffset={6} collisionPadding={12}><Select.ScrollUpButton className="wb-select-scroll">↑</Select.ScrollUpButton><Select.Viewport className="wb-select-viewport">{options.filter(o=>o.value!=='').map(o=><Select.Item key={o.value} value={o.value} disabled={o.disabled} className="wb-select-option" data-halo-value={o.value}><Select.ItemText>{o.label}</Select.ItemText><Select.ItemIndicator><TraceIcon name="check" size={16}/></Select.ItemIndicator></Select.Item>)}</Select.Viewport><Select.ScrollDownButton className="wb-select-scroll">↓</Select.ScrollDownButton></Select.Content></Select.Portal></Select.Root></span>;
+}
 
 // Local, synchronous search: do not invent a waiting state or delay input/deletion.
 export function HaloSearchInput({value,onValueChange,label,autoFocus,onKeyDown,placeholder}:{value:string;onValueChange:(value:string)=>void;label:string;autoFocus?:boolean;onKeyDown?:React.KeyboardEventHandler<HTMLInputElement>;placeholder?:string}) {

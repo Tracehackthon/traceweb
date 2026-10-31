@@ -1,3 +1,4 @@
+const {selectValue}=require('./helpers/select-control.cjs');
 // Full native application, production main/preload/SQLite and actual Codex turns.
 // No replacement provider, status writes, UI injected receipts or timed success.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto');
@@ -37,7 +38,7 @@ async function prepare(goal){await box('外部任务目标').fill(goal);const co
   const prior=await jobs(),run=prior.find(r=>r.kind==='task'&&r.status==='succeeded');assert(run&&run.review?.decision==='accepted'&&run.scope.refs.length,'A real reviewed external-task result is required');
   await page.locator('.wb-execution[data-run-id="'+run.id+'"]').waitFor();const before=await read(),materialId=run.scope.refs[0].id,original=JSON.stringify(before.host.materials[materialId]),item=page.getByRole('region',{name:'逐项采纳',exact:true}).locator('.wb-adoption-item').first();
   check('adoption opens the same actual external task and validated result from the live baseline',await page.getByRole('region',{name:'Agent返回结果'}).innerText().then(t=>t.includes(run.result.answer)));
-  const reviewed=await item.getByRole('textbox',{name:'本项采纳正文'}).inputValue()+'\n用户明确采用到本任务材料摘记。';await item.getByRole('textbox',{name:'本项采纳正文'}).fill(reviewed);await item.getByRole('combobox',{name:'采纳位置'}).selectOption('material:'+materialId);
+  const reviewed=await item.getByRole('textbox',{name:'本项采纳正文'}).inputValue()+'\n用户明确采用到本任务材料摘记。';await item.getByRole('textbox',{name:'本项采纳正文'}).fill(reviewed);await selectValue(item.getByRole('combobox',{name:'采纳位置'}),'material:'+materialId);
   check('editable result preview and explicit destination do not write Product content',(await read()).revision===before.revision);
   await item.getByRole('button',{name:'确认采纳本项',exact:true}).click();const receipt=await until(async()=>(await jobs()).find(r=>r.id===run.id).adoptions.find(a=>a.status==='committed'));
   const after=await read(),annotation=after.host.expressions['adopted-'+materialId],archive=after.host.expressions['ai-'+run.id];

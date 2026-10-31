@@ -1,9 +1,10 @@
+const {selectValue}=require('./select-control.cjs');
 // Full built product, real UI commands, isolated Browser/Electron storage.
 const fs=require('node:fs'),path=require('node:path');
 module.exports=async function({page,state,saved,check,capture,out,desktop,app,windowSize,base,restartDesktop,restartBrowser,themeOnly=false}){
   const nav=name=>page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name,exact:true});
   const settings=async()=>{await page.getByRole('button',{name:'设置',exact:true}).click();return page.getByRole('combobox',{name:'外观',exact:true});};
-  const theme=async(value)=>{const control=await settings();await control.selectOption(value);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();};
+  const theme=async(value)=>{const control=await settings();await selectValue(control,value);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();};
   const appearance=()=>page.locator('html').getAttribute('data-trace-appearance');
   const reports=[];
   await windowSize(1440,940);await page.emulateMedia({reducedMotion:'no-preference',colorScheme:'light'});

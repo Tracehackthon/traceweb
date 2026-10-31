@@ -1,4 +1,4 @@
-import {HaloSelect} from './halo-controls';
+import {HaloSelect,HaloInput,HaloTextarea} from './halo-controls';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { makeId, type ContentEntry, type ContentValue, type WorkbenchClient } from './client';
 import { WorkbenchModal } from './modal';
@@ -21,7 +21,7 @@ export function MaterialDraftRecovery({ raw, onExport, onRestart, onClose }: { r
   const [confirmed, setConfirmed] = useState(false);
   return <WorkbenchModal title="材料草稿需要恢复" onClose={onClose}><div className="wb-editor">
     <p>这份本地记录的格式无法识别，没有覆盖原记录，也没有把它当成空草稿。已保存的材料和画布不受影响。</p>
-    <label>原始草稿记录<textarea aria-label="原始草稿记录" readOnly rows={6} value={raw} /></label>
+    <label>原始草稿记录<HaloTextarea aria-label="原始草稿记录" readOnly rows={6} value={raw} /></label>
     <button className="wb-button" onClick={onExport}>导出原始草稿记录</button>
     <p className="wb-muted">导出只会发起下载，请自行核实文件并保留需要的内容；点击导出不代表已经备份成功。</p>
     <label className="wb-check"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />我已自行保留需要的内容，允许重新开始</label>
@@ -57,11 +57,11 @@ export function MaterialCapture({ source, draft, onChange, onSave, onClose, clie
     {saved && <p role="status">材料正文已保留，尚未完成放置时只重试原画布布局，不重复创建材料。</p>}
     {pending && <p role="status">上一操作尚未确认。可关闭此窗口保留草稿，在工作台核对原命令后继续。</p>}
     <fieldset disabled={busy || saved || pending}>
-      {!source && <label>材料类型<HaloSelect aria-label="材料类型" value={draft.kind} onChange={e => field('kind', e.target.value)}><option value="text">文字材料</option><option value="dialogue">对话片段</option><option value="code">代码片段</option><option value="web">网页摘录</option></HaloSelect></label>}
-      <label>材料标题<input aria-label="材料标题" value={draft.title} onChange={e => field('title', e.target.value)} /></label>
+      {!source && <label>材料类型<HaloSelect aria-label="材料类型" value={draft.kind} onValueChange={value=> field('kind', value)}><option value="text">文字材料</option><option value="dialogue">对话片段</option><option value="code">代码片段</option><option value="web">网页摘录</option></HaloSelect></label>}
+      <label>材料标题<HaloInput aria-label="材料标题" value={draft.title} onChange={e => field('title', e.target.value)} /></label>
       {textual && <>
-        <label>{draft.kind === 'web' ? '原网页地址（必填）' : '来源地址（可选）'}<input aria-label="来源地址" value={draft.url} onChange={e => field('url', e.target.value)} placeholder={draft.kind === 'web' ? '网页摘录需提供完整的 https:// 地址' : '没有外部地址也可保留原文'} readOnly={Boolean(source)} /></label>
-        <label>完整原文<textarea ref={text} aria-label="完整原文" rows={7} value={draft.original} readOnly={Boolean(source)} onChange={e => { setError(''); onChange({ ...draft, original: e.target.value, selection: null }); }} /></label>
+        <label>{draft.kind === 'web' ? '原网页地址（必填）' : '来源地址（可选）'}<HaloInput aria-label="来源地址" value={draft.url} onChange={e => field('url', e.target.value)} placeholder={draft.kind === 'web' ? '网页摘录需提供完整的 https:// 地址' : '没有外部地址也可保留原文'} readOnly={Boolean(source)} /></label>
+        <label>完整原文<HaloTextarea ref={text} aria-label="完整原文" rows={7} value={draft.original} readOnly={Boolean(source)} onChange={e => { setError(''); onChange({ ...draft, original: e.target.value, selection: null }); }} /></label>
         <div className="wb-actions"><button type="button" className="wb-button" onClick={() => { const element = text.current; if (element && element.selectionEnd > element.selectionStart) { setError(''); onChange({ ...draft, selection: { start: element.selectionStart, end: element.selectionEnd } }); } else setError('请先选中原文中要留下的片段。'); }}>使用原文中的选段</button>{draft.selection && <button type="button" className="wb-button" onClick={() => { setError(''); onChange({ ...draft, selection: null }); }}>改为保留全文</button>}</div>
         <p className="wb-muted">{draft.selection ? locatorLabel({ type: 'text', ...draft.selection }) : '保留全文'}；原文另存为不可变原件。</p>
         <pre className="wb-capture-excerpt" aria-label="摘录预览">{draft.selection ? draft.original.slice(draft.selection.start, draft.selection.end) : draft.original || '还没有输入原文。'}</pre>
@@ -69,12 +69,12 @@ export function MaterialCapture({ source, draft, onChange, onSave, onClose, clie
       {source && ['audio', 'video'].includes(draft.kind) && <>
         {url && (draft.kind === 'video' ? <video className="wb-media-video" src={url} controls preload="metadata" onLoadedMetadata={e => measured(e.currentTarget)} onError={() => setReadError('原视频无法解码；原件仍保留，没有记录虚构时长。')} /> : <audio className="wb-media-audio" src={url} controls preload="metadata" onLoadedMetadata={e => measured(e.currentTarget)} onError={() => setReadError('原音频无法解码；原件仍保留，没有记录虚构时长。')} />)}
         <p className="wb-muted">{Number.isFinite(duration) ? `实际原件时长 ${duration.toFixed(3)} 秒` : '正在读取真实时长…'}</p>
-        <div className="wb-locator-grid"><label>开始时间（秒）<input aria-label="开始时间（秒）" inputMode="decimal" value={draft.start} onChange={e => field('start', e.target.value)} /></label><label>结束时间（秒）<input aria-label="结束时间（秒）" inputMode="decimal" value={draft.end} onChange={e => field('end', e.target.value)} /></label></div>
+        <div className="wb-locator-grid"><label>开始时间（秒）<HaloInput aria-label="开始时间（秒）" inputMode="decimal" value={draft.start} onChange={e => field('start', e.target.value)} /></label><label>结束时间（秒）<HaloInput aria-label="结束时间（秒）" inputMode="decimal" value={draft.end} onChange={e => field('end', e.target.value)} /></label></div>
       </>}
       {source && ['pdf', 'image'].includes(draft.kind) && <>
-        {draft.kind === 'pdf' && <div className="wb-locator-grid"><label>PDF 页码<input aria-label="PDF 页码" inputMode="numeric" value={draft.page} onChange={e => field('page', e.target.value)} /></label><label>页面旋转<HaloSelect aria-label="页面旋转" value={draft.rotation} onChange={e => field('rotation', e.target.value)}>{[0, 90, 180, 270].map(n => <option key={n} value={n}>{n}°</option>)}</HaloSelect></label></div>}
+        {draft.kind === 'pdf' && <div className="wb-locator-grid"><label>PDF 页码<HaloInput aria-label="PDF 页码" inputMode="numeric" value={draft.page} onChange={e => field('page', e.target.value)} /></label><label>页面旋转<HaloSelect aria-label="页面旋转" value={draft.rotation} onValueChange={value=> field('rotation', value)}>{[0, 90, 180, 270].map(n => <option key={n} value={n}>{n}°</option>)}</HaloSelect></label></div>}
         <p className="wb-muted">区域以所示页面左上角为起点，百分比在 0–100 内；旋转后的页面坐标独立记录。</p>
-        <div className="wb-locator-grid">{([['x', '区域左侧（%）'], ['y', '区域顶部（%）'], ['width', '区域宽度（%）'], ['height', '区域高度（%）']] as const).map(([key, label]) => <label key={key}>{label}<input aria-label={label} inputMode="decimal" value={draft[key]} onChange={e => field(key, e.target.value)} /></label>)}</div>
+        <div className="wb-locator-grid">{([['x', '区域左侧（%）'], ['y', '区域顶部（%）'], ['width', '区域宽度（%）'], ['height', '区域高度（%）']] as const).map(([key, label]) => <label key={key}>{label}<HaloInput aria-label={label} inputMode="decimal" value={draft[key]} onChange={e => field(key, e.target.value)} /></label>)}</div>
         {url && (draft.kind === 'pdf' ? /^\d+$/.test(draft.page) && Number(draft.page) > 0 ? <Suspense fallback={<p role="status">正在准备 PDF 定位…</p>}><PdfPreview url={url} locator={region || { type: 'pdf', page: Number(draft.page), rotation: [0, 90, 180, 270].includes(Number(draft.rotation)) ? Number(draft.rotation) : 0 }} fullPage onInfo={value => setPages(value.pages)} onDocumentError={setReadError} /></Suspense> : <p role="status">填写有效页码后显示对应原页，不会改跳到其它位置。</p> : <LocalMedia kind="image" url={url} title={draft.title} locator={region} original />)}
       </>}
     </fieldset>

@@ -30,7 +30,7 @@ html[data-trace-appearance] :is(.wb-halo-control,.wb-halo-search,.wb-import-pane
 html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(textarea,select,input:not([type=checkbox],[type=radio],[type=file],[type=range],[type=color],[type=hidden])) {
   min-width:0; border:0; border-radius:var(--trace-radius-control); color:var(--trace-text-primary); background:var(--trace-state-control); font:inherit; line-height:24px;
 }
-html[data-trace-appearance] :is(.wb-shell,.wb-dialog) .wb-halo-control>:is(input,textarea,select) { width:100%; margin:0; background:transparent; box-shadow:none; }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) .wb-halo-control>:is(input,textarea,select,.wb-select-trigger) { width:100%; margin:0; background:transparent; box-shadow:none; }
 html[data-trace-appearance] .wb-halo-control::before { background:linear-gradient(145deg,color-mix(in srgb,var(--trace-surface-panel) 82%,transparent),transparent 70%); box-shadow:inset 0 1px 0 color-mix(in srgb,var(--trace-text-primary) 4%,transparent); }
 html[data-trace-appearance] .wb-halo-control::after { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; box-shadow:var(--trace-state-focus-shadow); opacity:0; }
 html[data-trace-appearance] .wb-shell .wb-liquid-button { border-color:transparent; box-shadow:var(--trace-state-idle-shadow); }

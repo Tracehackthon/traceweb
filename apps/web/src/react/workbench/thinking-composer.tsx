@@ -1,3 +1,4 @@
+import {HaloTextarea} from './halo-controls';
 import React,{useId,useLayoutEffect,useRef,useState} from 'react';
 import {revealNeighbour} from './list-navigation';
 
@@ -12,7 +13,7 @@ export function ThinkingComposer({messages,value,onChange,onSave,tools}:{message
   const choose=(at:number)=>{const message=history[at];if(!message)return;onChange(message.text);setIndex(null);requestAnimationFrame(()=>{input.current?.focus();input.current?.setSelectionRange(message.text.length,message.text.length);});};
   return <form ref={form} className="wb-thinking-composer" onSubmit={event=>{event.preventDefault();if(composing.current||saving||!value.trim())return;setSaving(true);const submitted=value;void onSave(submitted).then(()=>{if(input.current?.value===submitted)onChange('');}).catch(()=>{}).finally(()=>setSaving(false));}}>
     {tools&&<div className="wb-composer-tools">{tools}</div>}
-    <textarea ref={input} aria-label="继续共同思考" aria-haspopup="listbox" aria-expanded={index!==null} aria-controls={index!==null?id:undefined} aria-activedescendant={index!==null?id+'-'+index:undefined} value={value} onChange={event=>{close(false);onChange(event.target.value);}} placeholder="写下问题或想法" onCompositionStart={()=>{composing.current=true;close(false);}} onCompositionEnd={()=>{composing.current=false;}} onKeyDown={event=>{
+    <HaloTextarea surfaceClassName="wb-composer-control" ref={input} aria-label="继续共同思考" aria-haspopup="listbox" aria-expanded={index!==null} aria-controls={index!==null?id:undefined} aria-activedescendant={index!==null?id+'-'+index:undefined} value={value} onChange={event=>{close(false);onChange(event.target.value);}} placeholder="写下问题或想法" onCompositionStart={()=>{composing.current=true;close(false);}} onCompositionEnd={()=>{composing.current=false;}} onKeyDown={event=>{
       if(composing.current||event.nativeEvent.isComposing||event.nativeEvent.keyCode===229||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
       if(index===null){if(event.key==='ArrowUp'&&value===''&&history.length){event.preventDefault();before.current={value,start:event.currentTarget.selectionStart,end:event.currentTarget.selectionEnd};setIndex(0);}return;}
       if(['ArrowUp','ArrowDown','Home','End','Enter','Escape'].includes(event.key)){event.preventDefault();event.stopPropagation();if(event.key==='Escape')close(true);else if(event.key==='Enter')choose(index);else setIndex(event.key==='Home'?0:event.key==='End'?history.length-1:Math.max(0,Math.min(history.length-1,index+(event.key==='ArrowDown'?1:-1))));}

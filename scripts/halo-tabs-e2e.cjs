@@ -1,3 +1,4 @@
+const {selectValue}=require('./helpers/select-control.cjs');
 // Full built app, isolated browser storage, authoritative IndexedDB verification.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {chromium}=require('playwright');
@@ -25,7 +26,7 @@ const check=(name,value)=>{assert(value,name);checks.push(name);console.log('PAS
   check('exactly one tab is in tab order',await list.locator('[tabindex="0"]').count()===1);
   check('active panel has valid ARIA links',await page.getByRole('tabpanel').evaluate(e=>{const t=document.getElementById(e.getAttribute('aria-labelledby'));return !!t&&t.getAttribute('aria-controls')===e.id&&t.getAttribute('aria-selected')==='true';}));
   for(const theme of ['light','dark']){
-    await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('combobox',{name:'外观',exact:true}).selectOption(theme);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();
+    await page.getByRole('button',{name:'设置',exact:true}).click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),theme);await page.getByRole('button',{name:'关闭对话框',exact:true}).click();
     await tab('来源').click();await page.screenshot({path:path.join(out,theme+'-tabs.png')});
     check(theme+' active tab is visually distinct',await tab('来源').evaluate(e=>getComputedStyle(e).backgroundColor!==getComputedStyle(e.parentElement).backgroundColor));
     check(theme+' tab switches without animation',await tab('来源').evaluate(e=>getComputedStyle(e).transitionDuration==='0s'&&getComputedStyle(e).animationName==='none'));

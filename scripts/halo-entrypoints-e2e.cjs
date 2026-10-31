@@ -1,3 +1,4 @@
+const {selectValue}=require('./helpers/select-control.cjs');
 // Full production bundle -> native controls -> IndexedDB -> reload verification.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {chromium}=require('playwright');
@@ -40,7 +41,7 @@ await page.evaluate(()=>window.__haloFailLayout=true);injectedFaults.push('canva
 await page.screenshot({path:path.join(out,'light-imports.png')});await queue.getByRole('button',{name:'收起队列'}).click();
 // Bind target before slow IO; switch to a different real canvas before completion.
 const targetId=(await read()).canvases[0].id;await picker.setInputFiles([file('慢导入.txt','仍归原画布')]);await page.waitForFunction(()=>typeof window.__haloRelease==='function');await page.getByRole('button',{name:'新建画布',exact:true}).click();await page.getByRole('button',{name:'写下第一点想法',exact:true}).waitFor();await page.evaluate(()=>{window.__haloRelease();delete window.__haloRelease;});await queue.locator('[data-phase=done]').filter({hasText:'慢导入.txt'}).waitFor();snapshot=await read();const slow=Object.values(snapshot.workspace.host.materials).find(m=>m.title==='慢导入.txt');check('slow import stays on the canvas chosen before IO',snapshot.canvases.find(c=>c.id===targetId).nodes.some(n=>n.ref?.id===slow.id)&&snapshot.canvases.filter(c=>c.id!==targetId).every(c=>!c.nodes.some(n=>n.ref?.id===slow.id)));
-await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('combobox',{name:'外观',exact:true}).selectOption('dark');await page.getByRole('button',{name:'关闭对话框'}).click();await page.screenshot({path:path.join(out,'dark-imports.png')});await queue.getByRole('button',{name:'收起队列'}).click();
+await page.getByRole('button',{name:'设置',exact:true}).click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),'dark');await page.getByRole('button',{name:'关闭对话框'}).click();await page.screenshot({path:path.join(out,'dark-imports.png')});await queue.getByRole('button',{name:'收起队列'}).click();
 await page.reload();snapshot=await read();check('successful imports persist across reload, not merely in the queue',Object.keys(snapshot.workspace.host.materials).length===5&&snapshot.canvases.flatMap(c=>c.nodes).filter(n=>n.ref?.kind==='material').length===5);
 const dragData=await page.evaluateHandle(()=>{const dt=new DataTransfer();dt.items.add(new File(['真实拖入原件'],'拖入材料.txt',{type:'text/plain'}));return dt;});
 await page.locator('.wb-ic-viewport').dispatchEvent('dragover',{dataTransfer:dragData,clientX:400,clientY:320});
