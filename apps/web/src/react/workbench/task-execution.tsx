@@ -24,10 +24,10 @@ export function useAgentRuns(){
 export function agentTaskLabel(task:Task,runs:Run[],ready:boolean,error=''){const run=runs.filter(r=>r.taskId===task.id).at(-1);return error?'读取中断，当前状态未知':run?(run.adoptions?.some(a=>a.status==='committed')?'部分结果已采纳':run.review?'结果已复核':labels[run.status]||run.status):!ready?'读取执行状态…':task.status==='prepared'?'准备已保存，尚未提交':'已取消准备';}
 
 // Presentation only: neither a provider terminal state nor a review is an adoption receipt.
-function agentBadgeAppearance(run:Run|undefined,ready:boolean,error=''):{tone:HaloTone;icon:IconName}{
+function agentBadgeAppearance(run:Run|undefined,ready:boolean,error='',preparationCancelled=false):{tone:HaloTone;icon:IconName}{
   if(error)return{tone:'warning',icon:'error'};
   if(!ready)return{tone:'neutral',icon:'pending'};
-  if(!run)return{tone:'neutral',icon:'document'};
+  if(!run)return{tone:'neutral',icon:preparationCancelled?'idle':'document'};
   if(run.adoptions?.some(a=>a.status==='committed'))return{tone:'success',icon:'check'};
   if(run.review)return{tone:'accent',icon:'document'};
   if(run.status==='failed'||run.status==='timed_out')return{tone:'error',icon:'error'};
@@ -37,7 +37,7 @@ function agentBadgeAppearance(run:Run|undefined,ready:boolean,error=''):{tone:Ha
 }
 export function AgentTaskBadge({task,runs,ready,error=''}:{task:Task;runs:Run[];ready:boolean;error?:string}){
   const run=runs.filter(r=>r.taskId===task.id).at(-1);
-  return <HaloBadge {...agentBadgeAppearance(run,ready,error)} data-task-state={task.status} data-run-state={run?.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
+  return <HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-task-state={task.status} data-run-state={run?.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
 }
 
 export function TaskExecution({task,client,executions,onCancelPreparation,thinking}:{task:Task;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onCancelPreparation:()=>void;thinking?:{sessionId:string;messageId:string}}){
@@ -50,7 +50,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
   if(task.execution)return <p className="wb-muted">本任务已有其他执行回执，请从既有回执面板继续核验；不会重复提交。</p>;
   const interaction=run?.runtime?.interaction,adopted=Boolean(run?.adoptions?.some(a=>a.status==='committed'));
   return <section className="wb-execution" aria-label="任务执行与结果复核" data-status={run?.status||'prepared'} data-run-id={run?.id}>
-    <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3><HaloBadge {...agentBadgeAppearance(run,ready,error)} data-execution-status={error?'unknown':run?.status||'prepared'}>{error?'读取中断，当前状态未知':run?adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?'尚未提交':'正在核对执行记录'}</HaloBadge></header>
+    <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3><HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-execution-status={error?'unknown':run?.status||task.status}>{error?'读取中断，当前状态未知':run?adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?task.status==='cancelled'?'准备已取消':'尚未提交':'正在核对执行记录'}</HaloBadge></header>
     {!run&&<>
       <p>{thinking?'仅使用本讨论原话、已选引用和此前AI回复，不读取项目文件。':'项目：'+(setup?.projectName||'尚未选择')+'。'}只有点击提交才会运行模型，可能使用你的 Codex 额度。</p>
       {!thinking&&<div className="wb-actions"><button className="wb-button" disabled={busy} onClick={()=>action(async()=>setSetup(await call('project.select')))}>选择执行项目</button><button className="wb-button" disabled={busy||!setup?.projectSelected} onClick={()=>action(async()=>{await call('check');setNotice('Codex已登录并通过连接检查；尚未执行任务。');})}>检查 Codex 连接</button></div>}
