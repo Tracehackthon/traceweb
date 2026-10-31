@@ -2,7 +2,7 @@
 // user-data directory. No replacement server, renderer store or fake receipts.
 const fs=require('node:fs'),path=require('node:path'),net=require('node:net'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {execFileSync,spawn}=require('node:child_process'),{once}=require('node:events'),{chromium}=require('playwright'),{DatabaseSync}=require('node:sqlite');
-const root=path.resolve(__dirname,'..'),exe=path.resolve(process.env.TRACE_DESKTOP_EXE||path.join(root,'apps/desktop-pet/release/0.2.14/win-unpacked/Trace.exe'));
+const root=path.resolve(__dirname,'..'),exe=path.resolve(process.env.TRACE_DESKTOP_EXE||path.join(root,'apps/desktop-pet/release/0.2.15/win-unpacked/Trace.exe'));
 const out=path.join(root,'.test-results/desktop-thinking-release',process.env.TRACE_THINKING_RUN||'candidate-01');
 assert(!fs.existsSync(path.join(out,'report.json')),'Use a fresh run identity');fs.mkdirSync(out,{recursive:true});
 const profile=path.join(out,'profile'),project=path.join(out,'project'),tmp=path.join(out,'tmp');for(const p of [profile,project,tmp])fs.mkdirSync(p,{recursive:true});
@@ -31,7 +31,7 @@ const command=async operations=>instance.page.evaluate(async operations=>{const 
 const item=(page,n)=>page.getByRole('article',{name:'paragraph-'+n,exact:true});
 (async()=>{try{
  if(process.argv.includes('--adopt-existing')){
-  const source=path.join(root,'.test-results/desktop-thinking-release/candidate-02/profile');assert(path.resolve(source)!==path.resolve(profile));fs.cpSync(source,profile,{recursive:true});
+  const source=path.resolve(process.env.TRACE_THINKING_SOURCE||path.join(root,'.test-results/desktop-thinking-release/candidate-02/profile'));assert(source.startsWith(path.join(root,'.test-results')+path.sep)&&source!==path.resolve(profile));fs.cpSync(source,profile,{recursive:true});
   instance=await launch('existing-result-new-capability');let page=instance.page;await page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name:'Agent 协作',exact:true}).click();const before=await read(),prior=(await jobs()).items,run=prior.find(r=>r.status==='succeeded'&&r.adoptions.some(a=>a.itemId==='paragraph-3'&&a.status==='decided'));assert(run);
   await page.getByRole('combobox',{name:'选择思考消息'}).selectOption(run.messageId);await page.locator('.wb-execution[data-run-id="'+run.id+'"]').waitFor();await item(page,3).getByRole('combobox',{name:'采纳位置'}).selectOption('new-capability');await item(page,3).getByRole('textbox',{name:'能力草稿名称'}).fill('从真实结果采纳的新能力');await item(page,3).getByRole('button',{name:'确认采纳本项',exact:true}).click();await page.locator('[data-item-id=paragraph-3][data-adoption-status=committed]').waitFor();const after=await read(),cap=Object.values(after.host.capabilities).find(c=>!before.host.capabilities[c.id]);
   check('default new-capability adoption writes a real draft with original source reference',cap&&cap.version===1&&cap.status==='draft'&&cap.versions[1].title==='从真实结果采纳的新能力'&&cap.versions[1].refs.some(r=>r.id==='ai-'+run.id));check('new capability leaves original capabilities and materials untouched',JSON.stringify(before.host.capabilities)===JSON.stringify(Object.fromEntries(Object.entries(after.host.capabilities).filter(([id])=>id!==cap.id)))&&JSON.stringify(before.host.materials)===JSON.stringify(after.host.materials));

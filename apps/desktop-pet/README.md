@@ -4,9 +4,11 @@
 
 ## Windows 桌面端
 
-### 0.2.14 内思考与逐项采纳（2026-11-01）
+### 0.2.15 输入、版本预览与失败反馈（2026-11-01）
 
-本机已更新到0.2.14，不是公开Release。外部任务真实执行继续保留；“Agent协作 → Trace内思考”现在也可以明确请AI回应、延续同一讨论，复核后逐项采纳到材料摘记与能力草稿。
+本机已更新到0.2.15，不是公开Release。0.2.14已跑通的真实内思考、外部任务和逐项采纳继续保留；本次统一Halo输入/原生选择器材质，版本预览改成Radix Tabs与HaloSurface/Badge的保留版/采纳后对照，已采纳内容用可复制的静态正文，失败用持久HaloNotice与原位置恢复入口。原生编辑、IME、选择和执行/采纳协议不重写。
+
+焦点阴影层120ms，原生details展开/收起200ms可反向中断；键盘、减少动态效果即时响应，关闭时内容退出焦点路径。不对打字、版本正文或假的进度做动画。
 
 1. 选定材料开始共同思考，或直接新建讨论，写下问题并“留下这段思考”。保存不自动调用模型；再点“请AI回应这段思考”才执行，使用本机Codex默认模型与额度。
 2. 内思考冻结本讨论截至所选消息的原话、明确版本引用、该消息的指令及此前本讨论AI回复；不带入其它讨论，不要求选择用户项目。使用应用自有空目录、真实native资格检查及Runtime的BOUNDED_CONFIG关闭shell/apps/plugins/网络等功能，不通过跳过版本检查开启执行。模型返回原稿和引用验证后才展示。
@@ -16,7 +18,7 @@
 
 Product `0.3.0-frontend.5`拥有材料/表达/能力内容与版本；`state/workbench/executions/agent.sqlite`拥有运行与逐项决定、采纳写入日志和Product回执。AI原稿留存和目标内容写入在同一个Product事务中；执行账本不充当第二份内容目录。旧`state/web.sqlite`、旧Agent库不转换、不双写，仍可从菜单打开。主进程不开放另一个整段采用入口，不允许renderer直接调用旧task.result.adopt；额外授权仍只能拒绝/停止。
 
-本轮候选23项、实际安装程序25项真实模型端到端（范围重叠，后者增加受限工具与逐项拒绝）、同产物外部任务冻结指令/取消20项、保存回归19项、新建能力草稿5项分别记录（最后5项复用真实结果，未新增模型turn），计数不相加。首次bounded-analysis模式因固定旧静态版本门禁拒绝当前CLI，未启动模型；改用已有真实native资格与受限配置后通过，不改Runtime合约，不放宽结果引用验证。包内Runtime仍为`0.8.0`/固定a088b865…，不是新的Runtime发行。
+本轮固定候选与实际安装EXE的界面/动效21项分别通过（范围重叠）；实际安装程序另有真实内思考/采纳25项、保存19项、新能力草稿5项通过，计数不相加。界面21项使用先前已验证真实结果的隔离副本，不伪造provider返回；25项从新的隔离库调用实际Codex，验证失败/重试、原稿版本、冲突、退出中断与重启接续。后端/原生执行器/store及Product来源与0.2.14冻结字节一致，包内Runtime仍为固定0.8.0。首次界面断言误查wrapper阴影，实际焦点在::after层；修正观测后重试通过，未为测试改产品。
 
 重放实际安装程序（仓库根目录，新运行名；会真实调用模型）：
 
@@ -25,9 +27,14 @@ $env:TRACE_DESKTOP_EXE='D:/trace/Trace.exe'
 $env:TRACE_DESKTOP_AGENT_LIVE='1'
 $env:TRACE_THINKING_RUN='fresh-installed-run'
 node scripts/desktop-thinking-e2e.cjs
+
+# 在上一步真实成功结果的副本上验证界面和实际写锁恢复，不新增模型调用
+$env:TRACE_POLISH_SOURCE=Join-Path (Get-Location) '.test-results/desktop-thinking-release/fresh-installed-run/profile'
+$env:TRACE_POLISH_RUN='fresh-ui-run'
+node scripts/desktop-polish-e2e.cjs
 ```
 
-本机安装器`release/0.2.14/Trace-Desktop-0.2.14-Setup.exe`。冻结来源、候选/已安装真实E2E、安装身份、数据保留和正常实例回执在项目忽略目录`.test-results/desktop-thinking-release/`；测试只提交自产随机材料，未给个人库写测试任务。发行一致性使用本轮冻结快照内`scripts/release-smoke.mjs --unpacked D:/trace --expected-version 0.2.14`，不能用后续变化的HEAD冒充安装来源。原0.2.13证据继续保留为历史，旧生成release移入回退备份。未签名、未上传；整产品15组、旧库迁移、分享/发布、其它平台和物理设备/读屏不由本轮代证。
+本机安装器`release/0.2.15/Trace-Desktop-0.2.15-Setup.exe`。冻结来源、候选/已安装真实E2E、安装身份、数据保留和正常实例回执在项目忽略目录`.test-results/desktop-polish-release/`；测试只提交自产随机材料，未给个人库写测试任务。发行一致性使用本轮冻结快照内`scripts/release-smoke.mjs --unpacked D:/trace --expected-version 0.2.15`，不能用后续变化的HEAD冒充安装来源。原0.2.14证据继续保留为历史，旧生成release移入回退备份。未签名、未上传；整产品15组、旧库迁移、分享/发布、其它平台和物理设备/读屏不由本轮代证。
 
 ### 既有公开发行与旧版Codex入口
 
@@ -68,7 +75,7 @@ npm ci
 npm run dist:win
 ```
 
-产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.14 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.15 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
 
 桌面 Runtime 不是任意 `trace-runtime` checkout：`runtime-contract.json` 固定了包含首启 Codex qualifier 的来源 commit `a088b8658d76d1f825366fa8060712592b6460db`（`codex/fix-packaged-codex-qualification-0.8.0`）。发布前将该 commit 放在干净 checkout 中，并通过 `TRACE_RUNTIME_SOURCE` 指向它；staging 会拒绝其他 commit，不会把缺少 qualifier 的 Runtime 伪装成 release-ready。首次准备 checkout 或依赖目录被清理后，先在 Runtime 根目录执行 `corepack pnpm install --frozen-lockfile`；脚本也会在检测到 MCP workspace junction 缺失时以同一锁文件策略恢复依赖，并在 build 后验证 `@modelcontextprotocol/sdk` server paths 与 `zod/v3` 已 materialize。
 
