@@ -19,7 +19,7 @@ export function HaloDisclosure({title,children,className='',defaultOpen=false,op
     const size=node.animate([{height:height+'px'},{height:end+'px'}],options),fade=content.animate([{opacity},{opacity:opening?'1':'0'}],options);
     size.id='trace-surface-disclosure-size';fade.id='trace-surface-disclosure-fade';animations.current=[size,fade];
     void size.finished.then(()=>{if(animations.current[0]!==size)return;node.open=opening;delete node.dataset.animating;content.inert=false;for(const a of animations.current)a.cancel();animations.current=[];}).catch(()=>{});
-  }}><span>{title}</span><TraceIcon name="down" size={16}/></summary><div ref={body} className="wb-halo-disclosure-content">{children}</div></details>;
+  }}><span className="wb-disclosure-label">{title}</span><span className="wb-control-icon"><TraceIcon name="down" size={16}/></span></summary><div ref={body} className="wb-halo-disclosure-content">{children}</div></details>;
 }
 
 // Controlled editors stay mounted: collapsing cannot discard a draft or reset
