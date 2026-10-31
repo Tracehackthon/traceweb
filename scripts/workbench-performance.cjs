@@ -35,10 +35,10 @@ async function snapshot(page) {
 }
 async function saved(page) { await page.waitForFunction(() => document.querySelector('.wb-save-status')?.textContent.includes('已保存内容')); }
 async function startFrames(page) {
-  await page.evaluate(() => { const result = window.__traceFrames = { intervals: [], last: performance.now(), running: true }; const frame = now => { result.intervals.push(now - result.last); result.last = now; if (result.running) requestAnimationFrame(frame); }; requestAnimationFrame(frame); });
+  await page.evaluate(() => { const result = window.__traceFrames = { intervals: [], last: null, running: true }; const frame = now => { if (result.last !== null) result.intervals.push(now - result.last); result.last = now; if (result.running) requestAnimationFrame(frame); }; requestAnimationFrame(frame); });
 }
 async function stopFrames(page) {
-  return page.evaluate(() => { const f = window.__traceFrames; f.running = false; const values = f.intervals.slice(1).sort((a, b) => a - b); return { frames: values.length, medianMs: values[Math.floor(values.length / 2)] || null, p95Ms: values[Math.floor(values.length * .95)] || null, maxMs: values.at(-1) || null, intervalsMs: f.intervals }; });
+  return page.evaluate(() => { const f = window.__traceFrames; f.running = false; const values = f.intervals.slice().sort((a, b) => a - b); return { timingBasis:'Consecutive requestAnimationFrame timestamps; first callback initializes the clock, not a frame interval', frames: values.length, medianMs: values[Math.floor(values.length / 2)] ?? null, p95Ms: values[Math.floor(values.length * .95)] ?? null, maxMs: values.at(-1) ?? null, intervalsMs: f.intervals }; });
 }
 (async () => { try {
   await build({ absWorkingDir: root, stdin: { contents: "export {browserProductCommand, browserCanvasCommand, saveBrowserResource} from './apps/web/src/product/workbench-browser.mjs';", resolveDir: root }, outfile: path.join(out, 'seed-helper.mjs'), bundle: true, format: 'esm', platform: 'browser', target: 'chrome140', sourcemap: false });
@@ -87,6 +87,7 @@ async function stopFrames(page) {
     for (let i = 0; i < 10; i++) { await page.mouse.wheel(0, i < 5 ? 80 : -60); await page.waitForTimeout(24); }
     const zoomElapsedMs = performance.now() - zoomStart, zoomFrames = await stopFrames(page), afterZoom = await snapshot(page);
     check(count + ' real wheel zoom changes camera only', (await page.locator('.wb-ic-world').getAttribute('style')) !== transform && afterZoom.canvas.revision === afterDrag.canvas.revision && afterZoom.contentRevision === before.contentRevision);
+    check(count + ' measurements use consecutive nonnegative rAF intervals, not mixed startup clocks', [dragFrames,zoomFrames].every(sample=>sample.frames>=10&&sample.intervalsMs.every(value=>Number.isFinite(value)&&value>=0)));
     const metrics = await page.evaluate(() => ({ usedJSHeapSize: performance.memory?.usedJSHeapSize || null, devicePixelRatio, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches, documentWidth: document.documentElement.scrollWidth, innerWidth, animations: document.getAnimations().length }));
     check(count + ' material scene has no page horizontal overflow or entry animations', metrics.documentWidth <= metrics.innerWidth && metrics.animations === 0);
     samples.push({count,materialCounts:seeded.counts,uniqueOriginals:seeded.originals.length,decodedMedia,loadedMs,originalsLoadedMs,dragElapsedMs,dragFrames,zoomElapsedMs,zoomFrames,zoomTarget,metrics});
