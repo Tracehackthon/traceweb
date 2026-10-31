@@ -36,7 +36,7 @@ html[data-trace-appearance] :is(.wb-shell,.wb-dialog) button.wb-button.wb-danger
 html[data-trace-appearance] .wb-shell button.wb-liquid-button:disabled .wb-liquid-surface { background:var(--trace-surface-muted); }
 @media(hover:hover) and (pointer:fine) {
   html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-button:not(.wb-primary):not(:disabled):hover { background:var(--trace-state-hover); }
-  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-primary:not(:disabled):hover { filter:brightness(1.04); }
+  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-primary:not(:disabled):hover { filter:none; }
   html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button.wb-icon-button,button.tu-icon-button):not(:disabled):hover { background:var(--trace-state-hover); }
 }
 @media(forced-colors:active) {

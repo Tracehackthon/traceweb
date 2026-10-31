@@ -76,12 +76,13 @@ html[data-trace-appearance] .wb-thinking-composer .wb-composer-control::before,h
 .wb-halo-disclosure>summary::-webkit-details-marker { display:none; }
 .wb-halo-disclosure>summary>.wb-disclosure-label { min-width:0; line-height:24px; }
 .wb-halo-disclosure>summary>.wb-control-icon { justify-self:end; }
-.wb-halo-disclosure[open]>summary>.wb-control-icon>svg { transform:rotate(180deg); }
+.wb-halo-disclosure:is([open]:not([data-expanded=false]),[data-expanded=true])>summary>.wb-control-icon>svg { transform:rotate(180deg); }
+.wb-halo-disclosure[data-expanded=false] { --wb-disclosure-duration:var(--trace-motion-exit); }
 .wb-halo-disclosure-content { display:grid; gap:12px; padding:4px 0 12px; }
 @media(prefers-reduced-motion:no-preference) {
   html[data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-select-content[data-state=open] { animation:trace-overlay-in 160ms var(--trace-motion-ease); }
   html[data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-halo-control::after { transition:opacity var(--trace-motion-fast,120ms) var(--trace-motion-ease,cubic-bezier(.23,1,.32,1)); }
-  html[data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-halo-disclosure>summary>.wb-control-icon>svg { transition:transform var(--trace-motion-enter,200ms) var(--trace-motion-ease,cubic-bezier(.23,1,.32,1)); }
+  html[data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-halo-disclosure>summary>.wb-control-icon>svg { transition:transform var(--wb-disclosure-duration,var(--trace-motion-enter,200ms)) var(--trace-motion-ease,cubic-bezier(.23,1,.32,1)); }
 }
 html[data-trace-input=keyboard] .wb-select-content,html[data-reduce-motion=true] .wb-select-content { animation:none!important; }
 @media(prefers-reduced-motion:reduce) { .wb-select-content { animation:none!important; } }

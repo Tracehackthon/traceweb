@@ -6,10 +6,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MENU_TIMING, inMenuSafeZone } from './menu-intent.mjs';
 import { DropdownMenu, Tooltip } from 'radix-ui';
 import { TraceIcon, type IconName } from './icon';
+import {AnchoredMotionSurface} from './anchored-motion';
 
 export const TraceTooltipProvider = Tooltip.Provider;
 export function TraceTooltip({ children, content, side = 'top' }: { children: React.ReactElement; content: React.ReactNode; side?: 'top' | 'right' | 'bottom' | 'left' }) {
-  return <Tooltip.Root><Tooltip.Trigger asChild>{children}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content className="trace-ui tu-tooltip" side={side} sideOffset={8} collisionPadding={12}>{content}<Tooltip.Arrow className="tu-tooltip-arrow" /></Tooltip.Content></Tooltip.Portal></Tooltip.Root>;
+  const [open,setOpen]=useState(false);
+  return <Tooltip.Root open={open} onOpenChange={setOpen}><Tooltip.Trigger asChild>{children}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content asChild className="trace-ui tu-tooltip wb-motion-popover" side={side} sideOffset={8} collisionPadding={12}><AnchoredMotionSurface motionOpen={open}>{content}<Tooltip.Arrow className="tu-tooltip-arrow" /></AnchoredMotionSurface></Tooltip.Content></Tooltip.Portal></Tooltip.Root>;
 }
 
 export interface MenuAction { id: string; label: string; icon?: IconName; disabled?: boolean; destructive?: boolean; children?: MenuAction[] }
@@ -18,12 +20,14 @@ export function TraceMenu({ label, actions, onAction, open, onOpenChange, pendin
   open?: boolean; onOpenChange?: (open: boolean) => void; pendingId?: string;
   error?: string; side?: 'top' | 'right' | 'bottom' | 'left';
 }) {
-  return <DropdownMenu.Root open={open} onOpenChange={onOpenChange}>
-    <DropdownMenu.Trigger asChild><button type="button" className="trace-ui tu-button tu-icon-button" aria-label={label}><TraceIcon name="more" /></button></DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content className="trace-ui tu-menu" side={side} align="end" sideOffset={6} collisionPadding={12} aria-label={label}>
-      <MenuRows actions={actions} onAction={onAction} pendingId={pendingId} title={label} />
+  const [localOpen,setLocalOpen]=useState(false),actualOpen=open??localOpen,trigger=useRef<HTMLButtonElement>(null);
+  return <DropdownMenu.Root open={actualOpen} onOpenChange={next=>{setLocalOpen(next);onOpenChange?.(next);}}>
+    <DropdownMenu.Trigger asChild><button ref={trigger} type="button" className="trace-ui tu-button tu-icon-button" aria-label={label}><TraceIcon name="more" /></button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal><DropdownMenu.Content asChild className="trace-ui tu-menu wb-motion-popover" side={side} align="end" sideOffset={6} collisionPadding={12} aria-label={label} onPointerDownOutside={event=>{if(trigger.current?.contains(event.detail.originalEvent.target as Node))event.preventDefault();}}>
+      <AnchoredMotionSurface motionOpen={actualOpen}>      <MenuRows actions={actions} onAction={onAction} pendingId={pendingId} title={label} />
       {pendingId && <p className="tu-menu-message" role="status">正在处理；关闭菜单不会撤销已发出的操作。</p>}
       {error && <p className="tu-menu-message" role="alert">{error}</p>}
+      </AnchoredMotionSurface>
     </DropdownMenu.Content></DropdownMenu.Portal>
   </DropdownMenu.Root>;
 }
@@ -71,8 +75,8 @@ function MenuRows({ actions, onAction, pendingId, title }: { actions: MenuAction
         onKeyDown={event => { if (['ArrowRight', 'Enter', ' '].includes(event.key)) { cancel(); setActive(action.id); } }}>
         {contents}<span className="tu-menu-chevron" aria-hidden="true">›</span>
       </DropdownMenu.SubTrigger>
-      <DropdownMenu.Portal><DropdownMenu.SubContent ref={node => { if (node) panels.current.set(action.id, node); else panels.current.delete(action.id); }} className="trace-ui tu-menu tu-submenu" sideOffset={-8} collisionPadding={12} onPointerEnter={cancel}>
-        <MenuRows actions={action.children} title={action.label} onAction={onAction} pendingId={pendingId} />
+      <DropdownMenu.Portal><DropdownMenu.SubContent ref={node => { if (node) panels.current.set(action.id, node); else panels.current.delete(action.id); }} asChild className="trace-ui tu-menu tu-submenu wb-motion-popover" sideOffset={-8} collisionPadding={12} onPointerEnter={cancel}>
+        <AnchoredMotionSurface motionOpen={active===action.id}>        <MenuRows actions={action.children} title={action.label} onAction={onAction} pendingId={pendingId} /></AnchoredMotionSurface>
       </DropdownMenu.SubContent></DropdownMenu.Portal>
     </DropdownMenu.Sub> : <DropdownMenu.Item {...events} key={action.id} className="tu-menu-item" data-destructive={action.destructive || undefined} disabled={action.disabled || Boolean(pendingId)} onPointerEnter={() => enter(action)} onSelect={() => onAction(action.id)}>{contents}</DropdownMenu.Item>;
   })}</>;
