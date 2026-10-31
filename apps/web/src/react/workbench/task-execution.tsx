@@ -62,7 +62,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
       {history.length>1&&<HaloDisclosure title={<>此前运行与回执（{history.length-1}）</>}>{history.slice(0,-1).map(old=><section key={old.id}><strong>第 {old.number} 次：{labels[old.status]}</strong><p>{old.error||old.result?.answer||'没有已确认结果'}</p><small>{old.runtime.threadId||old.id}</small></section>)}</HaloDisclosure>}
       <ExecutionLog events={run.events} title="已记录的执行事件"/>
     </>}
-    {error&&<p role="alert">{error} 上次记录仍保留，不代表当前执行状态。<button className="wb-button" onClick={()=>void refresh()}>重新读取执行记录</button></p>}{notice&&<p role="status">{notice}</p>}
+    {error&&<div className="wb-execution-recovery"><HaloNotice tone="error" title="当前执行状态未确认" description={error+' 上次记录仍保留，不代表当前执行状态。'}/><button className="wb-button" onClick={()=>void refresh()}>重新读取执行记录</button></div>}{notice&&<p role="status">{notice}</p>}
   </section>;
 }
 
