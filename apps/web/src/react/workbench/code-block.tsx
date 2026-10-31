@@ -4,7 +4,7 @@ import './execution-view.css';
 export function CodeBlock({code,language='text',title='代码'}:{code:string;language?:string;title?:string}) {
   const id=useId(),pre=useRef<HTMLPreElement>(null),[tab,setTab]=useState(0),[notice,setNotice]=useState('');
   // Only explicit fenced blocks are projected; the complete original is always available.
-  const tabs=[{label:'完整原文',code,language}];
+  const tabs=[{label:'当前正文',code,language}];
   const fence=/^```([\w+-]*)[^\r\n]*\r?\n([\s\S]*?)^```\s*$/gm;let match:RegExpExecArray|null;
   while((match=fence.exec(code))&&tabs.length<17)tabs.push({label:`代码段 ${tabs.length}`,code:match[2],language:match[1]||'text'});
   const active=Math.min(tab,tabs.length-1),selected=tabs[active],latest=useRef(selected.code);latest.current=selected.code;

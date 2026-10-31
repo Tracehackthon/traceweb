@@ -42,7 +42,7 @@ export function ExecutionView({client,task}:{client:WorkbenchClient;task:Task}) 
       {run.error?.message&&<p role="status">执行回执：{run.error.message}</p>}
       {run.status==='succeeded'&&<p className="wb-halo-hint">运行终态已记录；{run.canonicalStateChanged?'执行方报告原范围已有变更，请回原范围核验。':'不代表本任务结果已采用或正文已修改。'}{run.usableAsCurrent===false?'原范围已变化，不能视为当前建议。':''}</p>}
       <ExecutionLog events={events}/>
-      {run.result?.answer&&<CodeBlock title="执行返回原文（未自动采用）" code={run.result.answer} language="text"/>}
+      {run.result?.answer&&<CodeBlock title="执行返回正文（未自动采用）" code={run.result.answer} language="text"/>}
     </>}
   </section>;
 }
