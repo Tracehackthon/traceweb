@@ -116,8 +116,9 @@ html[data-trace-appearance=dark] .trace-ui { color-scheme:dark; }
 html[data-trace-appearance] :is(.tu-timeline-entry,.tu-history-trigger) { border-width:0.5px; }
 html[data-trace-appearance] .wb-dialog::backdrop { background:var(--black-a8); }
 html[data-trace-appearance] .wb-node[data-selected] { outline:2px solid var(--trace-focus); }
-html[data-trace-appearance] .wb-thinking-pane:has(.wb-thinking-composer) { display:flex; flex-direction:column; overflow:hidden; }
-html[data-trace-appearance] .wb-thinking-pane:has(.wb-thinking-composer)>:not(.wb-messages) { flex-shrink:0; }
-html[data-trace-appearance] .wb-messages { min-height:0; flex:1; overflow:auto; }
+/* Conversation, composer and execution controls share one real scroll owner.
+   A shrinking flex history must not push save controls into overflow:hidden. */
+html[data-trace-appearance] .wb-thinking-pane:has(.wb-thinking-composer) { display:block; overflow:auto; }
+html[data-trace-appearance] .wb-messages { min-height:0; overflow:visible; }
 html[data-trace-appearance] .wb-thinking-composer { margin-top:16px; padding:12px; background:var(--trace-surface-panel); }
 html[data-trace-appearance] .wb-thinking-composer textarea { min-height:88px; max-height:24dvh; }
