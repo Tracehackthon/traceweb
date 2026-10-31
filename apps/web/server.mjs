@@ -4,11 +4,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { createWebStore } from './web-store.mjs'
+import { createProductWorkspace } from '@trace/product-workspace/node'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const workspace = path.resolve(root, '../..')
-const webStore = createWebStore({ file: path.resolve(process.env.TRACE_WEB_STATE_FILE || path.join(workspace, '.trace/state/web.sqlite')) })
+const webStore = createProductWorkspace({ file: path.resolve(process.env.TRACE_WEB_STATE_FILE || path.join(workspace, '.trace/state/web.sqlite')), allowSnapshotWrites:true })
 const requestedPort = Number(process.env.TRACE_DESKTOP_PORT ?? '4173')
 const port = Number.isInteger(requestedPort) && requestedPort > 0 ? requestedPort : 4173
 const distRoot = path.resolve(process.env.TRACE_WEB_DIST_DIR || path.join(root, 'dist'))

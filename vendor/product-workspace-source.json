@@ -1,33 +1,41 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.2.0-frontend.5",
-  "recordedAt": "2026-10-30T21:55:27.153Z",
+  "version": "0.3.0-frontend.2",
+  "recordedAt": "2026-10-31T12:33:18.334Z",
   "license": "UNLICENSED",
-  "distribution": "Trace internal private artifact; no inferred open-source grant",
+  "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.2.0-frontend.5.tgz",
-    "sha256": "963961de0e24d61e224f2808de30aa259f0b173e1a23db71b2fdc923173d5ada",
-    "integrity": "sha512-xRKTXeTQ3KsIstIRnJ0d86TaPqv0duyAoAfKVW50xrv+Iw8rQyh3ZwDgpovrMi1fWBQ4zxB4/V+dYXpzydQWKg=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.2.tgz",
+    "sha256": "f8d79e60819f1398f5b30fa56f5aabbe03fb25f31ea8bd2746c0649b9e8d7601",
+    "integrity": "sha512-hqqv9gKM55z1ueyTyRkZGvinVkx+ktoEwapzx5+ZrfhM5ewD6/ezjUjigTb4RDaJIzksHjd8dcpO77K1yqTzlQ=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "91b86b17327fa3bb87e14cefb366d31c497b43c4",
-    "dirty": true,
-    "dirtyStatus": " M packages/product/workspace/README.md\n M packages/product/workspace/package.json\n M packages/product/workspace/src/bridge.mjs\n M packages/product/workspace/src/chain-model.mjs\n M packages/product/workspace/src/codex-bridge.mjs\n M packages/product/workspace/src/commands.mjs\n M packages/product/workspace/src/comparison-model.mjs\n M packages/product/workspace/src/host-ingest.mjs\n M packages/product/workspace/src/host-workflow.mjs\n M packages/product/workspace/src/index.mjs\n M packages/product/workspace/src/worksite-model.mjs\n M packages/product/workspace/src/workspace.mjs\n",
+    "head": "0e61787b25c2bfc17fa88274150e3a9454933ad8",
+    "dirty": false,
+    "dirtyStatus": "",
     "files": [
       {
-        "path": "package.json",
-        "sha256": "5a225c0981df2d86c06d30a865a198bd7fa99dcea2c2ad74318d23d766bda6b2"
+        "path": "README.md",
+        "sha256": "9486e0613c582a3dbc2b85d90fed992afd3d3dd240a625864f7617c25f1d808c"
       },
       {
-        "path": "README.md",
-        "sha256": "8f0fbeb8822e09105487df449101d7e0c103355adba2c603b8f5fe7f38ffdee3"
+        "path": "package.json",
+        "sha256": "dbce836517a2fcb77dc89fca996a6d2d38021311156b4c0d5b5d5073f4a3eaf8"
       },
       {
         "path": "src/bridge.mjs",
         "sha256": "77437e6f7e26a06de67451ba3a9f1551ead92056fa916dec3da8ab2eb82dc7be"
+      },
+      {
+        "path": "src/canvas-model.mjs",
+        "sha256": "06f7557bf840460bad0d8ce5b6c7d12045673b030dd6a6279f630933c85b7943"
+      },
+      {
+        "path": "src/canvas-store.mjs",
+        "sha256": "f4cc761811c1c9901e7495b2570fbffccc74d1dd23b4e9738f1eb657a45abc5e"
       },
       {
         "path": "src/chain-model.mjs",
@@ -39,7 +47,7 @@
       },
       {
         "path": "src/commands.mjs",
-        "sha256": "0a9299402c8d1efa3e1e4a21a9f386e7d8ab1588037e85c6169d52c064f67981"
+        "sha256": "56a134b4934af2ca144675ea1ba2ab7d309bee8d69586a972ec73206c132957c"
       },
       {
         "path": "src/comparison-model.mjs",
@@ -63,11 +71,15 @@
       },
       {
         "path": "src/index.mjs",
-        "sha256": "e3f0947586a5174f8142eb298ab3938b06ccdec979db675748e7039bc4e1e91f"
+        "sha256": "b6640a89b02445ba20a2cb1585d5bc152faa50c4b5c83f7bf4ef181ce80c2783"
       },
       {
         "path": "src/scope-contract.mjs",
         "sha256": "8b3f7b442f51c21a5d9eaf8c0c72eb3788dc2b8943d24fcedf7801e06b8aa70e"
+      },
+      {
+        "path": "src/workbench-model.mjs",
+        "sha256": "03342a09e014e900b61f89453535bcfab11f0ef1e7ffe960c49f027cacb38601"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -75,7 +87,7 @@
       },
       {
         "path": "src/workspace.mjs",
-        "sha256": "47c19c27f7a4b2b632dbfa3a5a50896a5230d83edcf335fee131d0f44a238387"
+        "sha256": "14f18dbc2d12cc8db1c2a700743e67d93b1acdadc5c9fd319635bf3a9e8d48ac"
       },
       {
         "path": "tsconfig.types.json",
@@ -84,6 +96,10 @@
       {
         "path": "types/bridge.d.mts",
         "sha256": "031a508541aff04c3e0e1266db8bd63dd39624cc37c17b5a6400ece5c572026a"
+      },
+      {
+        "path": "types/canvas-model.d.mts",
+        "sha256": "e7a36ab6cebd36eca9bf83b8bb9cfff818f4cd99ce5ed6ec765ab33ede7912c9"
       },
       {
         "path": "types/chain-model.d.mts",
@@ -103,18 +119,23 @@
       },
       {
         "path": "types/index.d.mts",
-        "sha256": "c4b6ca85803fbcf2fa13c9327717030b7297960d97b27e5d6b5197b489159167"
+        "sha256": "eedb1f6cd2e6a8c2d0b42027975d3a2ddad8f2595d23e5661c4fe256c6efe05f"
       },
       {
         "path": "types/scope-contract.d.mts",
         "sha256": "90cefac89312b4d305b513faaac926982dabefd9e5c96afdf61a8b164e0b3af8"
       },
       {
+        "path": "types/workbench-model.d.mts",
+        "sha256": "356ecafe548318a6e9cb0491caaee6847c34e9a5ac42755087eeedee587855e7"
+      },
+      {
         "path": "types/worksite-model.d.mts",
         "sha256": "267c7a1e9dc72810913a299799780d06590fcadbeb44e100c498112127168440"
       }
-    ],
-    "filesIdentitySha256": "543da74fa7a9c9be84e7972592afd89ca0393996317cd810821825d40eab23fd",
-    "declarationCompiler": "7.0.2"
-  }
+    ]
+  },
+  "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
+  "verification": "workbench/runtime-current.tap: 46 passed; Web and current UI regression pending",
+  "revisionReason": "frontend.1 remains immutable. frontend.2 adds full canvas envelope/history validation and pre-reference original-byte integrity verification after real corruption-path audit."
 }

@@ -10,7 +10,7 @@
     "dev": "npm --prefix apps/web run dev",
     "start": "npm --prefix apps/web start",
     "build": "npm run build:web",
-    "build:web": "node scripts/verify-product-workspace.mjs && node scripts/verify-ui-resources.mjs && npm --prefix apps/web run build",
+    "build:web": "node scripts/verify-product-workspace.mjs && node scripts/verify-ui-resources.mjs && node scripts/verify-infinite-canvas.mjs && npm --prefix apps/web run build",
     "build:vercel": "node scripts/build-vercel.mjs",
     "build:pet": "npm --prefix apps/desktop-pet run build",
     "release:checksum": "node scripts/checksum-release.mjs",
@@ -32,7 +32,10 @@
     "test:ui-renovation": "node scripts/ui-renovation-e2e.cjs",
     "video:studio": "remotion studio video/src/index.tsx --public-dir=video/public --no-open",
     "video:render": "remotion render video/src/index.tsx TraceDemo apps/web/public/video/trace-demo.mp4 --public-dir=video/public --codec=h264 --crf=23 --pixel-format=yuv420p",
-    "video:poster": "remotion still video/src/index.tsx TraceDemo apps/web/public/video/trace-demo-poster.jpg --public-dir=video/public --frame=90 --image-format=jpeg"
+    "video:poster": "remotion still video/src/index.tsx TraceDemo apps/web/public/video/trace-demo-poster.jpg --public-dir=video/public --frame=90 --image-format=jpeg",
+    "test:workbench": "node scripts/workbench-e2e.cjs",
+    "test:workbench:desktop": "node scripts/workbench-e2e.cjs --desktop",
+    "test:workbench:performance": "node scripts/workbench-performance.cjs"
   },
   "devDependencies": {
     "@remotion/cli": "^4.0.506",
@@ -46,7 +49,7 @@
     "vite": "^8.3.0"
   },
   "dependencies": {
-    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.2.0-frontend.5.tgz",
+    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.3.0-frontend.2.tgz",
     "lucide-react": "1.65.0",
     "radix-ui": "1.8.1",
     "react": "^19.3.0",

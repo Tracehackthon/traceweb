@@ -907,6 +907,32 @@ export function createRuntimeCapabilityClient({
       }
     }
     if (request.operation === 'workspace.request') return nativeWorkspaceRequest(request.pathname, request.method || 'GET', request.body)
+    if (request.operation === 'workbench.request') {
+      const pathname=request.pathname,method=request.method||'GET'
+      const readable=pathname==='/api/product/workspace'||pathname==='/api/product/canvases'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}$/.test(pathname)
+      const writable=pathname==='/api/product/commands'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}\/commands$/.test(pathname)
+      if(!(method==='GET'&&readable||method==='POST'&&writable))throw new Error('不支持这个工作台操作')
+      const body=method==='POST'?JSON.stringify(request.body):undefined
+      if(body!==undefined&&Buffer.byteLength(body)>8*1024*1024)throw new Error('工作台命令超过8 MiB')
+      const response=await fetchImpl(new URL(pathname,backendOrigin),{method,redirect:'error',signal:AbortSignal.timeout(runtimeTimeoutMs),headers:{origin:backendOrigin,'content-type':'application/json'},...(body===undefined?{}:{body})})
+      const text=await response.text();if(Buffer.byteLength(text)>8*1024*1024)throw new Error('工作台响应超过8 MiB')
+      let value;try{value=JSON.parse(text)}catch{throw new Error('工作台响应不是有效JSON')}
+      if(!response.ok)return{kind:NATIVE_PRODUCT_RESPONSE_KIND,ok:false,status:response.status,error:value.error}
+      if(value.storage)value.storage={kind:value.storage.kind||'sqlite',label:'Trace 桌面端本机空间'}
+      return value
+    }
+    if (request.operation === 'product.resource.save' || request.operation === 'product.resource.read') {
+      const save=request.operation==='product.resource.save'
+      const bytes=save?(request.bytes instanceof Uint8Array?request.bytes:request.bytes instanceof ArrayBuffer?new Uint8Array(request.bytes):null):null
+      if(save&&(!bytes||bytes.byteLength>256*1024*1024||typeof request.mime!=='string'||!/^\w[\w.+-]*\/[\w.+-]+$/.test(request.mime)))throw new Error('原件数据或类型不正确')
+      if(!save&&(typeof request.resourceId!=='string'||!/^[a-f0-9]{64}$/.test(request.resourceId)))throw new Error('原件身份不正确')
+      const pathname=save?'/api/product/resources':`/api/product/resources/${request.resourceId}/content`
+      const response=await fetchImpl(new URL(pathname,backendOrigin),{method:save?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(30000),headers:{origin:backendOrigin,...(save?{'content-type':request.mime}:{})},...(save?{body:bytes}:{})})
+      if(!response.ok){const value=await response.json();return{kind:NATIVE_PRODUCT_RESPONSE_KIND,ok:false,status:response.status,error:value.error}}
+      if(save)return response.json()
+      const body=await response.arrayBuffer();if(body.byteLength>256*1024*1024)throw new Error('原件超过256 MiB')
+      return {bytes:new Uint8Array(body),mime:response.headers.get('content-type')||'application/octet-stream'}
+    }
     if (request.operation === 'product.command') {
       if (request.protocolVersion !== 1 || !Array.isArray(request.operations) || request.operations.length < 1 || request.operations.length > 256) throw new Error('产品命令不完整')
       const commandId = requireId(request.commandId, '产品命令')

@@ -17,7 +17,7 @@ import { preloadImages, registerFont, clearResourceCache, getResourceStats } fro
 import { completeDemoMode, runtime } from './react/runtime';
 import { workspaceRecoveryExport } from './react/workspace-authority.mjs';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
-import { browserStorage, exportWorkspace } from './react/workspace-storage';
+import { browserStorage, exportWorkspace, workspaceRequest } from './react/workspace-storage';
 import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, nativeRuntimeConnected, nativeRuntimeUnavailable, onDesktopSetupProgress, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, retryDesktopRuntime, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
 import type { DialogState, RouteMemory, ViewName, WorkspaceSnapshot } from './react/types';
 
@@ -841,5 +841,13 @@ function App() {
 
 const mountPoint = document.querySelector('#app');
 if (!mountPoint) throw new Error('Trace 应用缺少 #app 挂载点');
-createRoot(mountPoint).render(<App />);
+const reactRoot=createRoot(mountPoint);
+async function bootProduct(){
+  const view=new URL(location.href).searchParams.get('view');
+  let workbench=['canvas','capabilities','collaboration'].includes(view||'');
+  if(!workbench){try{const response=await workspaceRequest('/api/web/workspace',{cache:'no-store'});if(response.ok)workbench=(await response.json()).host?.schemaVersion===2;}catch{/* Existing load surface owns the failure and preserves its recovery draft. */}}
+  if(workbench){const {WorkbenchApp}=await import('./react/workbench/workbench-app');reactRoot.render(<WorkbenchApp/>);}
+  else reactRoot.render(<App/>);
+}
+void bootProduct().catch(error=>{reactRoot.render(<main role="alert"><h1>工作台没有载入</h1><p>{error instanceof Error?error.message:'读取失败，未替换保存内容。'}</p><button onClick={()=>location.reload()}>重新载入</button></main>);});
 

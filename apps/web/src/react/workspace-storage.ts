@@ -36,6 +36,10 @@ export async function productCommandRequest(payload: { protocolVersion?: number;
 }
 
 export async function workspaceRequest(url: string, options: RequestInit = {}): Promise<Response> {
+  if(completeDemoStorage&&url.startsWith('/api/product/')){
+    const {browserWorkspaceRequest}=await import('../product/browser-workspace.mjs');
+    return browserWorkspaceRequest(url,options);
+  }
   if (completeDemoStorage) {
     const { demoWorkspaceRequest } = await import('./demo-workspace-storage');
     return demoWorkspaceRequest(url, options);
