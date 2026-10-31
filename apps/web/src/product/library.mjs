@@ -1,8 +1,7 @@
-import { mark, icon } from '../home-icons.js';
 export const h = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const titleOf = matter => matter?.title || (matter?.whyCare || matter?.originalText || '未命名的事').split('\n')[0];
 export const short = (value,n=70) => Array.from(value||'').slice(0,n).join('')+(Array.from(value||'').length>n?'…':'');
-const label = {matter:'在意的事',expression:'原表达',understanding:'当前理解',discussion:'补充',source:'对照材料',result:'工作结果',revision:'修订记录',work:'工作现场',branch:'旁支'};
+/** @returns {import('../react/types').LibraryRecord[]} */
 export function recordsOf(host) {
   const rows=[];
   for(const m of host.chain.matters) {
@@ -130,54 +129,4 @@ export function mattersView(host) {
     };
   });
   return {mode:'overview',query:'',notice:'',example:false,selectedId:null,selected:null,matters,search:{counts:{matters:0,quotes:0,sources:0},matters:[],quotes:[],sources:[]}};
-}
-export function mountLibrary({root,host,route,onNavigate,onBack,onProfile}) {
-  const control=new AbortController();
-  const on=(target,event,fn)=>target.addEventListener(event,fn,{signal:control.signal});
-  const works=route.view==='works';
-  const heading=works?'工作现场':route.view==='search'?'找回之前的那一点':'全部痕迹';
-  let current={...route,kind:works?'work':route.kind||''};
-  root.innerHTML=`<section class="web-library"><header class="web-header"><button class="web-brand" data-go="home" aria-label="Trace，返回首页"><span class="brand-tile">${mark}</span>Trace</button><nav><button data-go="matters">在意的事</button><button data-go="all">全部痕迹</button><button data-go="works">工作现场</button></nav></header><main class="web-library-main"><button class="web-back" data-back>← 返回来处</button><div class="web-library-title"><div><h1>${heading}<span>。</span></h1><p class="web-library-description">${works?'从理解出发，把实际结果带回来':'原话、材料和结果，仍有各自的来处'}</p></div><span class="web-count"></span></div>${route.matterId?`<div class="web-scope">只看「${h(short(titleOf(host.chain.matters.find(m=>m.id===route.matterId)),45))}」<button data-clear-scope>查看全部事项 ×</button></div>`:''}<form class="web-search" role="search">${icon('search')}<input type="search" aria-label="搜索全部痕迹" placeholder="搜原话、理解、材料或结果……" value="${h(route.q||'')}" autocomplete="off"><button type="submit">搜索</button></form><nav class="web-filters" aria-label="内容类型" ${works?'hidden':''}>${[['','全部'],['expression','原表达'],['understanding','我的理解'],['source','对照材料'],['result','结果'],['revision','修订'],['work','工作']].map(([kind,text])=>`<button data-kind="${kind}" aria-pressed="${current.kind===kind}">${text}</button>`).join('')}</nav><div class="web-records"></div></main><button class="web-profile" aria-label="个人与设置">${icon('user')}</button></section>`;
-  function paint(){
-    const rows=queryRecords(host,current);
-    root.querySelector('.web-count').textContent=`${rows.length} 条${current.q?'匹配':''}痕迹`;
-    root.querySelectorAll('[data-kind]').forEach(b=>b.setAttribute('aria-pressed',String(current.kind===b.dataset.kind)));
-    root.querySelector('.web-records').innerHTML=rows.length?rows.map(r=>`<article class="web-record" id="record-${h(r.id)}" data-record="${h(r.id)}"><div class="web-record-meta"><span>${label[r.kind]}</span><span>${h(r.meta||'你的内容')}</span></div><button class="web-record-open" data-open="${h(r.id)}"><h2>${h(short(r.title,70))}</h2><p>${h(r.text)}</p>${r.interpretation?`<p class="web-secondary">解释：${h(r.interpretation)}</p>`:''}${r.unconfirmed?`<p class="web-secondary">还不确定：${h(r.unconfirmed)}</p>`:''}</button><div class="web-record-bottom">${r.matterId?'属于同一件事 · ':''}${r.route?'打开原处 →':'这份材料还没有关联到任何一件事'}</div></article>`).join(''):`<section class="web-empty"><h2>${works?'还没有工作记录':current.q?'没有找到这次想找的内容':'这里还没有痕迹'}</h2><p>${works?'从一件事的「我的理解」进入「带去用」，确认本次任务和带入的内容。':'换个关键词，或回首页留下一点。'}</p><button class="web-primary" data-go="home">回首页留下一点</button></section>`;
-  }
-  function change(patch){current={...current,...patch};onNavigate(current,{replace:true,render:false});paint();}
-  on(root,'click',event=>{
-    const b=event.target.closest('button');if(!b)return;
-    if(b.hasAttribute('data-back'))onBack();
-    if(b.dataset.go)onNavigate({view:b.dataset.go});
-    if(b.hasAttribute('data-clear-scope'))onNavigate({...current,matterId:null});
-    if(b.hasAttribute('data-kind'))change({kind:b.dataset.kind});
-    if(b.classList.contains('web-profile'))onProfile();
-    if(b.dataset.open){const r=recordsOf(host).find(r=>r.id===b.dataset.open),next=routeForRecord(r);if(next)onNavigate(next,{origin:current});}
-  });
-  const input=root.querySelector('input');let composing=false;
-  on(input,'compositionstart',()=>composing=true);
-  on(input,'compositionend',()=>{composing=false;change({q:input.value});});
-  on(input,'input',()=>{if(!composing)change({q:input.value});});
-  on(root.querySelector('form'),'submit',event=>{event.preventDefault();if(!composing)change({q:input.value});});
-  on(document,'keydown',event=>{
-    if (!root.isConnected || (event.target !== document.body && !root.contains(event.target)) || document.querySelector('dialog[open]')) return;
-    if(event.key!=='Escape'||event.isComposing)return;
-    event.preventDefault();event.stopPropagation();onBack();
-    const focusReturnTarget = (attempt=0) => {
-      const selector = returnFocusSelectors(route).find(value => document.querySelector(value));
-      const target = selector ? document.querySelector(selector) : null;
-      if (target instanceof HTMLElement && target !== document.body) {
-        if (!target.matches('a,button,input,select,textarea,[tabindex]:not([tabindex="-1"])')) target.tabIndex=-1;
-        target.focus({preventScroll:true});
-        return;
-      }
-      // The route host and the shell chrome are committed in the same React
-      // update, but route modules can still resolve one frame later on a cold
-      // load. Retry briefly without ever depending on the detached opener.
-      if (attempt < 4) window.requestAnimationFrame(()=>focusReturnTarget(attempt+1));
-    };
-    window.requestAnimationFrame(()=>focusReturnTarget());
-  });
-  paint();if(route.view==='search'&&!route.recordId)input.focus();
-  return {destroy(){control.abort();},update(nextHost){host=nextHost;paint();}};
 }
