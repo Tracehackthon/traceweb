@@ -7,3 +7,25 @@
 /* Native scrollbars otherwise add large arrow buttons and white gutters on Windows. */
 :is(.wb-shell,.wb-dialog),:is(.wb-shell,.wb-dialog) * { scrollbar-width:thin;scrollbar-color:var(--sand-9) transparent; }
 @media(forced-colors:active){:is(.wb-shell,.wb-dialog),:is(.wb-shell,.wb-dialog) * { scrollbar-color:auto; }}
+
+/* A saved task is a frozen record. Its independent preparation stays available,
+   but selecting a saved task puts the record, not another editor, first. */
+.wb-task-preparer>.wb-halo-disclosure-content { display:grid;gap:20px;padding-top:20px; }
+.wb-task-preparer>.wb-halo-disclosure-content>p { margin:0; }
+.wb-task-preparer>summary .wb-disclosure-label { font-size:20px;line-height:28px;font-weight:600; }
+.wb-task-context { display:grid;gap:12px; }
+.wb-task-context>h4 { margin:0;font-size:13px;line-height:20px;font-weight:500; }
+.wb-task-context>.wb-reference { margin:0;min-height:44px;width:100%; }
+.wb-task-context>.wb-reference>span { min-width:0;overflow-wrap:anywhere; }
+.wb-task-context>.wb-reference>small { flex:none; }
+.wb-task-context>p { margin:0; }
+.wb-collection-compact { min-width:0;display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--trace-surface-panel); }
+html[data-trace-appearance] .wb-shell .wb-collection-compact>button.wb-collection-switch { flex:1;min-width:0;justify-content:space-between;min-height:64px;text-align:left;padding:8px 12px; }
+.wb-collection-switch>span { display:grid;gap:2px;min-width:0; }
+.wb-collection-switch small { font-size:12px;line-height:20px;font-weight:400;color:var(--trace-text-secondary); }
+.wb-collection-switch strong { font-size:14px;line-height:24px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.wb-collection-switch>svg { flex:none; }
+.wb-collection-compact>.wb-icon-button { flex:none; }
+.wb-collection-modal .wb-list-pane { padding:0;max-height:none;overflow:visible;border:0; }
+.wb-collection-modal .wb-page-heading { margin-bottom:16px; }
+.wb-collection-modal .wb-item-list { max-height:min(52dvh,440px); }

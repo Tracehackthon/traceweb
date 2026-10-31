@@ -51,7 +51,7 @@ module.exports=async function({page,state,saved,check,capture,out,desktop,app,wi
   await rows.last().press('Home');for(let n=0;n<11;n++)await page.keyboard.press('ArrowDown');
   check('keyboard reveals the next row early in the overflowing capability list',await capabilityList.evaluate(e=>{const row=document.activeElement.getBoundingClientRect(),box=e.getBoundingClientRect();return e.scrollHeight>e.clientHeight&&e.scrollTop>0&&row.bottom<=box.bottom-12&&row.top>=box.top;}));
   await capture('ui-capability-list');
-  await nav('Agent 协作').click();await page.getByRole('button',{name:'新建共同思考',exact:true}).click();
+  await nav('Agent 协作').click();await page.getByRole('radio',{name:'Trace 内思考',exact:true}).click();await page.getByRole('button',{name:'新建共同思考',exact:true}).click();
   const input=page.getByRole('textbox',{name:'继续共同思考',exact:true}),submit=page.getByRole('button',{name:'留下这段思考',exact:true});
   await input.fill('');await input.press('ArrowUp');check('new discussion never exposes another discussion history',await page.getByRole('listbox',{name:'历史输入'}).count()===0);
   const sessionId=Object.values((await state()).product.host.sessions).at(-1).id;

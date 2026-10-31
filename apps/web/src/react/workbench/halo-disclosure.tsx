@@ -5,13 +5,13 @@ import {motionAllowed} from './motion';
 
 // Native details remains the semantic/focus owner. Only deliberate pointer
 // disclosure animates; keyboard, reduced motion and live data updates are instant.
-export function HaloDisclosure({title,children,className='',defaultOpen=false,open}:{title:React.ReactNode;children:React.ReactNode;className?:string;defaultOpen?:boolean;open?:boolean}){
+export function HaloDisclosure({title,children,className='',defaultOpen=false,open,onOpenChange}:{title:React.ReactNode;children:React.ReactNode;className?:string;defaultOpen?:boolean;open?:boolean;onOpenChange?:(open:boolean)=>void}){
   const id='trace-disclosure-'+useId(),root=useRef<HTMLDetailsElement>(null),body=useRef<HTMLDivElement>(null),animations=useRef<Animation[]>([]),target=useRef(false);
   useEffect(()=>()=>{for(const a of animations.current)a.cancel();},[]);
-  useLayoutEffect(()=>{if(open===undefined)return;for(const a of animations.current)a.cancel();animations.current=[];const node=root.current,content=body.current;if(!node||!content)return;node.open=open;target.current=open;node.dataset.expanded=String(open);delete node.dataset.animating;node.querySelector('summary')?.setAttribute('aria-expanded',String(open));content.inert=!open;},[open]);
+  useLayoutEffect(()=>{if(open===undefined||(animations.current.length&&target.current===open))return;for(const a of animations.current)a.cancel();animations.current=[];const node=root.current,content=body.current;if(!node||!content)return;node.open=open;target.current=open;node.dataset.expanded=String(open);delete node.dataset.animating;node.querySelector('summary')?.setAttribute('aria-expanded',String(open));content.inert=!open;},[open]);
   return <details ref={root} open={open??defaultOpen} className={'wb-halo-disclosure '+className}><summary aria-expanded={open??defaultOpen} aria-controls={id} onClick={event=>{
     const node=root.current,content=body.current;if(!node||!content)return;
-    event.preventDefault();const opening=animations.current.length?!target.current:!node.open;target.current=opening;node.dataset.expanded=String(opening);node.querySelector('summary')?.setAttribute('aria-expanded',String(opening));
+    event.preventDefault();const opening=animations.current.length?!target.current:!node.open;target.current=opening;onOpenChange?.(opening);node.dataset.expanded=String(opening);node.querySelector('summary')?.setAttribute('aria-expanded',String(opening));
     const height=node.getBoundingClientRect().height,opacity=node.open?getComputedStyle(content).opacity:'0';
     for(const a of animations.current)a.cancel();animations.current=[];content.inert=false;
     if(!event.detail||!motionAllowed()){node.open=opening;content.inert=!opening;delete node.dataset.animating;return;}

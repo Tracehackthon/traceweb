@@ -48,7 +48,7 @@ module.exports=async({page,state,saved,check,capture,out,windowSize,baseline})=>
  await capture('source-alignment');
  await page.reload();await page.locator('[data-workbench-ready=true]').waitFor();
  check('real saved alignment annotation survives reload',Object.values((await state()).product.host.expressions).some(e=>e.versions[e.version].text==='几何修正不改变真实保存链路。'));
- await page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name:'Agent 协作',exact:true}).click();await page.getByRole('radio',{name:'外部任务',exact:true}).click();await page.getByRole('textbox',{name:'外部任务目标'}).fill('核对箭头和文字的位置，不提交真实执行。');await button('保存任务准备').click();await page.locator('.wb-task-detail').waitFor();await saved();
+ await page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name:'Agent 协作',exact:true}).click();await page.getByRole('radio',{name:'外部任务',exact:true}).click();await require('./open-task-draft.cjs')(page);await page.getByRole('textbox',{name:'外部任务目标'}).fill('核对箭头和文字的位置，不提交真实执行。');await button('保存任务准备').click();await page.locator('.wb-task-detail').waitFor();await saved();
  for(const width of [1440,390]){
   await windowSize(width,940);const summary=page.locator('.wb-existing-execution>summary');
   const measure=()=>summary.evaluate(e=>{const b=e.getBoundingClientRect(),label=e.firstElementChild.getBoundingClientRect(),icon=e.querySelector('svg').getBoundingClientRect();return{dy:icon.y+icon.height/2-label.y-label.height/2,rail:b.right-icon.x-icon.width/2,height:label.height};});
