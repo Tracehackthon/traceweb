@@ -1,0 +1,78 @@
+/* Current workbench state contract: surface + customizable tinted shadow.
+   Keep interaction semantics, media pixels, ink, links and resize handles intact. */
+:root[data-trace-appearance] {
+  --trace-selection-tint:var(--trace-material-accent,#455d72);
+  --trace-state-control:color-mix(in srgb,var(--trace-selection-tint) 4%,var(--trace-surface-panel));
+  --trace-state-hover:color-mix(in srgb,var(--trace-selection-tint) 6%,var(--trace-surface-panel));
+  --trace-state-selected:color-mix(in srgb,var(--trace-selection-tint) 10%,var(--trace-surface-panel));
+  --trace-state-idle-shadow:0 2px 8px color-mix(in srgb,var(--trace-selection-tint) 9%,transparent);
+  --trace-state-selected-shadow:0 4px 14px color-mix(in srgb,var(--trace-selection-tint) 22%,transparent),0 1px 3px color-mix(in srgb,var(--trace-selection-tint) 12%,transparent);
+  --trace-state-focus-shadow:0 5px 18px color-mix(in srgb,var(--trace-selection-tint) 32%,transparent),0 2px 5px color-mix(in srgb,var(--trace-selection-tint) 18%,transparent);
+}
+:root[data-trace-appearance=dark] {
+  --trace-state-control:color-mix(in srgb,var(--trace-selection-tint) 6%,var(--trace-surface-panel));
+  --trace-state-selected:color-mix(in srgb,var(--trace-selection-tint) 16%,var(--trace-surface-panel));
+}
+
+/* Remove decorative layout separators, not meaningful canvas connections. */
+html[data-trace-appearance] :is(.wb-navigation,.wb-topbar,.wb-inspector,.wb-list-pane,.wb-save-status,.wb-reference-summary,.wb-source-metadata,.wb-recent,.wb-detail-note,.wb-find-row,.wb-relation,.wb-task-detail,.wb-annotation,.wb-import-row),
+html[data-trace-appearance] :is(.wb-inspector>footer,.wb-halo-surface>.wb-page-heading,.wb-halo-surface .wb-editor>.wb-actions) { border-color:transparent; }
+html[data-trace-appearance] .wb-inspector { background:var(--trace-surface-panel); box-shadow:-6px 0 24px color-mix(in srgb,var(--trace-selection-tint) 7%,transparent); }
+
+/* Controls have filled surfaces at rest; no permanent box-shaped stroke. */
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(.wb-button,.tu-button,.wb-editor input,.wb-editor textarea,.wb-editor select,.wb-inline-editor,.wb-search-input,.wb-thinking-composer,.wb-halo-surface,.wb-halo-notice,.wb-halo-badge,.wb-halo-segmented,.wb-halo-segmented>button,.wb-halo-annotation,.wb-halo-notice-icon),
+html[data-trace-appearance] :is(.wb-dialog,.tu-menu,.tu-tooltip) { border-color:transparent; }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(.wb-editor input,.wb-editor textarea,.wb-editor select,.wb-inline-editor,.wb-search-input) { background:var(--trace-state-control); box-shadow:none; }
+html[data-trace-appearance] :is(.wb-halo-control,.wb-halo-search) { background:var(--trace-state-control); }
+html[data-trace-appearance] :is(.wb-halo-control,.wb-halo-search,.wb-import-panel)::before { background:none; box-shadow:none; }
+html[data-trace-appearance] .wb-halo-control>:is(input,textarea) { background:transparent; }
+html[data-trace-appearance] .wb-shell .wb-liquid-button { border-color:transparent; box-shadow:var(--trace-state-idle-shadow); }
+html[data-trace-appearance] :is(.wb-thinking-composer,.wb-halo-surface) { border-color:transparent; box-shadow:var(--trace-state-idle-shadow); }
+html[data-trace-appearance] .wb-thinking-composer .wb-primary { border-color:transparent; }
+
+/* Persistent selection is not the same thing as transient hover/focus. */
+html[data-trace-appearance] .wb-shell :is(.wb-navigation nav button[aria-current=page],.wb-recent .is-current,.wb-list-row[aria-current=true],.wb-list-row.is-current,.wb-capability-summary[aria-current=true],.wb-segment button[aria-pressed=true],.wb-halo-segmented>button[data-state=on],.wb-input-history [aria-selected=true],.wb-dock>button[aria-pressed=true],.wb-halo-tabs [data-state=active]) {
+  border-color:transparent; outline:none; background:var(--trace-state-selected); color:var(--trace-text-primary); box-shadow:var(--trace-state-selected-shadow);
+}
+html[data-trace-appearance] .wb-capability-summary { border-bottom-color:transparent; border-radius:12px; }
+html[data-trace-appearance] .wb-halo-segmented { background:var(--trace-state-control); }
+html[data-trace-appearance] :is(.wb-selection-tools,.wb-zoom,.wb-dock) { box-shadow:var(--trace-state-idle-shadow); }
+
+/* Canvas selection: shaded surface + elevation; geometry never changes. */
+html[data-trace-appearance] .wb-shell .wb-node { border-color:transparent; box-shadow:var(--trace-state-idle-shadow); }
+html[data-trace-appearance] .wb-shell .wb-node[data-selected] { outline:none; box-shadow:var(--trace-state-selected-shadow); }
+html[data-trace-appearance] .wb-node[data-selected]>.wb-card { background:var(--trace-state-selected); }
+html[data-trace-appearance] .wb-spatial-group { border-color:transparent; background:var(--trace-state-control); }
+html[data-trace-appearance] .wb-spatial-group[data-selected] { box-shadow:var(--trace-state-selected-shadow); }
+
+/* Keyboard focus remains visible, but uses a directional shadow, not a ring. */
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,input,textarea,select,a,[tabindex]):focus-visible,
+html[data-trace-appearance] .tu-menu-item:focus-visible { outline:none; box-shadow:var(--trace-state-focus-shadow); }
+html[data-trace-appearance] :is(.wb-halo-control,.wb-halo-search,.wb-thinking-composer,.wb-search-input,.wb-gooey-search):focus-within,
+html[data-trace-appearance] :is(.wb-halo-control,.wb-halo-search,.wb-thinking-composer,.wb-search-input,.wb-gooey-search):has(:focus-visible) {
+  outline:none; border-color:transparent; background:var(--trace-state-selected); box-shadow:var(--trace-state-focus-shadow);
+}
+html[data-trace-appearance] :is(.wb-halo-control,.wb-halo-search,.wb-thinking-composer,.wb-search-input)>:is(input,textarea):focus-visible,
+html[data-trace-appearance] .wb-gooey-search :is(button,input):focus-visible { outline:none; box-shadow:none; }
+html[data-trace-appearance] .wb-shell .wb-node:focus-visible { outline:none; box-shadow:var(--trace-state-focus-shadow); }
+html[data-trace-appearance] .tu-menu-item[data-highlighted] { background:var(--trace-state-selected); box-shadow:var(--trace-state-selected-shadow); }
+html[data-trace-appearance] .tu-menu { box-shadow:var(--trace-shadow-menu); }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(input,textarea,select) { caret-color:var(--trace-selection-tint); accent-color:var(--trace-selection-tint); }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) ::selection { color:var(--trace-text-primary); background:var(--trace-state-selected); }
+
+/* Errors stay distinguishable without returning to bright permanent frames. */
+html[data-trace-appearance] .wb-halo-control[data-invalid=true] { outline:none; background:var(--tomato-3); box-shadow:0 4px 16px color-mix(in srgb,var(--tomato-9) 28%,transparent); }
+@media (hover:hover) and (pointer:fine) {
+  html[data-trace-appearance] .wb-shell :is(.wb-list-row,.wb-capability-summary,.wb-halo-segmented>button):hover { background:var(--trace-state-hover); }
+  html[data-trace-appearance] .wb-shell :is(.wb-list-row[aria-current=true],.wb-capability-summary[aria-current=true],.wb-halo-segmented>button[data-state=on]):hover { background:var(--trace-state-selected); }
+}
+@media (forced-colors:active) {
+  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,input,textarea,select,a,[tabindex]):focus-visible,
+  html[data-trace-appearance] :is(.wb-halo-control,.wb-halo-search,.wb-thinking-composer,.wb-gooey-search):focus-within,
+  html[data-trace-appearance] .wb-shell .wb-node[data-selected] { outline:2px solid Highlight; outline-offset:2px; box-shadow:none; }
+}
+
+html[data-trace-appearance] .wb-shell .wb-halo-tabs { border-color:transparent; background:var(--trace-state-control); }
+html[data-trace-appearance] .wb-shell .wb-halo-tabs [role=tab]:focus-visible { outline:none; box-shadow:var(--trace-state-focus-shadow); }
+html[data-trace-appearance] :is(.wb-activation-trigger,.wb-empty-mark,.wb-capture-excerpt,.wb-original-text,.wb-recovery) { border-color:transparent; box-shadow:var(--trace-state-idle-shadow); }
+html[data-trace-appearance] .wb-gooey-surfaces i { box-shadow:none; }
