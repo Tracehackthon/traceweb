@@ -49,7 +49,7 @@
     "vite": "^8.3.0"
   },
   "dependencies": {
-    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.3.0-frontend.2.tgz",
+    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.3.0-frontend.3.tgz",
     "lucide-react": "1.65.0",
     "radix-ui": "1.8.1",
     "react": "^19.3.0",

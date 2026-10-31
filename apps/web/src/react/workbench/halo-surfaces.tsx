@@ -71,7 +71,7 @@ export function CapabilitySummary({entry,active,onSelect}:{entry:ContentEntry;ac
   const value=entry.versions[entry.version];
   return <button type="button" data-list-item className="wb-capability-summary" aria-current={active?'true':undefined} onClick={onSelect}>
     <span className="wb-capability-summary-heading"><TraceIcon name="library" size={18}/><strong>{entry.title||'未命名能力'}</strong></span>
-    <span className="wb-capability-summary-description">{value?.purpose||'尚未填写用途'}</span>
-    <span className="wb-capability-summary-meta"><CapabilityStatus status={entry.status}/><span className="wb-capability-version">v{entry.version}</span></span>
+    <span className="wb-capability-summary-description">{value?.purpose||value?.prompt?.slice(0,120)||'尚未填写用途'}</span>
+    <span className="wb-capability-summary-meta"><span>{value?.usage==='instruction'?'AI 指令':value?.usage==='template'?'提示模板':'方法'}</span><CapabilityStatus status={entry.status}/><span className="wb-capability-version">v{entry.version}</span></span>
   </button>;
 }

@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.2",
-  "recordedAt": "2026-10-31T12:33:18.334Z",
+  "version": "0.3.0-frontend.3",
+  "recordedAt": "2026-11-01",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.2.tgz",
-    "sha256": "f8d79e60819f1398f5b30fa56f5aabbe03fb25f31ea8bd2746c0649b9e8d7601",
-    "integrity": "sha512-hqqv9gKM55z1ueyTyRkZGvinVkx+ktoEwapzx5+ZrfhM5ewD6/ezjUjigTb4RDaJIzksHjd8dcpO77K1yqTzlQ=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.3.tgz",
+    "sha256": "f24c5b803a21c57c45f89ea2298d1a4bee086860162158cd16b4bc8ae30e54fb",
+    "integrity": "sha512-RIq+MJ640ifAxeXlE98TY/nM4SP5/rZ6i8xgpyRRT1FghvBNASgLIJmfsYBSYUF8YHzxuq3vuo7s4EkJDwCAhA=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "0e61787b25c2bfc17fa88274150e3a9454933ad8",
+    "head": "bab4c4546138b4e5e3f23a6753030cf0e9a8f3e9",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
@@ -23,7 +23,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "dbce836517a2fcb77dc89fca996a6d2d38021311156b4c0d5b5d5073f4a3eaf8"
+        "sha256": "d0f9f9d349f15ab77a4b2b6d5352aa81210326663b99c8ee142bd03ebe3df787"
       },
       {
         "path": "src/bridge.mjs",
@@ -79,7 +79,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "03342a09e014e900b61f89453535bcfab11f0ef1e7ffe960c49f027cacb38601"
+        "sha256": "3e0ea60af5c2ab1a2c5c557c70648953fca53782e3d04d361a3383ea0cae31f1"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -136,6 +136,10 @@
     ]
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
-  "verification": "workbench/runtime-current.tap: 46 passed; Web and current UI regression pending",
-  "revisionReason": "frontend.1 remains immutable. frontend.2 adds full canvas envelope/history validation and pre-reference original-byte integrity verification after real corruption-path audit."
+  "verification": "Domain/type and formal Web builds passed; full application E2E evidence is in .test-results/capability-tools/. No unit tests run for this change.",
+  "revisionReason": "frontend.2 remains immutable. frontend.3 adds optional library roles, canonical ordered step projections, session instruction selection and immutable message/task references plus task plan snapshots. Existing schema2 values remain readable; older readers safely reject the new fields.",
+  "supersedes": {
+    "version": "0.3.0-frontend.2",
+    "reason": "Backward compatible optional library roles, ordered steps, scoped instruction references and task plan snapshots; old reader rejects new fields instead of erasing them."
+  }
 }
