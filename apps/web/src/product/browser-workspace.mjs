@@ -92,14 +92,19 @@ export async function putBrowserWorkspace(payload) {
             try {
               if (known.result) {
                 if (known.result.fingerprint !== fingerprint) throw failure(409, 'COMMAND_REUSED', '同一命令包含不同内容，未覆盖数据。');
-                result = { revision: known.result.revision, replayed: true, storage: info };
+                // Older command rows did not retain their committed snapshot.
+                // Never pair an old revision with the current head's content.
+                const committedHost = known.result.host || (saved.revision === known.result.revision ? saved.host : null);
+                if (!committedHost) throw failure(409, 'COMMITTED_SNAPSHOT_UNAVAILABLE', '这次修改已有提交记录，但原回执内容不可用。请先保留草稿，再载入最新版本。');
+                validateHost(committedHost);
+                result = { revision: known.result.revision, host: structuredClone(committedHost), headRevision: saved.revision, replayed: true, storage: info };
                 return;
               }
               if (saved.revision !== payload.expectedRevision) throw failure(409, 'REVISION_CONFLICT', '另一标签页已有更新，请先导出，再载入已保存版本。');
               const revision = saved.revision + 1;
               workspaces.put({ schemaVersion: 1, revision, host }, 'current');
-              commands.put({ fingerprint, revision }, payload.commandId);
-              result = { revision, replayed: false, storage: info };
+              commands.put({ fingerprint, revision, host: structuredClone(host) }, payload.commandId);
+              result = { revision, host: structuredClone(host), headRevision: revision, replayed: false, storage: info };
             } catch (cause) { error = cause; tx.abort(); }
           };
         } catch (cause) { error = cause; tx.abort(); }

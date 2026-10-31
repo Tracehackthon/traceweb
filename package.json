@@ -10,7 +10,7 @@
     "dev": "npm --prefix apps/web run dev",
     "start": "npm --prefix apps/web start",
     "build": "npm run build:web",
-    "build:web": "npm --prefix apps/web run build",
+    "build:web": "node scripts/verify-product-workspace.mjs && node scripts/verify-ui-resources.mjs && npm --prefix apps/web run build",
     "build:vercel": "node scripts/build-vercel.mjs",
     "build:pet": "npm --prefix apps/desktop-pet run build",
     "release:checksum": "node scripts/checksum-release.mjs",
@@ -18,6 +18,8 @@
     "test:release-tools": "node --test scripts/release-tools.test.mjs",
     "desktop:pet": "npm --prefix apps/desktop-pet run desktop",
     "test:browser-storage": "node scripts/browser-storage-e2e.cjs",
+    "test:ui-components": "node scripts/ui-components-e2e.cjs",
+    "test:ui-components:desktop": "node scripts/ui-components-e2e.cjs --desktop",
     "test:demo-storage": "node scripts/demo-storage-compat-e2e.cjs",
     "test": "npm --prefix apps/web test",
     "test:e2e": "node scripts/product-e2e.cjs",
@@ -44,6 +46,9 @@
     "vite": "^8.3.0"
   },
   "dependencies": {
+    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.2.0-frontend.5.tgz",
+    "lucide-react": "1.65.0",
+    "radix-ui": "1.8.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   }

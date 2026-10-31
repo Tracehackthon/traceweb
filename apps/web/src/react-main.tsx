@@ -1,18 +1,25 @@
+import './fonts.css';
 import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import './product/web.css';
 import './react/settings-disclosure.css';
 import './react/project-lifecycle.css';
+import './react/ui/trace-ui.css';
+import { LibraryWorkspace } from './react/library-workspace';
+import { ProcessState, TraceMenu, TraceTooltip, TraceTooltipProvider, type ProcessPhase } from './react/ui/controls';
+import { ReferenceList } from './react/ui/reference-list';
+import { referenceItems } from './react/ui/library-projection.mjs';
 import { routeDocumentTitle, runtimeStatusLabel } from './react/presentation-copy.mjs';
 import * as B from './product/bridge.mjs';
 import { ASSETS } from './product/assets.mjs';
-import { h, homeEntries, mountLibrary, recordsOf, titleOf } from './product/library.mjs';
+import { titleOf } from './product/library.mjs';
 import { preloadImages, registerFont, clearResourceCache, getResourceStats } from './product/resource-cache.mjs';
 import { completeDemoMode, runtime } from './react/runtime';
+import { workspaceRecoveryExport } from './react/workspace-authority.mjs';
 import { COMPLETE_DEMO } from './product/demo-workspace.mjs';
 import { browserStorage, exportWorkspace } from './react/workspace-storage';
 import { agentCapabilities, adoptNativeAgent, cancelNativeAgent, checkCodexConnection, checkZhihuAuthorization, connectTraceCodexPlugin, desktopSetupStatus, disconnectZhihuAuthorization, hasNativeCapabilityBridge, nativeRuntimeConnected, nativeRuntimeUnavailable, onDesktopSetupProgress, readDesktopRuntimePanel, readNativeAgentEvents, readNativeAgentRun, readZhihuUserContent, retryDesktopRuntime, runDesktopRuntimeAction, searchPublic, selectDesktopProject, startNativeAgent, startZhihuAuthorization, zhihuAuthorizationStatus, type SearchItem, type SearchSource, type ZhihuAuthorizationStatus, type ZhihuUserContentKind } from './react/capability-client';
-import type { DialogState, RouteMemory, RouteNavigationOptions, ViewName, WorkspaceSnapshot } from './react/types';
+import type { DialogState, RouteMemory, ViewName, WorkspaceSnapshot } from './react/types';
 
 type StyleName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite';
 type MountedScreen = { routeKey: string; root: HTMLDivElement; screen: any };
@@ -114,8 +121,7 @@ async function loadRouteResources(view: ViewName): Promise<any> {
       : view === 'chain' ? import('./product/chain-screen.mjs')
         : view === 'compare' ? import('./product/comparison-screen.mjs')
           : view === 'worksite' ? import('./product/worksite-screen.mjs')
-            : ['all', 'search', 'works'].includes(view) ? Promise.resolve({ mountLibrary })
-              : view === 'projects' ? import('./product/project-lifecycle.mjs') : Promise.resolve(null);
+            : view === 'projects' ? import('./product/project-lifecycle.mjs') : Promise.resolve(null);
   const styleName = routeStyle(view);
   const criticalPromises: Promise<unknown>[] = [modulePromise];
   if (styleName) criticalPromises.push(style(styleName));
@@ -192,9 +198,6 @@ async function mountRoute(root: HTMLDivElement, route: RouteMemory, module: any)
       onProfile: () => runtime.profile(), onDraft: runtime.onHomeDraft, onCapture: runtime.onCapture,
     });
   }
-  if (['all', 'search', 'works'].includes(route.view)) {
-    return module.mountLibrary({ root, host, route, onNavigate: (next: RouteMemory, options?: RouteNavigationOptions) => runtime.navigate(next, options), onBack: () => runtime.back(), onProfile: () => runtime.profile() });
-  }
   if (route.view === 'projects') {
     return module.mountProjectLifecycle({ root, onNavigate: (next: RouteMemory) => runtime.navigate(next), onBack: () => runtime.back(), onProfile: () => runtime.profile() });
   }
@@ -237,7 +240,7 @@ function StatusBar({ snapshot }: { snapshot: WorkspaceSnapshot }) {
   })();
   const exportRecovery = () => {
     const recovery = snapshot.recoveryDraft;
-    const value = { revision: recovery?.revision ?? snapshot.revision, host: recovery?.host ?? snapshot.host, unsaved: snapshot.pending || Boolean(recovery), recovery: Boolean(recovery) };
+    const value = workspaceRecoveryExport(snapshot);
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `Trace-recovery-${Date.now()}.json`; link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -271,7 +274,7 @@ function Chrome({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot>
         {matter.links?.length ? <RecoveryButton onClick={() => runtime.sources()}>{matter.links.length} 份对照已关联</RecoveryButton> : null}
       </>}
     </nav>
-    {route.view === 'chain' && <nav className="web-context-menu" aria-label="事项工具"><RecoveryButton onClick={() => runtime.navigate({ view: 'search' })}>搜索</RecoveryButton><RecoveryButton onClick={() => runtime.navigate({ view: 'all', matterId: route.matterId })}>全部痕迹</RecoveryButton><RecoveryButton onClick={() => runtime.profile()}>个人与设置</RecoveryButton></nav>}
+    {route.view === 'chain' && <nav className="web-context-menu" aria-label="事项工具"><TraceTooltip content="找回内容（Ctrl / ⌘ K）"><RecoveryButton onClick={() => runtime.navigate({ view: 'search' })}>搜索</RecoveryButton></TraceTooltip><RecoveryButton onClick={() => runtime.navigate({ view: 'all', matterId: route.matterId })}>全部痕迹</RecoveryButton><RecoveryButton onClick={() => runtime.profile()}>个人与设置</RecoveryButton><TraceMenu label="事项更多操作" actions={[{ id: 'evolution', label: '查看这项理解的演变', icon: 'history' }, { id: 'sources', label: '查看材料与来处', icon: 'link' }]} onAction={id => id === 'sources' ? runtime.sources() : runtime.navigate({ view: 'all', matterId: route.matterId, selectedId: `${route.matterId}:${matter?.understanding ? 'understanding' : 'original'}`, detailTab: 'evolution' })} /></nav>}
   </>;
 }
 
@@ -333,7 +336,7 @@ function WorkspaceLoadSurface({ snapshot }: { snapshot: ReturnType<typeof runtim
   const runtimeUnavailable = hasNativeCapabilityBridge() && nativeRuntimeUnavailable();
   const recovery = snapshot.recoveryDraft;
   const exportRecovery = () => {
-    const value = { revision: recovery?.revision ?? snapshot.revision, host: recovery?.host ?? snapshot.host, unsaved: snapshot.pending || Boolean(recovery), recovery: Boolean(recovery) };
+    const value = workspaceRecoveryExport(snapshot);
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `Trace-recovery-${Date.now()}.json`; link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -345,6 +348,10 @@ function WorkspaceLoadSurface({ snapshot }: { snapshot: ReturnType<typeof runtim
 }
 
 function RouteOutlet({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
+  return snapshot.ready && ['all', 'search', 'works'].includes(snapshot.route.view) ? <LibraryWorkspace snapshot={snapshot} status={<StatusBar snapshot={snapshot} />} /> : <LegacyRouteOutlet snapshot={snapshot} />;
+}
+
+function LegacyRouteOutlet({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnapshot> }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<MountedScreen | null>(null);
   const tokenRef = useRef(0);
@@ -356,7 +363,7 @@ function RouteOutlet({ snapshot }: { snapshot: ReturnType<typeof runtime.getSnap
 
   useLayoutEffect(() => {
     runtime.setRouteRoot(activeRef.current?.root || null);
-    return () => runtime.setRouteRoot(null);
+    return () => { activeRef.current?.screen?.destroy?.(); runtime.setRouteRoot(null); };
   }, []);
 
   useEffect(() => {
@@ -433,8 +440,8 @@ function DialogContent({ dialog, snapshot }: { dialog: DialogState; snapshot: Re
   if (dialog.type === 'capability' && dialog.capability) return <CapabilityDialog capability={dialog.capability} />;
   if (dialog.type === 'sources') {
     const matter = snapshot.host?.chain?.matters?.find((item: any) => item.id === dialog.message);
-    const linked = snapshot.host?.chain?.sources?.filter((source: any) => source.ownerMatterId === matter?.id) || [];
-    return <><p>{titleOf(matter)}</p>{linked.length ? linked.map((source: any) => { const link = matter.links?.find((item: any) => item.sourceId === source.id); return <section className="web-linked-item" key={source.id}><strong>{source.title}</strong><p>{source.excerpt}</p><small>{link ? `已接为${({ limit: '限制', limitation: '限制', support: '支持', challenge: '挑战', supplement: '补充' } as Record<string, string>)[link.relationship.type] || '有关'} · 关联本身不改变理解` : '尚未关联 · 原材料仍保留'}</small></section>; }) : <p>还没有材料，可以先选一句原话找个对照。</p>}<footer><RecoveryButton onClick={() => { runtime.closeDialog(); runtime.navigate({ view: 'all', matterId: matter?.id }); }}>查看这件事的全部痕迹</RecoveryButton></footer></>;
+    const linked = referenceItems(snapshot.host, matter?.id);
+    return <><p>{titleOf(matter)}</p><ReferenceList label="材料与来处" items={linked.map(source => ({ ...source, status: source.linked ? '已关联；关联本身不改变理解，也不代表本次已交给 Agent。' : '尚未关联；原材料仍保留。' }))} /><footer><RecoveryButton onClick={() => { runtime.closeDialog(); runtime.navigate({ view: 'all', matterId: matter?.id }); }}>查看这件事的全部痕迹</RecoveryButton></footer></>;
   }
   if (dialog.type === 'work-context') return <><p>这是你确认的本地上下文，尚未发送给外部 Agent。可复制到实际工作中，之后手工带回结果。</p><pre>{dialog.message}</pre><footer><RecoveryButton primary onClick={async (event) => { try { await navigator.clipboard.writeText(dialog.message || ''); (event.currentTarget as HTMLButtonElement).textContent = '已复制 · 尚未发送'; } catch { (event.currentTarget as HTMLButtonElement).textContent = '请手动选择文字复制'; } }}>复制本次上下文</RecoveryButton></footer></>;
   const record = dialog.record || {};
@@ -447,6 +454,8 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const [items, setItems] = useState<SearchItem[]>([]);
   const [searchState, setSearchState] = useState(requestedSource === 'none' ? '这次没有选择联网搜索。' : '准备查找公开内容…');
   const [searchBusy, setSearchBusy] = useState(false);
+  const [searchPhase, setSearchPhase] = useState<ProcessPhase>('idle');
+  const [agentPhase, setAgentPhase] = useState<ProcessPhase>('idle');
   const [kept, setKept] = useState<string[]>([]);
   const [agentInfo, setAgentInfo] = useState<any>(null);
   const [agentState, setAgentState] = useState(capability.agent === 'none' ? '这次没有选择 Agent。' : '正在检查这台设备上的 Agent…');
@@ -458,11 +467,11 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const native = hasNativeCapabilityBridge();
 
   const doSearch = async (nextSource = source) => {
-    setSearchBusy(true); setItems([]); setSearchState(`正在从${nextSource === 'zhihu' ? '知乎' : '全网'}查找公开内容…`);
+    setSearchBusy(true); setSearchPhase('pending'); setItems([]); setSearchState(`正在从${nextSource === 'zhihu' ? '知乎' : '全网'}查找公开内容…`);
     try {
       const result = await searchPublic(nextSource, capability.query, 3);
-      setItems(result.items || []); setSearchState(result.items?.length ? `找到 ${result.items.length} 条公开内容；保留前不会加入这件事。` : '没有找到合适的内容，可以换一个更具体的问题。');
-    } catch (cause) { setSearchState(cause instanceof Error ? cause.message : '搜索没有完成。'); }
+      setSearchPhase('idle'); setItems(result.items || []); setSearchState(result.items?.length ? `找到 ${result.items.length} 条公开内容；保留前不会加入这件事。` : '没有找到合适的内容，可以换一个更具体的问题。');
+    } catch (cause) { setSearchPhase('error'); setSearchState(cause instanceof Error ? cause.message : '搜索没有完成。'); }
     finally { setSearchBusy(false); }
   };
 
@@ -471,7 +480,7 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
     if (capability.agent === 'none') return;
     void agentCapabilities().then((value) => {
       const agent = value?.agent || value;
-      setAgentInfo(agent);
+      setAgentInfo(agent); setAgentPhase(agent?.enabled ? 'idle' : 'unknown');
       const profiles = agent?.profiles || [];
       const selected = capability.agent === 'codex-native'
         ? profiles.find((profile: any) => profile.kind === 'codex')?.profileId
@@ -489,7 +498,7 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
     catch (cause) { setSearchState(cause instanceof Error ? cause.message : '来源没有保存。'); }
   };
   const runAgent = async () => {
-    setAgentBusy(true); setAgentResult(null); setAdoptionBlocked(false); setAgentState('正在交给 Agent 处理…');
+    setAgentBusy(true); setAgentPhase('pending'); setAgentResult(null); setAdoptionBlocked(false); setAgentState('正在交给 Agent 处理…');
     try {
       const created = await startNativeAgent({ text: capability.query, source: requestedSource, ...(profileId ? { profileId } : {}) });
       const runId = String(created?.runId || '');
@@ -513,17 +522,20 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
         current = await readNativeAgentRun(runId);
         if (current?.status && !terminal.has(current.status)) setAgentState(current.status === 'running' ? 'Agent 正在处理…' : 'Agent 已进入队列…');
       }
-      setAgentResult(current); setAgentState(current.status === 'succeeded' ? 'Agent 已返回回答，确认前不会写入“我的理解”。' : current.error?.message || 'Agent 没有完成这次处理，可以稍后重试。');
-    } catch (cause) { setAgentState(cause instanceof Error ? cause.message : 'Agent 运行没有完成。'); }
+      setAgentResult(current); setAgentPhase(current.status === 'succeeded' ? 'success' : current.status === 'cancelled' ? 'cancelled' : 'error'); setAgentState(current.status === 'succeeded' ? 'Agent 已返回回答，确认前不会写入“我的理解”。' : current.error?.message || 'Agent 没有完成这次处理，可以稍后重试。');
+    } catch (cause) { setAgentPhase('unknown'); setAgentState(cause instanceof Error ? cause.message : 'Agent 运行状态暂时无法核对。'); }
     finally { setAgentBusy(false); }
   };
 
   const cancelAgent = async () => {
     if (!agentRunId) return;
-    setAgentState('正在请求停止这次运行…');
-    try { const value = await cancelNativeAgent(agentRunId); setAgentResult(value); setAgentState('这次运行已停止，原话与已有内容没有改变。'); }
-    catch (cause) { setAgentState(cause instanceof Error ? cause.message : '停止请求没有完成。'); }
-    finally { setAgentBusy(false); }
+    setAgentPhase('pending'); setAgentState('正在请求停止这次运行…');
+    try { const value = await cancelNativeAgent(agentRunId); setAgentResult(value);
+      const stopped = ['cancelled', 'succeeded', 'failed', 'stale', 'timed_out', 'interrupted'].includes(value?.status);
+      setAgentPhase(value?.status === 'cancelled' ? 'cancelled' : value?.status === 'succeeded' ? 'success' : stopped ? 'error' : 'pending');
+      setAgentState(value?.status === 'cancelled' ? '已收到停止回执，原话与已有内容没有改变。' : stopped ? '已收到本次运行的结束状态；停止不代表撤回已有结果。' : '已提交停止请求，尚未收到停止回执。');
+      if (stopped) setAgentBusy(false);
+    } catch (cause) { setAgentPhase('unknown'); setAgentState(cause instanceof Error ? cause.message : '停止请求状态暂时无法核对。'); }
   };
 
   const changeAdoption = async (action: 'accept' | 'dismiss' | 'undo') => {
@@ -547,9 +559,10 @@ function CapabilityDialog({ capability }: { capability: NonNullable<DialogState[
   const agentIntent = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[capability.agent] || '未选择';
   return <section className="web-capability-flow">
     <p>原话已经保存。搜索结果和 Agent 回答会先留在这里，只有你确认后才会进入这件事。</p>
+    <ReferenceList label="本次提交的原话" items={[{ id: capability.matterId, title: "你交给这次协作的内容", text: capability.query, status: "公开检索范围另由上面的本次选择指定；这里不代表已经执行或采用。" }]} />
     <div className="web-capability-grid">
-      {requestedSource !== 'none' && <section><header><i>知</i><div><h3>公开来源</h3><small>知乎经验与全网资料</small></div></header><div className="web-capability-controls"><select aria-label="搜索范围" value={source} disabled={searchBusy} onChange={(event) => setSource(event.target.value as SearchSource)}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select><RecoveryButton disabled={searchBusy} onClick={() => void doSearch()}>{searchBusy ? '正在查找…' : '重新查找'}</RecoveryButton></div><p role="status">{searchState}</p>{items.map((item) => <article className="web-capability-source" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{metric(item) && <span>{metric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>接口未返回原文链接</small>}<RecoveryButton primary disabled={!item.url || kept.includes(item.id)} onClick={() => void keep(item)}>{!item.url ? '暂不能保留' : kept.includes(item.id) ? '已保留到这件事' : '保留到这件事'}</RecoveryButton></footer></article>)}</section>}
-      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>在本机继续</h3><small>Codex、Harness 或自定义 Agent</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>结果回来后</dt><dd>先由你确认</dd></div></dl><p role="status">{agentState}</p>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '交给 Agent 继续'}</RecoveryButton>{agentBusy && <RecoveryButton disabled={!agentRunId} onClick={() => void cancelAgent()}>停止这次运行</RecoveryButton>}{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改建议' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}{agentResult.result.kind === 'revision_candidate' && adoptionReady && agentResult.result.adoption === 'not_applied' && <footer><RecoveryButton primary onClick={() => void changeAdoption('accept')}>接受候选</RecoveryButton><RecoveryButton onClick={() => void changeAdoption('dismiss')}>忽略候选</RecoveryButton></footer>}{agentResult.result.kind === 'revision_candidate' && adoptionReady && agentResult.result.adoption === 'applied' && <RecoveryButton onClick={() => void changeAdoption('undo')}>撤销这次采纳</RecoveryButton>}{agentResult.result.kind === 'answer' && agentResult.result.adoption === 'not_applied' && <footer><RecoveryButton onClick={() => runtime.closeDialog()}>继续讨论</RecoveryButton><RecoveryButton primary onClick={() => runtime.closeDialog()}>带回 Trace</RecoveryButton></footer>}</article>}</section>}
+      {requestedSource !== 'none' && <section><header><i>知</i><div><h3>公开来源</h3><small>知乎经验与全网资料</small></div></header><div className="web-capability-controls"><select aria-label="搜索范围" value={source} disabled={searchBusy} onChange={(event) => setSource(event.target.value as SearchSource)}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select><RecoveryButton disabled={searchBusy} onClick={() => void doSearch()}>{searchBusy ? '正在查找…' : '重新查找'}</RecoveryButton></div><ProcessState phase={searchPhase}>{searchState}</ProcessState>{items.map((item) => <article className="web-capability-source" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{metric(item) && <span>{metric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>接口未返回原文链接</small>}<RecoveryButton primary disabled={!item.url || kept.includes(item.id)} onClick={() => void keep(item)}>{!item.url ? '暂不能保留' : kept.includes(item.id) ? '已保留到这件事' : '保留到这件事'}</RecoveryButton></footer></article>)}</section>}
+      {capability.agent !== 'none' && <section><header><i>C</i><div><h3>在本机继续</h3><small>Codex、Harness 或自定义 Agent</small></div></header><dl className="web-agent-boundary"><div><dt>这次选择</dt><dd>{agentIntent}</dd></div><div><dt>在哪里处理</dt><dd>{native ? '这台设备' : '等待桌宠连接'}</dd></div><div><dt>结果回来后</dt><dd>先由你确认</dd></div></dl><ProcessState phase={agentPhase}>{agentState}</ProcessState>{profiles.length > 0 && <label>使用哪个 Agent<select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option value={profile.profileId} key={profile.profileId}>{profile.label || '可用 Agent'}</option>)}</select></label>}<RecoveryButton primary disabled={!native || !agentInfo?.enabled || agentBusy} onClick={() => void runAgent()}>{agentBusy ? 'Agent 正在处理…' : '交给 Agent 继续'}</RecoveryButton>{agentBusy && <RecoveryButton disabled={!agentRunId} onClick={() => void cancelAgent()}>停止这次运行</RecoveryButton>}{!native && <small>启动桌宠后，这次内容会从本机交给 Agent；网页不会接触你的登录信息。</small>}{agentResult?.result && <article className="web-capability-agent-result"><small>{agentResult.profile?.label || 'Agent'} · {agentResult.result.kind === 'revision_candidate' ? '修改建议' : '讨论回答'}</small><strong>Agent 的回答</strong><p>{agentResult.result.answer}</p>{agentResult.result.uncertainties?.length > 0 && <><b>仍不确定</b><ul>{agentResult.result.uncertainties.map((text: string) => <li key={text}>{text}</li>)}</ul></>}{agentResult.result.kind === 'revision_candidate' && adoptionReady && agentResult.result.adoption === 'not_applied' && <footer><RecoveryButton primary onClick={() => void changeAdoption('accept')}>接受候选</RecoveryButton><RecoveryButton onClick={() => void changeAdoption('dismiss')}>忽略候选</RecoveryButton></footer>}{agentResult.result.kind === 'revision_candidate' && adoptionReady && agentResult.result.adoption === 'applied' && <RecoveryButton onClick={() => void changeAdoption('undo')}>撤销这次采纳</RecoveryButton>}{agentResult.result.kind === 'answer' && agentResult.result.adoption === 'not_applied' && <footer><RecoveryButton onClick={() => runtime.closeDialog()}>继续讨论</RecoveryButton><RecoveryButton primary onClick={() => runtime.closeDialog()}>带回 Trace</RecoveryButton></footer>}</article>}</section>}
     </div>
     <footer><RecoveryButton onClick={() => runtime.closeDialog()}>完成，回到这件事</RecoveryButton></footer>
   </section>;
@@ -798,9 +811,8 @@ function App() {
     void runtime.start().catch(() => undefined);
     const popstate = () => runtime.handlePopState();
     const keydown = (event: KeyboardEvent) => {
-      if (event.isComposing) return;
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && snapshot.route.view !== 'home') { event.preventDefault(); runtime.navigate({ view: 'search' }); }
-      if (event.key === 'Escape' && !snapshot.dialog && ['search', 'all', 'works'].includes(snapshot.route.view)) { event.preventDefault(); runtime.back(); }
+      if (event.isComposing || event.defaultPrevented || snapshot.dialog || document.querySelector('[role="menu"]')) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' ) { event.preventDefault(); if (snapshot.route.view === 'search') document.querySelector<HTMLInputElement>('.tu-search-field input')?.focus(); else runtime.navigate({ view: 'search' }); }
     };
     const beforeunload = (event: BeforeUnloadEvent) => { if (snapshot.pending) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('popstate', popstate); window.addEventListener('keydown', keydown); window.addEventListener('beforeunload', beforeunload);
@@ -824,7 +836,7 @@ function App() {
     if (result === 'error') runtime.message(`知乎授权没有完成（${reason || '回调校验失败'}）。请重新发起，不会重放旧授权码。`);
     else runtime.profile();
   }, [snapshot.ready]);
-  return <div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-load-state={snapshot.loadState} data-busy={snapshot.busy ? 'true' : 'false'}><AmbientFrame /><DemoGuide snapshot={snapshot} /><StatusBar snapshot={snapshot} /><Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div>;
+  return <TraceTooltipProvider delayDuration={150} skipDelayDuration={300}><div className="trace-react-shell" data-route={snapshot.route.view} data-ready={snapshot.ready ? 'true' : 'false'} data-load-state={snapshot.loadState} data-busy={snapshot.busy ? 'true' : 'false'}><AmbientFrame /><DemoGuide snapshot={snapshot} />{!(snapshot.ready && ['all', 'search', 'works'].includes(snapshot.route.view)) && <StatusBar snapshot={snapshot} />}<Chrome snapshot={snapshot} /><RouteOutlet snapshot={snapshot} /><DialogHost snapshot={snapshot} /></div></TraceTooltipProvider>;
 }
 
 const mountPoint = document.querySelector('#app');

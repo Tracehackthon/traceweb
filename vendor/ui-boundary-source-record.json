@@ -1,0 +1,60 @@
+{
+  "repository": "https://github.com/shadcn-ui/ui",
+  "commit": "24a16429815cc4d691f38b49d0f4ffc11a9daef4",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/shadcn-ui/ui/24a16429815cc4d691f38b49d0f4ffc11a9daef4/LICENSE.md",
+      "sha256": "1564074e13439397221ffd522e2e504d56561994a23d371aa5e3ad43e4f5423f"
+    },
+    {
+      "path": "apps/v4/registry/bases/radix/ui/empty.tsx",
+      "url": "https://raw.githubusercontent.com/shadcn-ui/ui/24a16429815cc4d691f38b49d0f4ffc11a9daef4/apps/v4/registry/bases/radix/ui/empty.tsx",
+      "sha256": "05c419160ac0226973f6f00d7d8865dc46645a75ea0697138992cdbc736efec4"
+    },
+    {
+      "path": "apps/v4/registry/bases/radix/ui/skeleton.tsx",
+      "url": "https://raw.githubusercontent.com/shadcn-ui/ui/24a16429815cc4d691f38b49d0f4ffc11a9daef4/apps/v4/registry/bases/radix/ui/skeleton.tsx",
+      "sha256": "8fcbad84e494a75484a0975221fb40f54c4a7d68f79cfc305cb158d1feb1badf"
+    },
+    {
+      "path": "apps/v4/registry/bases/radix/ui/alert.tsx",
+      "url": "https://raw.githubusercontent.com/shadcn-ui/ui/24a16429815cc4d691f38b49d0f4ffc11a9daef4/apps/v4/registry/bases/radix/ui/alert.tsx",
+      "sha256": "639c846b57885d8af4dbdf7ddab7b15fd4d392c051f7496c67e811154e7861d9"
+    }
+  ],
+  "adaptations": [
+    {
+      "source": "empty.tsx + alert.tsx + skeleton.tsx",
+      "target": "apps/web/src/react/ui/state-primitives.tsx",
+      "changes": "Trace-named presentation components; retain composition/data-slot; replace Tailwind/cva/cn with scoped Trace CSS and typed props; semantic headings, labelled regions and controlled expansion; no business/network state"
+    }
+  ],
+  "excludedDependencies": [
+    "Tailwind",
+    "cn",
+    "class-variance-authority",
+    "Base UI",
+    "Motion"
+  ],
+  "referenceOnly": [
+    {
+      "name": "Nagi",
+      "commit": "0e4625bf8af157af7bb0b75ba1b9131ad96d41f2",
+      "url": "https://github.com/Nik-code/nagi",
+      "use": "empty search, truncation and favicon fallback patterns only; no source migration"
+    },
+    {
+      "name": "Frontend Supply Lightbox",
+      "commit": "330e4387df9cc15b6386734cf3a4f837e005c519",
+      "url": "https://lightbox.frontend.supply/docs/examples/quick-look",
+      "use": "media viewing and focus-return reference only; not installed"
+    },
+    {
+      "name": "Breatic",
+      "url": "https://github.com/orime-org/breatic",
+      "use": "workspace interaction reference only; no source migration under additional license conditions"
+    }
+  ]
+}

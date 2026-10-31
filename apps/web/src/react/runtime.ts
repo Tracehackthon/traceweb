@@ -6,9 +6,11 @@ import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
 import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork, searchPublic } from './capability-client';
 import { classifyWorkspaceLoadFailure, publicWorkspaceLoadMessage, WORKSPACE_LOAD_STATES, workspaceDataState, workspaceError, withWorkspaceTimeout } from './workspace-load.mjs';
 import { canNavigateWhileSavePending } from './save-navigation.mjs';
+import { productReturnRoute, retainPresentationReturn } from './route-presentation.mjs';
 import { matchesAuthoritativeWorkReturn } from './native-work-reconcile.mjs';
 import { existingMatterForHandoff } from './handoff-resolution.mjs';
 import { buildComparisonSearchQuery } from './comparison-search.mjs';
+import { assertWorkspaceHost, reconcileWorkspaceAuthority, validateWorkspaceAcknowledgement } from './workspace-authority.mjs';
 import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceLoadState, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -48,7 +50,7 @@ function urlFor(route: RouteMemory): URL {
   url.search = '';
   url.hash = '';
   url.searchParams.set('view', route.view);
-  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record']] as const) {
+  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record'], ['selectedId', 'selected'], ['detailTab', 'tab'], ['includeHistory', 'history']] as const) {
     const value = route[key];
     if (value) url.searchParams.set(param, String(value));
   }
@@ -71,14 +73,14 @@ function fromUrl(): RouteMemory {
     memory = null;
   }
   const route: RouteMemory = { view };
-  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record']] as const) {
+  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record'], ['selectedId', 'selected'], ['detailTab', 'tab'], ['includeHistory', 'history']] as const) {
     if (params.has(param)) route[key] = params.get(param) || undefined;
   }
   return memory && urlFor(memory).search === location.search ? memory : route;
 }
 
 function routeKey(route: RouteMemory): string {
-  return JSON.stringify({ view: route.view, matterId: route.matterId, workId: route.workId, sessionId: route.sessionId, screen: route.screen, q: route.q, kind: route.kind, recordId: route.recordId });
+  return JSON.stringify({ view: route.view, matterId: route.matterId, workId: route.workId, sessionId: route.sessionId, screen: route.screen, q: route.q, kind: route.kind, recordId: route.recordId, selectedId: route.selectedId, detailTab: route.detailTab, includeHistory: route.includeHistory });
 }
 
 function sameValue(left: unknown, right: unknown): boolean {
@@ -97,6 +99,8 @@ export class WebRuntime {
   private listeners = new Set<() => void>();
   private host: any = null;
   private revision = 0;
+  private observedHeadRevision = 0;
+  private workspaceEpoch = 0;
   private recoveryGeneration = 0;
   private storage: any = null;
   private route: RouteMemory = fromUrl();
@@ -104,16 +108,19 @@ export class WebRuntime {
   private loadState: WorkspaceLoadState = WORKSPACE_LOAD_STATES.loading as WorkspaceLoadState;
   private busy = false;
   private pendingPayload: any = null;
+  private pendingBase: any = null;
+  private pendingProductCommand = false;
   private pendingOperations: any[] | null = null;
   private pendingGeneration = 0;
   private dirty = 0;
   private saved = 0;
   private timer: number | undefined;
   private tail: Promise<unknown> = Promise.resolve();
-  private continuation: (() => void) | null = null;
+  private flushInFlight: Promise<void> | null = null;
+  private continuation: ((authoritative: any) => void) | null = null;
   private loadInFlight: Promise<void> | null = null;
   private loadGeneration = 0;
-  private recoveryDraft: { revision: number; host: any } | null = null;
+  private recoveryDraft: WorkspaceSnapshot['recoveryDraft'] = null;
   private routeRoot: HTMLElement | null = null;
   private nativeWorkReady = false;
   // Matters keeps a short-lived presentation state for the approved
@@ -207,24 +214,34 @@ export class WebRuntime {
     const diskHost = data.host ? clone(data.host) : (completeDemoMode ? createCompleteDemoWorkspace() : B.createBridge());
     let repairedHost = diskHost;
     try {
+      // Preserve legacy home text, but only mount a structurally readable host.
+      if (typeof diskHost?.chain?.capture === 'string') diskHost.chain.capture = { text: diskHost.chain.capture, sourceIds: [], excerpt: '', excerptSourceId: null };
+      assertWorkspaceHost(diskHost);
       repairedHost = B.recoverPendingComparisons(diskHost);
     } catch (cause) {
       throw workspaceError('工作区结构或版本不正确，未覆盖已保存内容。', { code: 'INVALID_HOST' });
     }
     const needsRepair = !sameValue(repairedHost, diskHost);
     if (!keepLocal) {
+      this.workspaceEpoch += 1;
       this.host = repairedHost;
       this.revision = data.revision;
+      this.observedHeadRevision = data.revision;
       this.storage = data.storage;
       this.pendingPayload = null;
+      this.pendingBase = null;
       this.pendingOperations = null;
       this.continuation = null;
       this.dirty = this.saved = 0;
     } else {
-      // A refresh only validates the authoritative revision. It never replaces
-      // a host containing an unsaved draft or a surface the user is editing.
-      this.revision = data.revision;
-      this.storage = data.storage;
+      this.observedHeadRevision = Math.max(this.observedHeadRevision, data.revision);
+      // Observing a newer head is not rebasing the local host onto it. In
+      // particular it must not change the CAS base of an uncertain command.
+      if (data.revision !== this.revision) {
+        this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host),
+          authoritativeHost: clone(repairedHost), authoritativeRevision: data.revision,
+          ...(this.pendingPayload ? { command: clone(this.pendingPayload) } : {}) };
+      }
     }
     this.route = fromUrl();
     const handoffOperations = !keepLocal && mode !== 'saved' ? this.resumeHarnessHandoff() : null;
@@ -241,7 +258,7 @@ export class WebRuntime {
       // Schedule repair after the shell is usable; a slow or unavailable write
       // must not turn a successful read back into an infinite startup spinner.
       this.draft(this.host, operations.length ? operations : null);
-    } else if (this.pendingPayload || this.dirty > this.saved) {
+    } else if (this.pendingPayload || this.dirty > this.saved || (keepLocal && data.revision !== this.revision)) {
       this.status = { state: 'error', text: '未保存草稿仍在页面中，请重试保存或导出。' };
       this.emit();
     } else {
@@ -252,14 +269,25 @@ export class WebRuntime {
   }
 
   private async loadWorkspace(mode: 'initial' | 'retry' | 'saved', generation: number): Promise<void> {
+    const editGeneration = this.dirty;
+    const readRevision = this.revision;
     this.loadState = WORKSPACE_LOAD_STATES.loading as WorkspaceLoadState;
     this.status = { state: 'loading', text: mode === 'saved' ? '正在读取已保存版本…' : `正在读取${storageLabel}中的内容…` };
     this.emit();
     try {
       const result = await this.readWorkspace();
       if (generation !== this.loadGeneration) return;
+      if (mode === 'saved' && (this.dirty !== editGeneration || this.revision !== readRevision)) {
+        this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host),
+          authoritativeHost: clone(result.data.host), authoritativeRevision: result.data.revision,
+          ...(this.pendingPayload ? { command: clone(this.pendingPayload) } : {}) };
+        this.loadState = WORKSPACE_LOAD_STATES.ready as WorkspaceLoadState;
+        this.setStatus('error', '读取期间又有新的修改或保存。没有替换当前内容，请先保留草稿后重新载入。');
+        return;
+      }
       if (mode === 'saved' && (this.pendingPayload || this.dirty > this.saved)) {
-        this.recoveryDraft = { revision: this.revision, host: clone(this.host) };
+        this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host),
+          ...(this.pendingPayload ? { command: clone(this.pendingPayload), submittedHost: clone(this.pendingPayload.host) } : {}) };
       }
       this.applyLoadedWorkspace(result.data, result.state, mode);
     } catch (cause) {
@@ -330,44 +358,91 @@ export class WebRuntime {
     return null;
   }
 
-  private async save(value: any, commandId = uid('command'), operations: any[] | null = null, generation = this.dirty): Promise<any> {
-    const payload = { expectedRevision: this.revision, host: clone(value), commandId, ...(operations?.length ? { operations: clone(operations) } : {}) };
-    this.pendingPayload = payload;
-    this.pendingGeneration = generation;
+  private async save(value: any, commandId = uid('command'), operations: any[] | null = null, generation = this.dirty, base = value): Promise<any> {
+    if (this.pendingPayload && this.pendingPayload.commandId !== commandId) throw new Error('请先处理未确认的保存');
+    if (!this.pendingPayload) {
+      this.pendingPayload = { expectedRevision: this.revision, host: clone(value), commandId, ...(operations?.length ? { operations: clone(operations) } : {}) };
+      this.pendingGeneration = generation;
+      this.pendingBase = clone(base);
+      this.pendingProductCommand = !completeDemoMode && hasNativeCapabilityBridge() && Boolean(operations?.length);
+    }
+    // A retry reuses the exact original envelope and transport, even after a
+    // refresh has observed another writer. Never re-fingerprint this command.
+    const payload = this.pendingPayload;
+    const epoch = this.workspaceEpoch;
+    const preserve = (extra: Partial<NonNullable<WorkspaceSnapshot['recoveryDraft']>> = {}) => {
+      this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host), submittedHost: clone(payload.host), command: clone(payload), ...extra };
+    };
     this.setStatus('saving', `正在保存到${storageLabel}…`);
     let response: Response;
     let data: any;
     try {
-      if (!completeDemoMode && hasNativeCapabilityBridge() && operations?.length) {
-        response = await productCommandRequest({ protocolVersion: 1, commandId, expectedRevision: this.revision, operations: clone(operations) });
+      let request: Promise<Response>;
+      if (this.pendingProductCommand) {
+        request = productCommandRequest({ protocolVersion: 1, commandId, expectedRevision: payload.expectedRevision, operations: clone(payload.operations) });
       } else {
-        response = await workspaceRequest('/api/web/workspace', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        request = workspaceRequest('/api/web/workspace', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       }
-      data = await response.json();
-    } catch {
-      this.setStatus('error', '当前修改尚未保存；此前已保存的内容仍可浏览。你可以重试或导出当前修改。');
+      response = await withWorkspaceTimeout(request, { code: 'WORKSPACE_SAVE_TIMEOUT', message: '保存结果暂未确认。原请求可能已提交，请保留草稿后重试核对，不会创建重复命令。' });
+      data = await withWorkspaceTimeout(response.json(), { timeoutMs: 2_000, code: 'WORKSPACE_SAVE_RESPONSE_INVALID', message: '保存回执未能完整读取。请保留草稿后重试核对。' });
+    } catch (cause) {
+      if (epoch !== this.workspaceEpoch || this.pendingPayload !== payload) throw new Error('旧工作区的保存响应已忽略');
+      preserve();
+      const timedOut = cause && typeof cause === 'object' && 'code' in cause && ['WORKSPACE_SAVE_TIMEOUT', 'WORKSPACE_SAVE_RESPONSE_INVALID'].includes(String(cause.code));
+      this.setStatus('error', timedOut && cause instanceof Error ? cause.message : '当前修改尚未确认保存；此前已保存的内容仍可浏览。你可以重试核对或导出当前修改。');
       throw new Error('保存连接中断');
     }
+    // Explicit recovery may have installed another workspace while this PUT
+    // was awaiting its response. Its old continuation/ACK must never roll the
+    // recovered host or revision back, even when the old command did commit.
+    if (epoch !== this.workspaceEpoch || this.pendingPayload !== payload) throw new Error('旧工作区的保存响应已忽略');
     if (!response.ok) {
       const message = response.status === 409 ? '另一处已有更新，未覆盖它。请先保留草稿，再载入已保存版本。' : `保存失败：${data?.error?.message || response.status}`;
-      if (response.status === 409) this.recoveryDraft = { revision: this.revision, host: clone(value) };
+      preserve();
       this.setStatus('error', message);
       throw new Error(message);
     }
-    this.revision = Math.max(this.revision, data.revision);
+    try {
+      validateWorkspaceAcknowledgement(data, payload, { productCommand: this.pendingProductCommand });
+      if (data.revision < this.observedHeadRevision) throw new Error('已观察到更新的工作区版本。这份迟到回执不能作为当前内容，请保留草稿后载入最新版本。');
+    } catch (cause) {
+      // Retain the raw, unconfirmed reply separately. An invalid or historical
+      // ACK must not replace the newer authority already read for recovery.
+      preserve({ unconfirmedAcknowledgement: clone(data) });
+      this.setStatus('error', cause instanceof Error ? cause.message : '保存回执未能核对，请先保留草稿。');
+      throw cause;
+    }
+    const reconciled = reconcileWorkspaceAuthority(this.pendingBase, this.host, data.host);
+    if (reconciled.conflicts.length) {
+      preserve({ authoritativeHost: clone(data.host), authoritativeRevision: data.revision, conflicts: reconciled.conflicts });
+      this.setStatus('error', '保存结果与新草稿修改了同一处。已保留两份内容，没有自动覆盖；请导出后核对已保存版本。');
+      throw new Error('保存结果与新草稿冲突');
+    }
+    this.host = reconciled.host;
+    this.revision = data.revision;
+    this.observedHeadRevision = data.revision;
     this.storage = data.storage;
+    this.saved = Math.max(this.saved, this.pendingGeneration);
     if (this.pendingPayload?.commandId === commandId) this.pendingPayload = null;
+    this.pendingBase = null;
     // A successful retry has reconciled the stale writer; do not keep an old
     // recovery export/action around after the authoritative save succeeds.
-    if (this.recoveryDraft?.host && sameValue(this.recoveryDraft.host, value)) this.recoveryDraft = null;
-    this.setStatus('saved', `已保存在${storageLabel}`);
+    if (this.recoveryDraft?.command?.commandId === commandId || (this.recoveryDraft?.host && sameValue(this.recoveryDraft.host, value))) this.recoveryDraft = null;
+    this.setPreferences();
+    this.setStatus(this.dirty > this.saved ? 'saving' : 'saved', this.dirty > this.saved ? '此前修改已保存，新草稿待保存…' : `已保存在${storageLabel}`);
+    if (this.dirty > this.saved) {
+      // The original debounce may have fired while a command was pending.
+      // Re-arm it; a successful older save must not strand the newer draft.
+      if (this.timer) window.clearTimeout(this.timer);
+      this.timer = window.setTimeout(() => { void this.flush().catch(() => undefined); }, 350);
+    }
     this.emit();
     return data;
   }
 
   private async flush(): Promise<void> {
     if (this.timer) window.clearTimeout(this.timer);
-    await this.tail;
+    if (this.flushInFlight) { await this.flushInFlight; return this.flush(); }
     if (this.pendingPayload) throw new Error('请先处理未确认的保存');
     if (this.dirty <= this.saved) return;
     const generation = this.dirty;
@@ -379,11 +454,20 @@ export class WebRuntime {
     this.pendingOperations = null;
     const job = this.tail.then(() => this.save(snapshot, uid('command'), operations, generation)).then(() => { this.saved = Math.max(this.saved, generation); this.emit(); });
     this.tail = job.catch(() => undefined);
-    await job;
+    this.flushInFlight = job;
+    try { await job; } finally { if (this.flushInFlight === job) this.flushInFlight = null; }
+  }
+
+  private async drainDrafts(): Promise<void> {
+    // A business command needs an acknowledged base, not merely the end of
+    // the batch that was pending when it started waiting. New typing during
+    // that wait belongs to another explicit operation batch.
+    do { await this.flush(); } while (this.dirty > this.saved);
   }
 
   draft(next: any, operation: any | any[] | null = null): void {
     this.host = next;
+    if (this.pendingPayload && this.recoveryDraft) this.recoveryDraft = { ...this.recoveryDraft, host: clone(next) };
     // A selection commonly follows an editor draft in the same debounce
     // window. Both operations are required: sending only FOCUS makes the
     // authoritative runtime validate the selection against the older text.
@@ -404,23 +488,22 @@ export class WebRuntime {
     this.busy = true;
     this.emit();
     try {
-      await this.flush();
+      await this.drainDrafts();
+      const base = clone(this.host);
       const next = transform(this.host);
       if (next?.error) {
         this.message(next.error.message);
         return;
       }
-      const finish = () => {
-        this.host = next;
-        this.saved = ++this.dirty;
+      const finish = (authoritative: any) => {
         this.setPreferences();
-        after(next);
+        after(authoritative);
         this.emit();
       };
       this.continuation = finish;
-      await this.save(next, uid('command'), operations);
+      const data = await this.save(next, uid('command'), operations, this.dirty, base);
       this.continuation = null;
-      finish();
+      finish(data.host);
     } catch (cause) {
       if (!this.pendingPayload) this.message(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -433,14 +516,12 @@ export class WebRuntime {
     if (!this.pendingPayload || this.busy) return;
     this.busy = true;
     const payload = this.pendingPayload;
-    const generation = this.pendingGeneration;
     this.emit();
     try {
-      await this.save(payload.host, payload.commandId, payload.operations || null);
-      this.saved = Math.max(this.saved, generation);
+      const data = await this.save(payload.host, payload.commandId, payload.operations || null);
       const finish = this.continuation;
       this.continuation = null;
-      finish?.();
+      finish?.(data.host);
       if (this.dirty > this.saved) await this.flush();
     } catch {
       // Keep the pending payload and recovery controls visible.
@@ -645,7 +726,7 @@ export class WebRuntime {
       }
       return next;
     }, (next) => {
-      this.navigate(next.route);
+      this.navigate({ view: 'chain', matterId, screen: selectedAgent !== 'none' ? 'handoff' : 'resume' });
       const source = ['zhihu', 'web'].includes(options.source || '') ? options.source as 'zhihu' | 'web' : 'none';
       const agent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as 'codex-native' | 'codex-harness' | 'custom' : 'none';
       // Agent selection already routed the user to the handoff screen.  Do
@@ -658,7 +739,13 @@ export class WebRuntime {
   }
 
   keepPublicSource(matterId: string, source: any, query: string): Promise<void> {
-    return this.commit((state) => B.keepPublicSource(state, { matterId, source, query }));
+    // One explicit command carries exactly the retained public snapshot fields;
+    // never fall back to a whole-host write in native Product mode.
+    const fields = ['id', 'provider', 'source', 'title', 'author', 'url', 'excerpt', 'content_id', 'content_type',
+      'comment_count', 'vote_up_count', 'authority_level', 'edited_at', 'content_mode', 'fetched_at'];
+    const retained = Object.fromEntries(fields.filter(key => source?.[key] !== undefined).map(key => [key, source[key]]));
+    return this.commit((state) => B.keepPublicSource(state, { matterId, source: retained, query }), undefined,
+      [{ type: 'source.keep-public', matterId, source: retained, query }]);
   }
 
   onChainAction = (action: any): void => {
@@ -682,7 +769,7 @@ export class WebRuntime {
       const workId = uid('work');
       const matterId = this.route.matterId;
       void this.commit((state) => (B.createWorkFromHandoff as any)(state, { matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }), (next) => {
-        this.navigate(next.route);
+        this.navigate({ view: 'worksite', workId, matterId, screen: 'overview' });
         if (this.nativeWorkReady && hasNativeCapabilityBridge() && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
       }, [{ type: 'handoff.create', matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }]);
       return;
@@ -789,7 +876,8 @@ export class WebRuntime {
     if (!anchor) { this.message('没有可比较的文字。先选一句原话、补充或已保存的理解。'); return; }
     const sessionId = uid('compare');
     const returnTarget = { ...clone(this.route), anchor };
-    void this.commit((state) => B.openComparison(state, { sessionId, matterId: matter.id, anchor, returnTarget }), (next) => this.navigate(next.route), [{ type: 'comparison.open', sessionId, matterId: matter.id, anchor, returnTarget }]);
+    const productTarget = productReturnRoute(returnTarget);
+    void this.commit((state) => B.openComparison(state, { sessionId, matterId: matter.id, anchor, returnTarget: productTarget }), () => this.navigate({ view: 'compare', sessionId, matterId: matter.id, anchor, returnTarget }), [{ type: 'comparison.open', sessionId, matterId: matter.id, anchor, returnTarget: productTarget }]);
   }
 
   onComparisonAction = (action: any): void => {
@@ -805,16 +893,21 @@ export class WebRuntime {
       this.busy = true; this.emit();
       void (async () => {
         try {
-          await this.flush();
+          await this.drainDrafts();
+          const base = clone(this.host);
           const prepared = change(this.host);
           if (prepared.error) { this.message(prepared.error.message); return; }
           const requestId = prepared.comparisons[sessionId].model.request?.id;
           if (!requestId) { this.host = prepared; this.emit(); return; }
           const applied = B.applyPendingComparison(prepared, { sessionId, requestId });
           if (!applied.outcome.ok) { this.host = B.deliverComparisonResult(prepared, { sessionId, requestId, outcome: applied.outcome }); this.emit(); return; }
-          const finish = () => { this.host = B.deliverComparisonResult(applied.host, { sessionId, requestId, outcome: applied.outcome }); this.dirty += 1; this.emit(); void this.flush().catch(() => undefined); };
+          // Browser snapshot writes persist the completed view in the same
+          // transaction. Native Product commands compute their own outcome;
+          // neither path gets overwritten by a captured local ACK afterwards.
+          const next = B.deliverComparisonResult(applied.host, { sessionId, requestId, outcome: applied.outcome });
+          const finish = () => { this.emit(); };
           this.continuation = finish;
-          await this.save(applied.host, requestId, [{ type: 'comparison.action', sessionId, action }]);
+          await this.save(next, requestId, [{ type: 'comparison.action', sessionId, action }], this.dirty, base);
           this.continuation = null;
           finish();
         } catch (cause) {
@@ -838,7 +931,7 @@ export class WebRuntime {
     this.busy = true;
     this.emit();
     try {
-      await this.flush();
+      await this.drainDrafts();
       const result = await searchPublic('zhihu', query, 5);
       const items = (Array.isArray(result?.items) ? result.items : []).filter((item: any) => {
         if (!item || item.provider !== 'zhihu' || item.source !== 'zhihu' || !String(item.id || '').trim() || !String(item.excerpt || '').trim()) return false;
@@ -852,6 +945,8 @@ export class WebRuntime {
         this.message('这次没有找到可核对的知乎公开内容。可以换一种说法，或直接粘贴已有材料。');
         return;
       }
+      await this.drainDrafts();
+      const base = clone(this.host);
       let next = this.host;
       const productOperations: any[] = [];
       for (const item of items) {
@@ -879,9 +974,7 @@ export class WebRuntime {
       next = B.dispatchComparison(next, { sessionId, action: backAction });
       productOperations.push({ type: 'comparison.action', sessionId, action: backAction });
       if (next.error) throw new Error(next.error.message || '搜索结果未能打开。');
-      await this.save(next, uid('search'), productOperations);
-      this.host = next;
-      this.saved = ++this.dirty;
+      await this.save(next, uid('search'), productOperations, this.dirty, base);
       this.setPreferences();
       this.emit();
     } catch (cause) {
@@ -897,7 +990,7 @@ export class WebRuntime {
     const next = B.returnFromComparison(this.host, this.route.sessionId);
     if (next.error && next.error.code !== 'stale_anchor') { this.message(next.error.message); return; }
     this.host = next;
-    this.navigate(next.route);
+    this.navigate(retainPresentationReturn(next.route, this.route.returnTarget));
   };
 
   continueComparison = (): void => {
@@ -905,7 +998,7 @@ export class WebRuntime {
     const next = B.returnFromComparison(this.host, this.route.sessionId);
     if (next.error && next.error.code !== 'stale_anchor') { this.message(next.error.message); return; }
     this.host = next;
-    this.navigate({ ...next.route, screen: 'discussion' });
+    this.navigate({ ...retainPresentationReturn(next.route, this.route.returnTarget), screen: 'discussion' });
   };
 
   onWorkAction = (action: any): void => {

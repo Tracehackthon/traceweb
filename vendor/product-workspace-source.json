@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "name": "@trace/product-workspace",
+  "version": "0.2.0-frontend.5",
+  "recordedAt": "2026-10-30T21:55:27.153Z",
+  "license": "UNLICENSED",
+  "distribution": "Trace internal private artifact; no inferred open-source grant",
+  "archive": {
+    "path": "vendor/trace-product-workspace-0.2.0-frontend.5.tgz",
+    "sha256": "963961de0e24d61e224f2808de30aa259f0b173e1a23db71b2fdc923173d5ada",
+    "integrity": "sha512-xRKTXeTQ3KsIstIRnJ0d86TaPqv0duyAoAfKVW50xrv+Iw8rQyh3ZwDgpovrMi1fWBQ4zxB4/V+dYXpzydQWKg=="
+  },
+  "source": {
+    "repository": "trace-runtime",
+    "relativePackage": "packages/product/workspace",
+    "head": "91b86b17327fa3bb87e14cefb366d31c497b43c4",
+    "dirty": true,
+    "dirtyStatus": " M packages/product/workspace/README.md\n M packages/product/workspace/package.json\n M packages/product/workspace/src/bridge.mjs\n M packages/product/workspace/src/chain-model.mjs\n M packages/product/workspace/src/codex-bridge.mjs\n M packages/product/workspace/src/commands.mjs\n M packages/product/workspace/src/comparison-model.mjs\n M packages/product/workspace/src/host-ingest.mjs\n M packages/product/workspace/src/host-workflow.mjs\n M packages/product/workspace/src/index.mjs\n M packages/product/workspace/src/worksite-model.mjs\n M packages/product/workspace/src/workspace.mjs\n",
+    "files": [
+      {
+        "path": "package.json",
+        "sha256": "5a225c0981df2d86c06d30a865a198bd7fa99dcea2c2ad74318d23d766bda6b2"
+      },
+      {
+        "path": "README.md",
+        "sha256": "8f0fbeb8822e09105487df449101d7e0c103355adba2c603b8f5fe7f38ffdee3"
+      },
+      {
+        "path": "src/bridge.mjs",
+        "sha256": "77437e6f7e26a06de67451ba3a9f1551ead92056fa916dec3da8ab2eb82dc7be"
+      },
+      {
+        "path": "src/chain-model.mjs",
+        "sha256": "ef9b70460fdc44c2e570e382e70e605baf9118a9651dcaa71acf5501aa610109"
+      },
+      {
+        "path": "src/codex-bridge.mjs",
+        "sha256": "876c776ef441c1c534d6ea4ad79002ca71d98a544d8fd296511ba59451555257"
+      },
+      {
+        "path": "src/commands.mjs",
+        "sha256": "0a9299402c8d1efa3e1e4a21a9f386e7d8ab1588037e85c6169d52c064f67981"
+      },
+      {
+        "path": "src/comparison-model.mjs",
+        "sha256": "77dec44807160056aaaf1c272452f57f4eb97edb1a19b7b1b6ef2dc7b28e0bfb"
+      },
+      {
+        "path": "src/demo-workspace.mjs",
+        "sha256": "fadd0283ce9df727767c1eeb5d5390765613db83fdecb55d96f562e8b97a15d4"
+      },
+      {
+        "path": "src/host-ingest.mjs",
+        "sha256": "b82b8fc6a6820ec24b1a68dcdca65929694a9e0146f6e006fd1ea88faa841bf9"
+      },
+      {
+        "path": "src/host-privacy.mjs",
+        "sha256": "837f668a9346dd3d4a641db735f5b8baf59be0d11ad4b5c01d021f7304e9e5f7"
+      },
+      {
+        "path": "src/host-workflow.mjs",
+        "sha256": "486800a0eea0ce80e197866921722b4c0464d8ea7f7127c4655007442997b4e1"
+      },
+      {
+        "path": "src/index.mjs",
+        "sha256": "e3f0947586a5174f8142eb298ab3938b06ccdec979db675748e7039bc4e1e91f"
+      },
+      {
+        "path": "src/scope-contract.mjs",
+        "sha256": "8b3f7b442f51c21a5d9eaf8c0c72eb3788dc2b8943d24fcedf7801e06b8aa70e"
+      },
+      {
+        "path": "src/worksite-model.mjs",
+        "sha256": "9994cb0637fec1100a38575b2df9b8d990f7a5cc2e18174f1d85b8439ce92fc6"
+      },
+      {
+        "path": "src/workspace.mjs",
+        "sha256": "47c19c27f7a4b2b632dbfa3a5a50896a5230d83edcf335fee131d0f44a238387"
+      },
+      {
+        "path": "tsconfig.types.json",
+        "sha256": "d1e01e41c11f04c2a28e89a695ea6a7a483160aec10ca4971d2a8ac6d75bfc2e"
+      },
+      {
+        "path": "types/bridge.d.mts",
+        "sha256": "031a508541aff04c3e0e1266db8bd63dd39624cc37c17b5a6400ece5c572026a"
+      },
+      {
+        "path": "types/chain-model.d.mts",
+        "sha256": "84e4cfc0e435a612f83f932f54a61abff8f753c51ce5fd74da49825e469b30ea"
+      },
+      {
+        "path": "types/commands.d.mts",
+        "sha256": "cfa1c9b56e6c568780ca4bdfa86f722fbe255aa6d83d77aa6c3a296c957bb39c"
+      },
+      {
+        "path": "types/comparison-model.d.mts",
+        "sha256": "7913bf38815b2895e58aa2bf7af5a63a920ffe018f0344b5a70bdeb97621db19"
+      },
+      {
+        "path": "types/demo-workspace.d.mts",
+        "sha256": "c413e4fdcc2895566dcdd4e31b6d1c8c7143e2ddea0a4d63e3d1714bd51a8253"
+      },
+      {
+        "path": "types/index.d.mts",
+        "sha256": "c4b6ca85803fbcf2fa13c9327717030b7297960d97b27e5d6b5197b489159167"
+      },
+      {
+        "path": "types/scope-contract.d.mts",
+        "sha256": "90cefac89312b4d305b513faaac926982dabefd9e5c96afdf61a8b164e0b3af8"
+      },
+      {
+        "path": "types/worksite-model.d.mts",
+        "sha256": "267c7a1e9dc72810913a299799780d06590fcadbeb44e100c498112127168440"
+      }
+    ],
+    "filesIdentitySha256": "543da74fa7a9c9be84e7972592afd89ca0393996317cd810821825d40eab23fd",
+    "declarationCompiler": "7.0.2"
+  }
+}
