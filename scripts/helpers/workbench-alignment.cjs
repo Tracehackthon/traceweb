@@ -6,6 +6,7 @@ module.exports=async({page,state,saved,check,capture,out,windowSize,baseline})=>
  const record=(name,value,expected=0)=>{measurements.push({name,value,expected,delta:Math.abs(value-expected)});if(!baseline)check(name,Math.abs(value-expected)<=0.5);};
  const button=name=>page.getByRole('button',{name,exact:true});
  await page.emulateMedia({reducedMotion:'reduce'});
+ await windowSize(1440,940);await page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name:'思考画布',exact:true}).click();
  if(process.env.TRACE_ALIGNMENT_THEME==='dark'){await button('设置').click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),'dark');await button('保存设置').click();await saved();}
  const revision=(await state()).product.revision;
  for(const width of [1440,1200,900,390]){
