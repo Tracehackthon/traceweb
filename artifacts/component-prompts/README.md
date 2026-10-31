@@ -116,3 +116,10 @@ node scripts/expressive-controls-e2e.cjs
 用户将要求扩展为整个当前工作台，不再只适配素材输入区。唯一状态入口`workbench-states.css`覆盖导航/最近对象/列表/详情Tab/分段/画布节点/表单/设置/菜单及弹窗；装饰框线透明，靠表面与可自定义色阴影表达选中，强制颜色模式保留系统焦点。`--trace-selection-tint`可覆盖状态色，真实运行已验证阴影变化而几何不变。协作记录补充真实aria-current，保留原状态链路。
 
 最终当前构建：23项工作台状态E2E + 14项前轮配色回归通过；前者有重试（初次Radix自动激活等待、异步新建能力换节点及标题由textarea改input的脚本定位修正），最后按真实选中/字段条件等待，并核验两个能力修订实际存入IndexedDB。报告：`.test-results/workbench-shadow-states/browser-current/report.json`，配色回归：`.test-results/component-prompts/focus-palette/after-shadow-states/report.json`。不是完整15组功能验收，安装版/实体触屏/其他浏览器未运行。
+
+
+### 常用动效接入（2026-11-01）
+
+在无描边状态层之上补充指针按钮按下/释放、选中/悬停阴影层透明度、原生弹窗与遮罩进出、Radix菜单/工具提示原点进出、真实保存提示淡入/收起、真实pending图标与进度反馈。复用现有原语，只用CSS transform/opacity与原生WAAPI，没有新增动画依赖。键盘、IME、正文、画布相机/拖动不加装饰延迟；系统/产品减少动态同时生效且可中途结束动画。明确的指针关闭保留退出挂载，保存命令直接卸载不强行等待动画。
+
+18项动效E2E首次通过（最终增加中途减少动态检查）；23项无描边、14项配色回归重试通过。回归脚本原先在关闭动画尚未结束、背景仍inert时fill，或在阴影opacity首帧即时断言；已改为等待实际隐藏/阴影条件，未用固定sleep掩盖。最终报告：`.test-results/workbench-motion/browser-current/report.json`、`.test-results/workbench-shadow-states/motion-current/report.json`、`.test-results/component-prompts/focus-palette/motion-current/report.json`。过程失败保留；视频：`.test-results/workbench-motion/browser-current/video/interaction.webm`。这些不是安装版或全部功能验收。

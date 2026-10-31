@@ -4,7 +4,7 @@ const base='http://127.0.0.1:4326',out=path.resolve(__dirname,'../.test-results/
 assert(!fs.existsSync(path.join(out,'report.json')),'Choose a fresh run name');fs.mkdirSync(path.join(out,'tmp'),{recursive:true});for(const k of ['TEMP','TMP','TMPDIR'])process.env[k]=path.join(out,'tmp');
 const checks=[],errors=[];let browser;
 const check=(name,ok)=>{assert(ok,name);checks.push(name);console.log('PASS '+name);};
-const shaded=e=>{const s=getComputedStyle(e);return s.outlineStyle==='none'&&s.boxShadow!=='none'&&(s.borderTopColor==='rgba(0, 0, 0, 0)'||parseFloat(s.borderTopWidth)===0);};
+const shaded=e=>{const s=getComputedStyle(e);return s.outlineStyle==='none'&&(s.boxShadow!=='none'||(getComputedStyle(e,'::after').boxShadow!=='none'&&parseFloat(getComputedStyle(e,'::after').opacity)>0))&&(s.borderTopColor==='rgba(0, 0, 0, 0)'||parseFloat(s.borderTopWidth)===0);};
 (async()=>{try{
   browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1440,height:940}});page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/app?view=canvas');await page.getByRole('button',{name:'开始画布',exact:true}).click();await page.getByRole('button',{name:'写下第一点想法',exact:true}).click();await page.locator('.wb-node[data-selected]').waitFor();
@@ -25,7 +25,7 @@ const shaded=e=>{const s=getComputedStyle(e);return s.outlineStyle==='none'&&s.b
     await page.getByRole('button',{name:'保存草稿版本',exact:true}).click();await page.getByText('草稿已保存',{exact:true}).waitFor();check(theme+' selected capability has shadow and still saves',await page.locator('.wb-capability-summary[aria-current=true]').evaluate(shaded));
     await page.screenshot({path:path.join(out,theme+'-capability.png')});await page.getByRole('button',{name:'思考画布',exact:true}).click();
   }
-  await page.getByRole('button',{name:'Agent 协作',exact:true}).click();await page.getByRole('button',{name:'新建共同思考',exact:true}).click();check('current discussion has semantic selection and shadow',await page.locator('.wb-list-row[aria-current=true]').evaluate(shaded));
+  await page.getByRole('button',{name:'Agent 协作',exact:true}).click();await page.getByRole('button',{name:'新建共同思考',exact:true}).click();await page.waitForFunction(()=>{const e=document.querySelector('.wb-list-row[aria-current=true]');return e&&(getComputedStyle(e).boxShadow!=='none'||parseFloat(getComputedStyle(e,'::after').opacity)>0);});check('current discussion has semantic selection and shadow',await page.locator('.wb-list-row[aria-current=true]').evaluate(shaded));
   await page.getByRole('textbox',{name:'继续共同思考'}).fill('选中以颜色阴影呈现，不依赖线框。');await page.screenshot({path:path.join(out,'discussion.png')});
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(out,'narrow.png')});check('narrow layout has no horizontal overflow',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.emulateMedia({forcedColors:'active'});const input=page.getByRole('textbox',{name:'继续共同思考'});await input.focus();check('forced-colors retains system focus affordance',await input.evaluate(e=>getComputedStyle(e.closest('form')).outlineStyle!=='none'));

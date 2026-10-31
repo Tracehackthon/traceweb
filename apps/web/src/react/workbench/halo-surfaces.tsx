@@ -1,8 +1,9 @@
-import React from 'react';
+import React,{useEffect,useRef} from 'react';
 import {ToggleGroup} from 'radix-ui';
 import {TraceIcon} from '../ui/icon';
 import type {ContentEntry} from './client';
 import './halo-surfaces.css';
+import {useSurfaceMotion} from './motion';
 
 export type HaloTone='neutral'|'success'|'warning'|'error';
 export function HaloBadge({children,tone='neutral',className=''}:{children:React.ReactNode;tone?:HaloTone;className?:string}){
@@ -40,10 +41,12 @@ export function HaloAnnotationSurface({children,preview}:{children:React.ReactNo
 // Local persistent feedback, not a timer-driven toast. Errors remain actionable
 // at the form and the title is announced once without stealing keyboard focus.
 export function HaloNotice({title,description,tone='success',onDismiss}:{title:string;description?:string;tone?:HaloTone;onDismiss?:()=>void}){
-  return <section className="wb-halo-notice" data-tone={tone} role={tone==='error'?'alert':'status'}>
+  const ref=useRef<HTMLElement>(null),{reveal,dismiss}=useSurfaceMotion(ref,onDismiss||(()=>{}),'notice');
+  useEffect(()=>{reveal();},[title,description,tone]);
+  return <section ref={ref} className="wb-halo-notice" data-tone={tone} role={tone==='error'?'alert':'status'}>
     <span className="wb-halo-notice-icon"><TraceIcon name={tone==='error'?'error':tone==='warning'?'pending':'check'} size={18}/></span>
     <div><strong>{title}</strong>{description&&<p>{description}</p>}</div>
-    {onDismiss&&<button type="button" className="wb-icon-button" aria-label="收起保存提示" onClick={onDismiss}><TraceIcon name="close" size={16}/></button>}
+    {onDismiss&&<button type="button" className="wb-icon-button" aria-label="收起保存提示" onClick={dismiss}><TraceIcon name="close" size={16}/></button>}
   </section>;
 }
 

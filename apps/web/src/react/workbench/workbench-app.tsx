@@ -16,6 +16,7 @@ import {DetailTabs,DetailTabsList,DetailTabsPanel} from './detail-tabs';
 import {HaloSegmented,HaloBadge,HaloSurface,HaloNotice,HaloProgress,CapabilityStatus,CapabilitySummary,HaloAnnotationSurface} from './halo-surfaces';
 import {freezeCanvasContentRef} from '@trace/product-workspace';
 import './workbench-states.css';
+import {useWorkbenchMotion} from './motion';
 type View='canvas'|'capabilities'|'collaboration';
 type InspectorTab='content'|'source'|'relations'|'evolution';
 const namespace=location.pathname.startsWith('/app/demo')?'demo':'personal';
@@ -84,6 +85,7 @@ function CapabilityEditor({entry,client,onTrial}:{entry:ContentEntry;client:Work
 }
 
 export function WorkbenchApp(){
+  useWorkbenchMotion();
   const [client]=useState(()=>new WorkbenchClient()),state=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot);
   const initial=useMemo(()=>{const url=new URL(location.href),old=url.searchParams.get('view');return{view:(['capabilities','collaboration'].includes(old||'')?old:old==='worksite'||old==='works'?'collaboration':'canvas')as View,canvas:url.searchParams.get('canvas')||readLocal('resume:canvas','canvas-main'),matter:url.searchParams.get('matter')};},[]);
   const [view,setView]=useState<View>(initial.view),[selected,setSelected]=useState<string[]>(()=>readLocal('resume:selected:'+initial.canvas,[])),[viewport,setViewport]=useState(()=>readLocal('resume:viewport:'+initial.canvas,{x:0,y:0,k:1})),[inspector,setInspector]=useState(true),[tab,setTab]=useState<InspectorTab>('source'),[direct,setDirect]=useState<ContentRef|null>(null),[overlay,setOverlay]=useState<'search'|'activation'|'settings'|'navigation'|null>(null),[query,setQuery]=useState(''),[notice,setNotice]=useState(''),[activeCapability,setActiveCapability]=useState<string|null>(null),[activeThinking,setActiveThinking]=useState<string|null>(null),[activeTask,setActiveTask]=useState<string|null>(null),[collabTab,setCollabTab]=useState<'internal'|'external'>('internal'),[message,setMessage]=useLocalDraft('thinking-composer',''),[goal,setGoal]=useLocalDraft('task-goal','');
