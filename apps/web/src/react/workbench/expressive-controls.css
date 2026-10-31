@@ -80,16 +80,3 @@ html[data-trace-appearance] :is(.wb-liquid-button,.wb-thinking-composer .wb-prim
 
 html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea) { caret-color:var(--trace-material-accent); }
 html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea)::selection { color:var(--trace-text-primary); background:color-mix(in srgb,var(--trace-material-accent) 20%,var(--trace-surface-panel)); }
-
-.wb-gooey-clear { color:var(--trace-text-primary); }
-
-
-/* Local focus treatment: contrast + tinted drop shadow, not a neon outline. */
-html[data-trace-appearance] .wb-gooey-search :is(button,input):focus-visible,
-html[data-trace-appearance] .wb-thinking-composer textarea:focus-visible { outline:none; }
-html[data-trace-appearance] :is(.wb-gooey-search,.wb-thinking-composer):has(:focus-visible) { box-shadow:0 5px 16px color-mix(in srgb,var(--trace-material-shadow-color) 34%,transparent); }
-html[data-trace-appearance] :is(.wb-liquid-button,.wb-thinking-composer .wb-primary):focus-visible { outline:1px solid var(--trace-material-edge); outline-offset:2px; box-shadow:var(--trace-material-focus-shadow); }
-@media (forced-colors:active) { html[data-trace-appearance] :is(.wb-gooey-search,.wb-thinking-composer):focus-within { outline:2px solid Highlight; box-shadow:none; } }
-
-html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea) { caret-color:var(--trace-material-accent); }
-html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea)::selection { color:var(--trace-text-primary); background:color-mix(in srgb,var(--trace-material-accent) 20%,var(--trace-surface-panel)); }

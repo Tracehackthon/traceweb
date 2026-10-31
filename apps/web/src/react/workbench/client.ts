@@ -86,6 +86,7 @@ export class WorkbenchClient {
   async retry() { const pending = this.state.pending; if (!pending) return; this.set({ saving: true }); try { await jsonRequest(pending.path, pending.body); localStorage.removeItem(pendingKey); this.set({ pending: null, error: null }); await this.load(); } catch (error) { this.set({ error: error instanceof Error ? error.message : '重试尚未确认。' }); } finally { this.set({ saving: false }); } }
   async reloadAfterConflict() { if(await this.load()){this.set({ pending: null, error: null });localStorage.removeItem(pendingKey);} }
   async createCanvas() { if(!await this.load(makeId('canvas')))throw new Error('新画布没有准备好；原画布未被覆盖。');await this.layout(undefined, 'rename', '新的想法');await this.load();return this.id; }
+  readResource(id: string) { return resourceBlob(id); }
   readCanvas(id: string): Promise<{ document: CanvasDocument }> { return jsonRequest('/api/product/canvases/' + encodeURIComponent(id)); }
   resourceUrl(id: string) { let value = this.urls.get(id); if (!value) { value = resourceBlob(id).then(blob => URL.createObjectURL(blob)); this.urls.set(id, value); value.catch(() => this.urls.delete(id)); } return value; }
   destroy() { for (const url of this.urls.values()) void url.then(URL.revokeObjectURL).catch(() => {}); this.urls.clear(); }

@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 import type { ViewportTransform } from "./types";
 type CanvasBackgroundMode = 'blank' | 'dots' | 'lines';
-const theme = {canvas:{background:'var(--trace-surface-workbench)',dot:'#a7aba8',line:'#dfe1df'}};
+const theme = {canvas:{background:'var(--trace-surface-workbench)',dot:'var(--trace-grid-dot)',line:'var(--trace-border-subtle)'}};
 // Native editing, playback and scrollable excerpts own their input. Upstream
 // popover class names are not dependencies of the Trace workbench.
 const interactive = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest('input,textarea,select,button,a,audio,video,[contenteditable="true"],[role="menu"],[role="dialog"],[data-canvas-no-zoom]'));
