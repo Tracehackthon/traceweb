@@ -14,7 +14,7 @@ export interface CanvasNode { id: string; ref: ContentRef | null; position: { x:
 export interface CanvasEdge { id: string; from: string; to: string; relationId: string | null }
 export interface CanvasScene { nodes: CanvasNode[]; connections: CanvasEdge[] }
 export interface CanvasDocument extends CanvasScene { schemaVersion: 1; id: string; title: string; revision: number; undo: CanvasScene[]; redo: CanvasScene[] }
-export interface WorkbenchState { ready: boolean; loading: boolean; readError: string | null; host: ContentHost | null; legacy: unknown; revision: number; canvas: CanvasDocument | null; canvases: { id: string; title: string; revision: number }[]; saving: boolean; error: string | null; pending: { path: string; body: unknown } | null }
+export interface WorkbenchState { ready: boolean; loading: boolean; readError: string | null; host: ContentHost | null; legacy: unknown; revision: number; canvas: CanvasDocument | null; canvases: { id: string; title: string; revision: number }[]; saving: boolean; error: string | null; pending: { path: string; body: unknown; owner?:string } | null }
 type NativeBridge = { requestCapability?: (request: Record<string, unknown>) => Promise<any> };
 const native = () => (window as Window & { traceNative?: NativeBridge }).traceNative;
 const pendingKey='trace-workbench-pending:'+(location.pathname.startsWith('/app/demo')?'demo':'personal');
@@ -73,15 +73,15 @@ export class WorkbenchClient {
   private enqueue<T>(action: () => Promise<T>):Promise<T> {
     const result = this.queue.then(action); this.queue = result.catch(() => {}); return result;
   }
-  private async send(path: string, body: unknown) {
+  private async send(path: string, body: unknown,owner?:string) {
     if (this.state.pending) throw new Error('上一操作尚未确认，请先重试原命令或保留草稿后重新读取。');
     this.set({ saving: true, error: null });
     try { const result = await jsonRequest(path, body); return result; }
-    catch (error) { const pending = { path, body: structuredClone(body) }; try{localStorage.setItem(pendingKey, JSON.stringify(pending));}catch{/* In-memory recovery remains available; no false acknowledgement. */} this.set({ error: error instanceof Error ? error.message : '保存未确认。', pending }); throw error; }
+    catch (error) { const pending = { path, body: structuredClone(body),...(owner?{owner}:{}) }; try{localStorage.setItem(pendingKey, JSON.stringify(pending));}catch{/* In-memory recovery remains available; no false acknowledgement. */} this.set({ error: error instanceof Error ? error.message : '保存未确认。', pending }); throw error; }
     finally { this.set({ saving: false }); }
   }
-  command(operations: unknown[]) { return this.enqueue(async () => { const result = await this.send('/api/product/commands', { protocolVersion: 1, commandId: makeId('content'), expectedRevision: this.state.revision, operations }); this.set({ host: result.host, revision: result.revision }); return result; }); }
-  layout(scene?: CanvasScene, action: 'replace' | 'undo' | 'redo' | 'rename' = 'replace', title?: string, baseRevision=this.state.canvas?.revision,canvasId=this.id) { return this.enqueue(async () => { if (baseRevision===undefined) throw new Error('画布尚未读取。'); const result = await this.send('/api/product/canvases/' + canvasId + '/commands', { protocolVersion: 1, commandId: makeId('layout'), expectedRevision: baseRevision, action, ...(scene ? { scene } : {}), ...(title === undefined ? {} : { title }) }); if(this.id===canvasId)this.set({ canvas: result.document }); return result; }); }
+  command(operations: unknown[],owner?:string) { return this.enqueue(async () => { const result = await this.send('/api/product/commands', { protocolVersion: 1, commandId: makeId('content'), expectedRevision: this.state.revision, operations },owner); this.set({ host: result.host, revision: result.revision }); return result; }); }
+  layout(scene?: CanvasScene, action: 'replace' | 'undo' | 'redo' | 'rename' = 'replace', title?: string, baseRevision=this.state.canvas?.revision,canvasId=this.id,owner?:string) { return this.enqueue(async () => { if (baseRevision===undefined) throw new Error('画布尚未读取。'); const result = await this.send('/api/product/canvases/' + canvasId + '/commands', { protocolVersion: 1, commandId: makeId('layout'), expectedRevision: baseRevision, action, ...(scene ? { scene } : {}), ...(title === undefined ? {} : { title }) },owner); if(this.id===canvasId)this.set({ canvas: result.document }); return result; }); }
   async prepare() { await this.command([{ type: 'workspace.upgrade' }]); await this.load(); if (this.state.canvas?.revision === 0) await this.layout(undefined, 'rename', '新的想法'); await this.load(); }
   async retry() { const pending = this.state.pending; if (!pending) return; this.set({ saving: true }); try { await jsonRequest(pending.path, pending.body); localStorage.removeItem(pendingKey); this.set({ pending: null, error: null }); await this.load(); } catch (error) { this.set({ error: error instanceof Error ? error.message : '重试尚未确认。' }); } finally { this.set({ saving: false }); } }
   async reloadAfterConflict() { if(await this.load()){this.set({ pending: null, error: null });localStorage.removeItem(pendingKey);} }

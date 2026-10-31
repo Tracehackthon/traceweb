@@ -1,0 +1,18 @@
+/* Quiet receipts at the action; a single fallback only when that owner unmounts. */
+.wb-feedback-slot:empty { display:none; }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) .wb-halo-notice[data-compact=true] { align-items:center;gap:8px;padding:0;background:transparent;border:0;box-shadow:none;min-height:24px; }
+.wb-halo-notice[data-compact=true] .wb-halo-notice-icon { width:20px;height:24px;border:0;border-radius:0; }
+.wb-halo-notice[data-compact=true] strong { font-size:var(--wb-text-label);line-height:var(--wb-leading-label);font-weight:var(--wb-weight-medium); }
+.wb-halo-notice[data-tone=neutral] { color:var(--trace-text-secondary);background:var(--trace-state-control);border-color:transparent; }
+.wb-halo-notice[data-pending=true] .wb-halo-notice-icon>svg { animation:trace-working 1000ms linear infinite; }
+.wb-feedback-recovery { min-width:0;display:grid;gap:12px; }
+.wb-feedback-recovery>.wb-actions { padding:0!important;border:0!important; }
+.wb-feedback-recovery>.wb-halo-disclosure { margin:0; }
+.wb-feedback-detail { white-space:pre-wrap;overflow-wrap:anywhere; }
+.wb-feedback-global { position:absolute;left:24px;right:24px;bottom:88px;z-index:30;max-height:40dvh;overflow:auto;padding:16px;border-radius:16px;background:var(--trace-surface-panel);box-shadow:var(--trace-shadow-menu); }
+.wb-halo-progress[data-indeterminate=true] { display:block; }
+.wb-halo-progress[data-indeterminate=true]>div { display:flex;align-items:center;justify-content:flex-start;gap:8px; }
+.wb-feedback-spinner { flex:none;animation:trace-working 1000ms linear infinite; }
+@media(max-width:767px){.wb-feedback-global { left:12px;right:12px;bottom:140px;max-height:36dvh; }.wb-feedback-recovery .wb-actions { flex-wrap:wrap; }}
+html[data-reduce-motion=true] :is(.wb-feedback-spinner,.wb-halo-notice[data-pending=true] svg) { animation:none!important; }
+@media(prefers-reduced-motion:reduce){:is(.wb-feedback-spinner,.wb-halo-notice[data-pending=true] svg) { animation:none!important; }}

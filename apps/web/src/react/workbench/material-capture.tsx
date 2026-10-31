@@ -1,3 +1,4 @@
+import {FormFeedback} from './feedback';
 import {HaloSelect,HaloInput,HaloTextarea} from './halo-controls';
 import {TraceIcon} from '../ui/icon';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
@@ -79,6 +80,6 @@ export function MaterialCapture({ source, draft, onChange, onSave, onClose, clie
         {url && (draft.kind === 'pdf' ? /^\d+$/.test(draft.page) && Number(draft.page) > 0 ? <Suspense fallback={<p role="status">正在准备 PDF 定位…</p>}><PdfPreview url={url} locator={region || { type: 'pdf', page: Number(draft.page), rotation: [0, 90, 180, 270].includes(Number(draft.rotation)) ? Number(draft.rotation) : 0 }} fullPage onInfo={value => setPages(value.pages)} onDocumentError={setReadError} /></Suspense> : <p role="status">填写有效页码后显示对应原页，不会改跳到其它位置。</p> : <LocalMedia kind="image" url={url} title={draft.title} locator={region} original />)}
       </>}
     </fieldset>
-    <div className="wb-actions">{(readError || error) && <p role="alert" className="wb-capture-error">{readError || error}</p>}<button type="button" className="wb-button" onClick={onClose}>取消，保留草稿</button><button type="submit" className="wb-button wb-primary" disabled={busy || pending}><TraceIcon name={busy||pending?"pending":"check"}/>{busy ? '正在保存材料与布局…' : saved ? '重试放到原画布' : '保存材料并放到画布'}</button></div>
+    <FormFeedback client={client} owner={'capture:'+draft.id} busy={busy} pendingLabel="正在保存材料与布局…" message={readError||error} error={Boolean(readError||error)}/><div className="wb-actions"><button type="button" className="wb-button" onClick={onClose}>取消，保留草稿</button><button type="submit" className="wb-button wb-primary" disabled={busy || pending}><TraceIcon name={busy||pending?"pending":"check"}/>{busy ? '正在保存材料与布局…' : saved ? '重试放到原画布' : '保存材料并放到画布'}</button></div>
   </form></WorkbenchModal>;
 }

@@ -89,5 +89,5 @@ html[data-trace-appearance] .wb-halo-control[data-invalid=true] { outline:none; 
 
 html[data-trace-appearance] .wb-shell .wb-halo-tabs { border-color:transparent; background:var(--trace-state-control); }
 html[data-trace-appearance] .wb-shell .wb-halo-tabs [role=tab]:focus-visible { outline:none; box-shadow:var(--trace-state-focus-shadow); }
-html[data-trace-appearance] :is(.wb-activation-trigger,.wb-empty-mark,.wb-capture-excerpt,.wb-original-text,.wb-recovery) { border-color:transparent; box-shadow:var(--trace-state-idle-shadow); }
+html[data-trace-appearance] :is(.wb-activation-trigger,.wb-empty-mark,.wb-capture-excerpt,.wb-original-text,.wb-feedback-global) { border-color:transparent; box-shadow:var(--trace-state-idle-shadow); }
 html[data-trace-appearance] .wb-gooey-surfaces i { box-shadow:none; }

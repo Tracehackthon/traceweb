@@ -45,18 +45,19 @@ export function HaloAnnotationSurface({children,preview}:{children:React.ReactNo
 
 // Local persistent feedback, not a timer-driven toast. Errors remain actionable
 // at the form and the title is announced once without stealing keyboard focus.
-export function HaloNotice({title,description,tone='success',onDismiss}:{title:string;description?:string;tone?:HaloTone;onDismiss?:()=>void}){
+export function HaloNotice({title,description,tone='success',onDismiss,pending=false,compact=tone!=='error'&&tone!=='warning',actions}:{title:string;description?:string;tone?:HaloTone;onDismiss?:()=>void;pending?:boolean;compact?:boolean;actions?:React.ReactNode}){
   const ref=useRef<HTMLElement>(null),{reveal,dismiss}=useSurfaceMotion(ref,onDismiss||(()=>{}),'notice');
   useEffect(()=>{reveal();},[title,description,tone]);
-  return <section ref={ref} className="wb-halo-notice" data-tone={tone} role={tone==='error'?'alert':'status'}>
-    <span className="wb-halo-notice-icon"><TraceIcon name={tone==='error'?'error':tone==='warning'?'pending':'check'} size={18}/></span>
-    <div><strong>{title}</strong>{description&&<p>{description}</p>}</div>
+  return <section ref={ref} className="wb-halo-notice" data-tone={tone} data-pending={pending||undefined} data-compact={compact} role={tone==='error'?'alert':'status'}>
+    <span className="wb-halo-notice-icon"><TraceIcon name={pending?'spinner':tone==='error'?'error':tone==='warning'?'pending':tone==='neutral'?'document':'check'} size={18}/></span>
+    <div><strong>{title}</strong>{description&&<p>{description}</p>}{actions&&<div className="wb-actions">{actions}</div>}</div>
     {onDismiss&&<button type="button" className="wb-icon-button" aria-label="收起保存提示" onClick={dismiss}><TraceIcon name="close" size={16}/></button>}
   </section>;
 }
 
 export function HaloProgress({value=null,max=1,label,valueText}:{value?:number|null;max?:number;label:string;valueText?:string}){
   const bound=Math.max(1,max),current=value===null?null:Math.min(bound,Math.max(0,value));
+  if(current===null)return <div className="wb-halo-progress" data-indeterminate="true" role="status"><div><TraceIcon name="spinner" size={16} className="wb-feedback-spinner"/><span>{label}</span>{valueText&&<span>{valueText}</span>}</div></div>;
   return <div className="wb-halo-progress">
     <div><span>{label}</span>{valueText&&<span>{valueText}</span>}</div>
     <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={bound} aria-valuenow={current??undefined} aria-valuetext={valueText||(current===null?'处理中，完成时间未知':undefined)} className="wb-halo-progress-track" data-indeterminate={current===null}>

@@ -42,10 +42,10 @@ export function AgentTaskBadge({task,runs,ready,error=''}:{task:Task;runs:Run[];
 
 export function TaskExecution({task,client,executions,onCancelPreparation,thinking}:{task:Task;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onCancelPreparation:()=>void;thinking?:{sessionId:string;messageId:string}}){
   const {runs,refresh,ready,error}=executions,history=runs.filter(r=>r.taskId===task.id),run=history.at(-1);
-  const [setup,setSetup]=useState<any>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[write,setWrite]=useState(false),[note,setNote]=useState(''),[answers,setAnswers]=useState<Record<string,string>>({});
-  useEffect(()=>{if(bridge())void call('status').then(setSetup).catch(e=>setNotice(e.message));},[]);
+  const [setup,setSetup]=useState<any>(null),[notice,setNotice]=useState(''),[noticeError,setNoticeError]=useState(false),[busy,setBusy]=useState(false),[write,setWrite]=useState(false),[note,setNote]=useState(''),[answers,setAnswers]=useState<Record<string,string>>({});
+  useEffect(()=>{if(bridge())void call('status').then(setSetup).catch(e=>{setNoticeError(true);setNotice(e.message);});},[]);
   useEffect(()=>{setNote(run?.review?.note||'');setAnswers({});},[run?.id]);
-  const action=async(fn:()=>Promise<any>)=>{if(busy)return;setBusy(true);setNotice('');try{await fn();await refresh();}catch(e){setNotice(e.message||'操作未完成，请保留当前内容后重试。');}finally{setBusy(false);}};
+  const action=async(fn:()=>Promise<any>)=>{if(busy)return;setBusy(true);setNotice('');setNoticeError(false);try{await fn();await refresh();}catch(e){setNoticeError(true);setNotice(e.message||'操作未完成，请保留当前内容后重试。');}finally{setBusy(false);}};
   if(!bridge())return <p className="wb-muted">真实执行需使用桌面版；本页只保存任务准备。</p>;
   if(task.execution)return <p className="wb-muted">本任务已有其他执行回执，请从既有回执面板继续核验；不会重复提交。</p>;
   const interaction=run?.runtime?.interaction,adopted=Boolean(run?.adoptions?.some(a=>a.status==='committed'));
@@ -62,7 +62,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
       <p>第 {run.number} 次运行 · 项目 {run.projectName} · {run.mode==='thinking'?'限本讨论的只读思考':run.mode==='read-only'?'只读':'可修改项目内文件'}。输入与引用已冻结，结果只回到这个任务。</p>
       {!error&&active.includes(run.status)&&<HaloProgress label={labels[run.status]||'正在执行'}/>}
       {run.runtime.threadId&&<p className="wb-execution-receipt">Codex thread：{run.runtime.threadId}{run.runtime.turnId&&<> / turn：{run.runtime.turnId}</>}</p>}
-      {run.error&&<HaloNotice tone="error" title={run.error} description="输入、原引用和已有回执仍保留。先前执行可能已产生项目改动；重试前请核对，不会自动回滚文件。"/>}
+      {run.error&&!error&&!noticeError&&<HaloNotice tone="error" title={run.error} description="输入、原引用和已有回执仍保留。先前执行可能已产生项目改动；重试前请核对，不会自动回滚文件。"/>}
       {['failed','interrupted','cancelled','timed_out'].includes(run.status)&&<button className="wb-button" disabled={busy} onClick={()=>action(()=>call('retry',{taskId:task.id,previousId:run.id,requestId:'retry-'+run.id}))}>核对后重试此任务</button>}
       {active.includes(run.status)&&<button className="wb-button wb-danger" disabled={busy||run.status==='cancelling'} onClick={()=>action(()=>call('cancel',{runId:run.id}))}>停止本次执行</button>}
       {interaction&&['waiting_approval','waiting_input'].includes(run.status)&&<section className="wb-execution-interaction" aria-label="运行交互">
@@ -80,7 +80,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
       {history.length>1&&<HaloDisclosure title={<>此前运行与回执（{history.length-1}）</>}>{history.slice(0,-1).map(old=><section key={old.id}><strong>第 {old.number} 次：{labels[old.status]}</strong><p>{old.error||old.result?.answer||'没有已确认结果'}</p><small>{old.runtime.threadId||old.id}</small></section>)}</HaloDisclosure>}
       <ExecutionLog events={run.events} title="已记录的执行事件"/>
     </>}
-    {error&&<div className="wb-execution-recovery"><HaloNotice tone="error" title="当前执行状态未确认" description={error+' 上次记录仍保留，不代表当前执行状态。'}/><button className="wb-button" onClick={()=>void refresh()}>重新读取执行记录</button></div>}{notice&&<p role="status">{notice}</p>}
+    {error&&<div className="wb-execution-recovery"><HaloNotice tone="error" title="当前执行状态未确认" description={error+' 上次记录仍保留，不代表当前执行状态。'}/><button className="wb-button" onClick={()=>void refresh()}>重新读取执行记录</button></div>}{!error&&(busy||notice)&&<HaloNotice pending={busy} tone={busy?'neutral':noticeError?'error':'success'} title={busy?'正在核对执行回执…':notice}/>}
   </section>;
 }
 
