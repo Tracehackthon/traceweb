@@ -87,6 +87,12 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     const promise=work();if(active)active.promise=promise;await promise
   }
   async function pump(){if(active||closed)return;const r=db.prepare("SELECT * FROM attempts WHERE status='queued' ORDER BY created LIMIT 1").get();if(!r)return;await run(r);if(!closed)void pump()}
+  function inputFor(request,original=null) {
+    const thinking=original?original.kind==='thinking':request.operation==='workbench.agent.think'||Boolean(request.sessionId);
+    const payload=thinking?store.thinkingSnapshot(original?.sessionId||request.sessionId,original?.messageId||request.messageId,{legacy:Boolean(original&&!original.messageScope)}):store.taskSnapshot(request.taskId);
+    if(thinking){payload.previous=original?.previous||[];payload.fragments.push(...payload.previous);guard(Buffer.byteLength(JSON.stringify(payload))<=256*1024,'讨论上下文超过256 KiB，请缩小范围。')}
+    return payload;
+  }
   function submit(request,retry=false){
     guard(identity(request.taskId)&&identity(request.requestId),'任务或请求身份不正确。')
     const previous=latest(request.taskId),known=db.prepare('SELECT * FROM attempts WHERE request_key=?').get(request.requestId)
@@ -95,8 +101,8 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     if(retry)guard(previous&&previous.id===request.previousId&&['failed','interrupted','cancelled','timed_out'].includes(previous.status),'只能重试该任务最近一次未完成运行。')
     const thinking=retry?JSON.parse(previous.payload).kind==='thinking':request.operation==='workbench.agent.think'
     const original=retry?JSON.parse(previous.payload):null
-    const payload=thinking?store.thinkingSnapshot(original?.sessionId||request.sessionId,original?.messageId||request.messageId):store.taskSnapshot(request.taskId)
-    if(thinking){payload.previous=retry?original.previous:db.prepare("SELECT * FROM attempts WHERE status='succeeded' ORDER BY rowid").all().filter(r=>{const p=JSON.parse(r.payload);return p.sessionId===payload.sessionId&&p.messageId!==payload.messageId&&payload.fragments.some(f=>f.id==='message:'+p.messageId)}).filter((r,i,a)=>!a.slice(i+1).some(x=>x.task_id===r.task_id)).map(r=>({id:'reply:'+r.id,role:'agent',revision:1,text:JSON.parse(r.result).answer,title:'本讨论此前的AI原稿'}));payload.fragments.push(...payload.previous);guard(Buffer.byteLength(JSON.stringify(payload))<=256*1024,'讨论上下文超过256 KiB，请缩小范围。')}
+    const payload=inputFor(request,original)
+    if(request.expectedInputHash!==undefined)guard(request.expectedInputHash===hash(payload),'刚才核对的发送范围已变化，请重新读取实际输入；没有开始执行。')
     const cwd=retry?previous.project:thinking?path.join(directory,'thinking-project'):project(),mode=thinking?'thinking':retry?previous.mode:request.mode||'read-only'
     if(thinking)fs.mkdirSync(path.join(cwd,'.git'),{recursive:true})
     guard(['thinking','read-only','workspace-write'].includes(mode),'不支持这个执行权限。')
@@ -134,6 +140,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       guard(!closed,'执行记录已关闭。')
       if(req.operation==='workbench.agent.status'){let cwd;try{cwd=project()}catch{}return {available:Boolean(getExecutable()),projectName:cwd?path.basename(cwd):null,projectSelected:Boolean(cwd)}}
       if(req.operation==='workbench.agent.check'){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),65000);try{return {ready:true,...await qualify(project(),controller.signal)}}finally{clearTimeout(timer)}}
+      if(req.operation==='workbench.agent.input.preview'){const payload=inputFor(req);return {payload,inputHash:hash(payload),executionStarted:false};}
       if(req.operation==='workbench.agent.feedback.source')return feedbackSource(req)
       if(req.operation==='workbench.agent.list')return {items:db.prepare('SELECT * FROM attempts ORDER BY created').all().map(publicRow)}
       if(req.operation==='workbench.agent.submit')return submit(req)

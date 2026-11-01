@@ -6,6 +6,8 @@ import {LiquidButton} from './expressive-controls';
 import {CodeBlock} from './code-block';
 import {ExecutionLog} from './execution-log';
 import {ResultAdoption} from './result-adoption';
+import {ReferenceViewer} from './reference-scope';
+import type {ContentRef} from './client';
 import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
 import {HaloDisclosure} from './halo-disclosure';
 import './task-execution.css';
@@ -41,8 +43,15 @@ export function AgentTaskBadge({task,runs,ready,error=''}:{task:Task;runs:Run[];
   return <HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-task-state={task.status} data-run-state={run?.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
 }
 
-export function TaskExecution({task,client,executions,onCancelPreparation,thinking,onFeedbackResult}:{task:Task;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onCancelPreparation:()=>void;thinking?:{sessionId:string;messageId:string};onFeedbackResult?:(run:Run)=>void}){
+function NativeInputPreview({taskId,thinking,client,onVerified}:{taskId:string;thinking?:{sessionId:string;messageId:string};client:WorkbenchClient;onVerified:(hash:string|null)=>void}){
+ const [value,setValue]=useState<any>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[view,setView]=useState<ContentRef|null>(null),sequence=useRef(0);
+ useEffect(()=>()=>{sequence.current++;},[]);
+ const read=async()=>{const n=++sequence.current;setLoading(true);setError('');setValue(null);onVerified(null);try{const result=await call('input.preview',thinking||{taskId});if(!result||!Array.isArray(result.payload?.fragments)||!/^[a-f0-9]{64}$/.test(result.inputHash)||result.executionStarted!==false)throw Error('当前宿主没有返回可核对的只读输入；未伪造预览或启动执行。');if(n===sequence.current){setValue(result);onVerified(result.inputHash);}}catch(e){if(n===sequence.current)setError(e.message||'实际输入读取失败，原消息和准备仍保留。');}finally{if(n===sequence.current)setLoading(false);}};
+ return <HaloDisclosure title="本次会发送哪些内容？"><div className="wb-reference-detail"><p>只读核对后端实际构建的发送片段，不创建运行、不启动模型。不会自动补其它画布、全部历史、AI回复或原件文件；正文中手动保留的文字仍属于本次问题。</p><button type="button" className="wb-button" disabled={loading} aria-busy={loading} onClick={()=>void read()}>核对实际发送范围（不执行）</button>{loading&&<HaloProgress label="正在读取实际发送范围…"/>}{error&&<HaloNotice tone="warning" title="实际输入暂不可读取" description={error}/>} {value&&<section aria-label="后端实际发送片段"><h4>这次保存的问题</h4><p className="wb-preserve">{value.payload.task.goal}</p>{value.payload.task.plan?.length>0&&<ol>{value.payload.task.plan.map(step=><li key={step.id}>{step.text}</li>)}</ol>}<p>已读取 {value.payload.fragments.length} 个实际片段。预览不是运行回执；提交时后端还会重算指纹并检查有效状态。</p>{value.payload.fragments.map((fragment,i)=><HaloDisclosure key={fragment.id||i} title={String(fragment.title||'片段')+' · '+({reference:'明确引用',instruction:'AI指令',user:'用户原话',agent:'AI原稿'}[fragment.role]||fragment.role)}><p className="wb-preserve">{fragment.text}</p>{fragment.ref&&<button type="button" className="wb-button" onClick={()=>setView(fragment.ref)}>核对这份准确来源 v{fragment.ref.version}</button>}</HaloDisclosure>)}<HaloDisclosure title="本次输入指纹"><code className="wb-preserve" style={{overflowWrap:'anywhere'}}>{value.inputHash}</code></HaloDisclosure><HaloDisclosure title="完整冻结输入（只读）"><CodeBlock code={JSON.stringify(value.payload,null,2)} language="json"/></HaloDisclosure></section>}{view&&<ReferenceViewer client={client} reference={view} onClose={()=>setView(null)}/>}</div></HaloDisclosure>;
+}
+export function TaskExecution({task,client,executions,onCancelPreparation,thinking,onFeedbackResult,legacyScope=false}:{task:Task;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onCancelPreparation:()=>void;thinking?:{sessionId:string;messageId:string};onFeedbackResult?:(run:Run)=>void;legacyScope?:boolean}){
   const {runs,refresh,ready,error}=executions,history=runs.filter(r=>r.taskId===task.id),run=history.at(-1);
+  const [inputHash,setInputHash]=useState<string|null>(null);
   const [setup,setSetup]=useState<any>(null),[notice,setNotice]=useState(''),[noticeError,setNoticeError]=useState(false),[busy,setBusy]=useState(false),[write,setWrite]=useState(false),[note,setNote]=useState(''),[answers,setAnswers]=useState<Record<string,string>>({});
   useEffect(()=>{if(bridge())void call('status').then(setSetup).catch(e=>{setNoticeError(true);setNotice(e.message);});},[]);
   useEffect(()=>{setNote(run?.review?.note||'');setAnswers({});},[run?.id]);
@@ -53,11 +62,12 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
   return <section className="wb-execution" aria-label="任务执行与结果复核" data-status={run?.status||'prepared'} data-run-id={run?.id}>
     <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3>{(run||thinking||error||!ready)&&<HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-execution-status={error?'unknown':run?.status||task.status}>{error?'读取中断，当前状态未知':run?run.sourceError?'原始返回暂不可核验':adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?task.status==='cancelled'?'准备已取消':'尚未提交':'正在核对执行记录'}</HaloBadge>}</header>
     {!run&&<>
-      <p>{thinking?'仅使用本讨论原话、已选引用和此前AI回复，不读取项目文件。':'执行项目：'+(setup?.projectName||'尚未选择')+'。'}提交后才会运行，并可能使用你的 Codex 额度。</p>
+      <p>{thinking?'仅使用这段原话、明确选择的引用和历史原话，不读取项目文件或自动补AI回复。':'执行项目：'+(setup?.projectName||'尚未选择')+'。'}提交后才会运行，并可能使用你的 Codex 额度。</p>
+      {setup&&!setup.available&&<HaloNotice tone="warning" title="未连接可用的Codex执行器" description="可以继续手工思考、准备任务和只读核对发送范围；这里没有开始模型运行，也不将预览当作执行成功。"/>}
       {!thinking&&<div className="wb-actions"><button className="wb-button" disabled={busy} onClick={()=>action(async()=>setSetup(await call('project.select')))}>选择执行项目</button><button className="wb-button" disabled={busy||!setup?.projectSelected} onClick={()=>action(async()=>{await call('check');setNotice('Codex已登录并通过连接检查；尚未执行任务。');})}>检查 Codex 连接</button></div>}
-      <HaloDisclosure title="本次会发送哪些内容？"><p>已保存的目标、步骤、AI 指令，以及 {task.refs.length} 项引用的对应版本。</p><p>不自动发送其他画布、讨论或原件文件。工具访问限于所选项目。</p></HaloDisclosure>
+      <NativeInputPreview taskId={task.id} thinking={thinking} client={client} onVerified={setInputHash}/>
       {!thinking&&<label className="wb-check"><input type="checkbox" checked={write} onChange={e=>setWrite(e.target.checked)}/>允许本次任务修改所选项目文件（默认只读）</label>}
-      <div className="wb-actions"><LiquidButton className="wb-button wb-primary" disabled={busy||!ready||Boolean(error)||!setup?.available||(!thinking&&!setup?.projectSelected)||task.status!=='prepared'||Boolean(client.getSnapshot().pending)} onClick={()=>action(()=>thinking?call('think',{...thinking,requestId:'submit-'+task.id}):call('submit',{taskId:task.id,requestId:'submit-'+task.id,mode:write?'workspace-write':'read-only'}))}><TraceIcon name="work"/>{thinking?'请 AI 回应这段思考':'提交并执行'}</LiquidButton>{!thinking&&task.status==='prepared'&&<button className="wb-button" disabled={busy} onClick={onCancelPreparation}>取消尚未交接的准备</button>}</div>
+      <div className="wb-actions"><LiquidButton className="wb-button wb-primary" disabled={busy||legacyScope||!inputHash||!ready||Boolean(error)||!setup?.available||(!thinking&&!setup?.projectSelected)||task.status!=='prepared'||Boolean(client.getSnapshot().pending)} onClick={()=>action(()=>thinking?call('think',{...thinking,requestId:'submit-'+task.id,expectedInputHash:inputHash}):call('submit',{taskId:task.id,requestId:'submit-'+task.id,expectedInputHash:inputHash,mode:write?'workspace-write':'read-only'}))}><TraceIcon name="work"/>{thinking?'请 AI 回应这段思考':'提交并执行'}</LiquidButton>{!thinking&&task.status==='prepared'&&<button className="wb-button" disabled={busy} onClick={onCancelPreparation}>取消尚未交接的准备</button>}</div>
     </>}
     {run&&<>
       <p>第 {run.number} 次运行 · 项目 {run.projectName} · {run.mode==='thinking'?'限本讨论的只读思考':run.mode==='read-only'?'只读':'可修改项目内文件'}。{run.sourceError?'原始记录当前无法核验，不将保存元信息当作可用来源。':'输入与引用已冻结，结果只回到这个任务。'}</p>
@@ -87,11 +97,11 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
   </section>;
 }
 
-export function ThinkingExecution({session,client,executions,onFeedbackResult}:{session:Thinking;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onFeedbackResult?:(run:Run)=>void}){
+export function ThinkingExecution({session,client,executions,onFeedbackResult,onContinue}:{session:Thinking;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onFeedbackResult?:(run:Run)=>void;onContinue?:(messageId:string)=>void}){
  const [selected,setSelected]=useState(session.messages.at(-1)?.id||'');
  useEffect(()=>{setSelected(session.messages.at(-1)?.id||'');},[session.messages.length]);
  const message=session.messages.find(m=>m.id===selected);
  if(!message)return <p className="wb-muted">先留下问题或想法，再明确请AI回应；不会自动发送。</p>;
- const task={id:'thinking-'+session.id+'-'+message.id,title:session.title,goal:message.text,refs:session.refs,excluded:session.excluded,instructions:message.instructions||[],status:'prepared',destination:'Trace 内只读思考',results:[]}as Task;
- return <section aria-label="Trace 内真实AI"><label>回应哪段原话<HaloSelect aria-label="选择思考消息" value={selected} onValueChange={value=>setSelected(value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</HaloSelect></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} onFeedbackResult={onFeedbackResult} onCancelPreparation={()=>{}}/></section>;
+ const task={id:'thinking-'+session.id+'-'+message.id,title:session.title,goal:message.text,refs:message.scope?.refs||session.refs,excluded:message.scope?.excluded||session.excluded,instructions:message.instructions||[],status:'prepared',destination:'Trace 内只读思考',results:[]}as Task;
+ return <section aria-label="Trace 内真实AI">{!message.scope&&<HaloNotice tone="warning" title="旧消息未独立记录当次引用范围" description="原话和既有回执仍保留；新的调用需先将这段原话带入草稿核对，不会后台修改历史。"/>}{onContinue&&<button type="button" className="wb-button" onClick={()=>onContinue(message.id)}>将这段原话带入新草稿</button>}<label>回应哪段原话<HaloSelect aria-label="选择思考消息" value={selected} onValueChange={value=>setSelected(value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</HaloSelect></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} legacyScope={!message.scope} onFeedbackResult={onFeedbackResult} onCancelPreparation={()=>{}}/></section>;
 }

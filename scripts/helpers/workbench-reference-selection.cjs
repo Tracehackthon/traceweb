@@ -178,7 +178,7 @@ module.exports = async ({page, state, saved, check, capture, out, windowSize, de
   await page.getByText('原请求已核对保存；后来编辑的草稿仍保留，尚未保存。',{exact:true}).waitFor();
   let record=Object.values((await host()).feedbacks)[0];
   check('original-command retry commits seven original citations once, not the newer local draft',record.version===1&&record.versions[1].refs.length===7&&(await storedDraft()).value.value.refs.length===6&&pending!==null&&record.versions[1].facts!=='保存失败后继续编辑的观察，尚未提交。');
-  
+
   // The original new-record form intentionally keeps later content. Reopen its
   // saved record, then explicitly reattach the oldest source and save version 2.
   await closeLatest();await button('待核对反馈').click();await page.locator('.wb-feedback-row').filter({hasText:record.title}).click();await button('编辑观察或核对版本').click();

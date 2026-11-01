@@ -1,25 +1,25 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.9",
+  "version": "0.3.0-frontend.10",
   "recordedAt": "2026-11-01",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.9.tgz",
-    "sha256": "e266fd4374fb7f2b4c0413404597203191b930e9023f03a3b4cea97355c770f0",
-    "integrity": "sha512-wmRbyu1QSOPrr3L68j4Sxzu2HrSlMDA6Njgti7XTs043iBrKi9N3T7KQlQsgD/kpVANpOWwSiao9Z0jk6POOwQ=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.10.tgz",
+    "sha256": "aab360d83c0d69bd0f75038c98528696dd147d6362a38c6e2b2b05f6f3c200f3",
+    "integrity": "sha512-M7Ak2K3vXONSr3HdhMblTnsAGZIRMA2JtgtF7NSoLJxbOuIIUEJz6/kKy2Kafj9VYAyyG+PwrEAy2ZKXG3i1ig=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "fe57eb9ade39a5da910b91bc6b070b63f8912c6c",
+    "head": "5fd6d72406c0fcbc9b399d9467bfb493774f415c",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "package.json",
-        "sha256": "9d3fc2167802a5851eae7fc569d6a252be8ba955a7325598334a18388e7f11a4"
+        "sha256": "17fead137335a43ef66fcd6efe3d7f8b9b9e0ba8aaea19c859436b113bfd2979"
       },
       {
         "path": "tsconfig.types.json",
@@ -27,7 +27,7 @@
       },
       {
         "path": "README.md",
-        "sha256": "57bfbd5ff9dd883a02e2f7cbb2acba052ff1a1a8ae09ed8ef6ab5f8ccaffabeb"
+        "sha256": "fb0817e7bf99bb912b7212f0cf79123f2f0d352de444c75347c9886858764c23"
       },
       {
         "path": "src/bridge.mjs",
@@ -43,7 +43,7 @@
       },
       {
         "path": "src/capability-feedback-rules.mjs",
-        "sha256": "48387b16ca99727f0b1a5d26a209c702f2050fb02bb3f8a95cca93a1515e5464"
+        "sha256": "2218dfdead18127fc6b98dbe56059ecce6bb327aac671e853299a37fc6dc0962"
       },
       {
         "path": "src/capability-packet-codec.mjs",
@@ -95,7 +95,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "91a43ea135f339ff1b588991440211d0aad6ec89d55c4709b117dc693a9f5565"
+        "sha256": "74b916fe4c67b9195c55043ec86ac80aa087bac0db79560326644af05d2326de"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -103,7 +103,7 @@
       },
       {
         "path": "src/workspace.mjs",
-        "sha256": "ea27004cdc88eeb4109797a59eaec4fe49566b94a83920d4aff9faaf5319e1e4"
+        "sha256": "59f6bb8da1b38e868b73b53bdbc1e31b59fbf46d882417f3e17e82f905be52ba"
       },
       {
         "path": "types/bridge.d.mts",
@@ -151,7 +151,7 @@
       },
       {
         "path": "types/workbench-model.d.mts",
-        "sha256": "ac25fe3bcab80c63a78f5605202d0ed20fa6d92fb9f73ae52b12287b49a75706"
+        "sha256": "d0f235320babd0739c7fdecd22890c3cb02780a29999fff6dd9e4e1f7b9202de"
       },
       {
         "path": "types/worksite-model.d.mts",
@@ -161,10 +161,10 @@
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
   "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
-  "revisionReason": "frontend.9 validates new exact text/media anchors against saved source ranges, preserves historical reads and prior feedback anchors; no consumed archive is overwritten.",
+  "revisionReason": "frontend.10 adds immutable per-message scopes and explicit prior-message selection, range-intersection exclusions and corresponding feedback provenance; current archive never overwrites frontend.9.",
   "supersedes": {
-    "version": "0.3.0-frontend.8",
-    "reason": "Strict new selections and effective use, without reinterpreting historical content or adding a fourth reference kind."
+    "version": "0.3.0-frontend.9",
+    "reason": "New optional message scope schema2 extension; old history remains readable, fresh actual execution must have explicit scope."
   },
   "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates."
 }

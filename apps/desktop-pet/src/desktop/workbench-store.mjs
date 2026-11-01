@@ -1,6 +1,6 @@
 import {Readable} from 'node:stream'
 import {createProductWorkspace} from '@trace/product-workspace/node'
-import {resolveContentRef,stableWorkbenchJson} from '@trace/product-workspace'
+import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences} from '@trace/product-workspace'
 
 const RESPONSE_KIND = 'trace.native-product-response@1'
 const jsonLimit = 8 * 1024 * 1024
@@ -27,20 +27,20 @@ export function createDesktopWorkbench({file}) {
     return {bytes:new Uint8Array(bytes),mime:headers['content-type']||'application/octet-stream'}
   }
   return {
-    thinkingSnapshot(id,messageId) {
+    thinkingSnapshot(id,messageId,{legacy=false}={}) {
       const host=workspace().read().host,session=host?.sessions?.[id],index=session?.messages.findIndex(m=>m.id===messageId);
       if(!session||index<0)throw Error('讨论或本次消息不可用。');
-      const message=session.messages[index],fragments=[],excluded=new Set(session.excluded.map(stableWorkbenchJson));
-      for(const [role,refs] of [['reference',session.refs],['instruction',message.instructions||[]]])for(const ref of refs){
-        if(excluded.has(stableWorkbenchJson(ref)))continue;
+      const message=session.messages[index],fragments=[],scope=message.scope||{refs:session.refs,excluded:session.excluded,historyIds:session.messages.slice(0,index).map(m=>m.id)};
+      if(!message.scope&&!legacy)throw Error('这条旧消息没有独立冻结范围；请先将原话接入新草稿核对，不会改写旧消息或原运行。');
+      for(const [role,refs] of [['reference',scope.refs],['instruction',message.instructions||[]]])for(const ref of effectiveContentReferences(refs,scope.excluded)){
         const {item,value}=resolveContentRef(host,ref,{forUse:true});let text=role==='instruction'?value.prompt:ref.kind==='capability'?JSON.stringify(value):value.text;
         if(ref.anchor&&ref.anchor.type!=='text')throw Error('当前文本执行器不能读取这个媒体局部；未扩大成整份材料发送。请保留引用，或先人工摘取为可读文字。')
         if(ref.anchor?.type==='text')text=text.slice(ref.anchor.start,ref.anchor.end);
         if(!text?.trim())throw Error('所选材料没有文字摘录；不会自动上传原件。');
         fragments.push({id:`${role}:${fragments.length+1}`,role,revision:ref.version,text,title:item.title,ref:structuredClone(ref)});
       }
-      for(const m of session.messages.slice(0,index+1))fragments.push({id:'message:'+m.id,role:'user',revision:1,text:m.text,title:'本讨论中的用户原话'});
-      const result={kind:'thinking',sessionId:id,messageId,task:{id:'thinking-'+id+'-'+messageId,title:session.title,goal:message.text,refs:structuredClone(session.refs),excluded:structuredClone(session.excluded),instructions:structuredClone(message.instructions||[]),status:'prepared'},fragments};
+      for(const m of session.messages.slice(0,index+1).filter(m=>m.id===messageId||scope.historyIds.includes(m.id)))fragments.push({id:'message:'+m.id,role:'user',revision:1,text:m.text,title:'本讨论中的用户原话'});
+      const result={kind:'thinking',sessionId:id,messageId,...(message.scope?{messageScope:structuredClone(scope)}:{}),task:{id:'thinking-'+id+'-'+messageId,title:session.title,goal:message.text,refs:structuredClone(scope.refs),excluded:structuredClone(scope.excluded),instructions:structuredClone(message.instructions||[]),status:'prepared'},fragments};
       if(Buffer.byteLength(JSON.stringify(result))>256*1024)throw Error('本讨论上下文超过256 KiB，请缩小引用范围。');
       return result;
     },
@@ -74,10 +74,8 @@ export function createDesktopWorkbench({file}) {
       const host=workspace().read().host,task=host?.tasks?.[id]
       if(!task||task.status!=='prepared')throw Error('任务准备不可用或已取消。')
       if(task.execution)throw Error('任务已绑定其他执行回执，请从原回执入口继续，未重复提交。')
-      const excluded=new Set(task.excluded.map(ref=>stableWorkbenchJson(ref)))
       const fragments=[]
-      for(const [role,refs] of [['reference',task.refs],['instruction',task.instructions||[]]])for(const ref of refs){
-        if(excluded.has(stableWorkbenchJson(ref)))continue
+      for(const [role,refs] of [['reference',task.refs],['instruction',task.instructions||[]]])for(const ref of effectiveContentReferences(refs,task.excluded)){
         const {item,value}=resolveContentRef(host,ref,{forUse:true})
         let text=role==='instruction'?value.prompt:ref.kind==='capability'?JSON.stringify(value):value.text
         if(ref.anchor&&ref.anchor.type!=='text')throw Error('当前文本执行器不能读取这个媒体局部；未扩大成整份材料发送。请保留引用，或先人工摘取为可读文字。')

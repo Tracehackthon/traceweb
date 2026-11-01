@@ -1,6 +1,6 @@
 import React,{useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {createPortal} from 'react-dom';
-import {validContentRef,validateReferenceSelection,stableWorkbenchJson} from '@trace/product-workspace';
+import {validContentRef,validateReferenceSelection,resolveContentRef,stableWorkbenchJson} from '@trace/product-workspace';
 import {WorkbenchClient,type ContentRef,type ContentValue} from './client';
 import {WorkbenchModal} from './modal';
 import {HaloField,HaloInput,HaloTextarea,HaloSelect,HaloSearchInput} from './halo-controls';
@@ -17,7 +17,7 @@ type RectDraft={x:string;y:string;width:string;height:string};
 export type ReferencePickerState={schemaVersion:1;query:string;group:'all'|'material'|'expression'|'capability';history:boolean;selected:ContentRef|null;replacing:ContentRef|null;mode:'saved'|'text'|'media';start:string;end:string;rect:RectDraft};
 const emptyRect=()=>({x:'0',y:'0',width:'100',height:'100'}),same=(a:unknown,b:unknown)=>stableWorkbenchJson(a)===stableWorkbenchJson(b);
 export const newReferencePickerState=():ReferencePickerState=>({schemaVersion:1,query:'',group:'all',history:false,selected:null,replacing:null,mode:'saved',start:'0',end:'0',rect:emptyRect()});
-export function validReferencePickerState(s:any):s is ReferencePickerState{return s&&typeof s==='object'&&!Array.isArray(s)&&Object.keys(s).every(k=>['schemaVersion','query','group','history','selected','replacing','mode','start','end','rect'].includes(k))&&s.schemaVersion===1&&typeof s.query==='string'&&s.query.length<=4096&&['all','material','expression','capability'].includes(s.group)&&typeof s.history==='boolean'&&(s.selected===null||validContentRef(s.selected))&&(s.replacing===null||validContentRef(s.replacing))&&['saved','text','media'].includes(s.mode)&&['start','end'].every(k=>typeof s[k]==='string'&&s[k].length<=32)&&s.rect&&typeof s.rect==='object'&&!Array.isArray(s.rect)&&Object.keys(s.rect).every(k=>['x','y','width','height'].includes(k))&&['x','y','width','height'].every(k=>typeof s.rect[k]==='string'&&s.rect[k].length<=32);}
+export function validReferencePickerState(s:any):s is ReferencePickerState{return s&&typeof s==='object'&&!Array.isArray(s)&&Object.keys(s).every(k=>['schemaVersion','query','group','history','selected','replacing','mode','start','end','rect'].includes(k))&&s.schemaVersion===1&&typeof s.query==='string'&&s.query.length<=4096&&['all','material','expression','capability'].includes(s.group)&&typeof s.history==='boolean'&&(s.selected===null||validContentRef(s.selected)&&!s.selected.anchor)&&(s.replacing===null||validContentRef(s.replacing))&&['saved','text','media'].includes(s.mode)&&['start','end'].every(k=>typeof s[k]==='string'&&s[k].length<=32)&&s.rect&&typeof s.rect==='object'&&!Array.isArray(s.rect)&&Object.keys(s.rect).every(k=>['x','y','width','height'].includes(k))&&['x','y','width','height'].every(k=>typeof s.rect[k]==='string'&&s.rect[k].length<=32);}
 export function selectReference(state:ReferencePickerState,ref:ContentRef,value?:ContentValue,replacing=state.replacing):ReferencePickerState{
  const loc=ref.anchor||value?.origin?.locator,rect=(loc?.rect||{x:0,y:0,width:1,height:1})as any;
  return {...state,selected:{kind:ref.kind,id:ref.id,version:ref.version},replacing,mode:ref.anchor?(ref.anchor.type==='text'?'text':'media'):'saved',start:String(loc?.type==='time'?loc.startMs:ref.anchor?.type==='text'?loc.start:0),end:String(loc?.type==='time'?loc.endMs:ref.anchor?.type==='text'?loc.end:value?.text?.length||0),rect:Object.fromEntries(['x','y','width','height'].map(k=>[k,String(rect[k]*100)]))as RectDraft};
@@ -28,7 +28,7 @@ export function projectReference(value:ContentValue,ref:ContentRef):ContentValue
 
 // Controlled local draft only. The global search projection is reused; no
 // mutation/recovery owner, model, placement action, or second content store.
-export function ReferencePicker({client,value,onChange,onAttach,onClose,attached}:{client:WorkbenchClient;value:ReferencePickerState;onChange:(v:ReferencePickerState)=>void;onAttach:(ref:ContentRef)=>void;onClose:()=>void;attached:ContentRef[]}){
+export function ReferencePicker({client,value,onChange,onAttach,onClose,attached,purpose='feedback',intent='include'}:{client:WorkbenchClient;value:ReferencePickerState;onChange:(v:ReferencePickerState)=>void;onAttach:(ref:ContentRef)=>void;onClose:()=>void;attached:ContentRef[];purpose?:'feedback'|'thinking'|'task';intent?:'include'|'exclude'}){
  const s=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot),host=s.host!,index=useMemo(()=>indexWorkspace(host),[host]),matches=useMemo(()=>filterWorkspaceIndex(index,value.query,{group:value.group,history:value.history},true),[index,value.query,value.group,value.history]),[notice,setNotice]=useState(''),[original,setOriginal]=useState(false),text=useRef<HTMLTextAreaElement>(null);
  const selected=value.selected,collection=selected&&host[{material:'materials',expression:'expressions',capability:'capabilities'}[selected.kind]],entry=selected&&collection?.[selected.id],body=selected&&entry?.versions[selected.version];
  let reference:ContentRef|null=null,error='';
@@ -37,13 +37,14 @@ export function ReferencePicker({client,value,onChange,onAttach,onClose,attached
   else if(entry.kind==='pdf'){if(base?.type!=='pdf')throw Error('先从原件留下明确页/区域，不能猜测PDF页数。');reference.anchor={type:'pdf',page:base.page,rect:percentRect(value.rect),...(base.rotation===undefined?{}:{rotation:base.rotation})};}
   else if(['audio','video'].includes(entry.kind)){if(!/^\d+$/.test(value.start)||!/^\d+$/.test(value.end))throw Error('时间按非负整数毫秒记录。');reference.anchor={type:'time',startMs:Number(value.start),endMs:Number(value.end)};}
   else throw Error('这份保存内容不支持媒体区域引用；可引用完整版本或文字选段。');}
-  validateReferenceSelection(host,reference);
+  validateReferenceSelection(host,reference);if(purpose!=='feedback'&&intent==='include')resolveContentRef(host,reference,{forUse:true});
  }}catch(e){error=e.message||'引用范围尚未就绪。';reference=null;}
  const duplicate=Boolean(reference&&attached.some(r=>same(r,reference))),unchanged=Boolean(reference&&value.replacing&&same(reference,value.replacing));
  const update=(patch:Partial<ReferencePickerState>)=>{onChange({...value,...patch});setNotice('');};
  const originalRef=reference||selected;
- return createPortal(<WorkbenchModal title={value.replacing?'替换准确引用':'添加准确引用'} className="wb-reference-dialog wb-review-dialog" onClose={onClose}><div className="wb-reference-picker">
-  <p className="wb-halo-hint">只选择已保存对象及准确版本，不自动附整个画布、发送原件或启动Agent。添加只改本地反馈草稿，仍需单独保存反馈。</p>
+ const target=purpose==='feedback'?'反馈':purpose==='thinking'?'共同思考':'任务准备',context=purpose==='feedback'?'':(intent==='exclude'?'明确排除 · ':'本次引用 · ')+target+'草稿';
+ return createPortal(<WorkbenchModal title={value.replacing?'替换准确引用':'添加准确引用'} className="wb-reference-dialog wb-review-dialog" context={context||undefined} onClose={onClose}><div className="wb-reference-picker">
+  <p className="wb-halo-hint">只选择已保存对象及准确版本，不自动附整个画布、发送原件或启动Agent。添加只改本地{target}草稿，仍需单独保存{purpose==='thinking'?'这段原话':target}。</p>
   {s.readError&&<HaloNotice tone="warning" title="显示上次成功读取的内容" description={s.readError}/>}
   <HaloSearchInput autoFocus label="搜索可引用内容" maxLength={4096} placeholder="查找材料、表达、AI原稿或能力" value={value.query} onValueChange={query=>update({query})}/>
   <div className="wb-reference-filters"><HaloField label="引用查找范围"><HaloSelect value={value.group} onValueChange={group=>update({group:group as ReferencePickerState['group']})}>{[['all','全部可引用内容'],['material','材料'],['expression','表达与AI原稿'],['capability','能力']].map(([key,label])=><option key={key} value={key}>{label}</option>)}</HaloSelect></HaloField><label className="wb-check"><input type="checkbox" checked={value.history} onChange={e=>update({history:e.target.checked})}/>包括历史保存版本</label></div>
@@ -56,7 +57,7 @@ export function ReferencePicker({client,value,onChange,onAttach,onClose,attached
    {value.mode==='media'&&(['audio','video'].includes(entry.kind)?<div className="wb-reference-fields"><HaloField label="引用开始毫秒"><HaloInput inputMode="numeric" value={value.start} onChange={e=>update({start:e.target.value})}/></HaloField><HaloField label="引用结束毫秒"><HaloInput inputMode="numeric" value={value.end} onChange={e=>update({end:e.target.value})}/></HaloField></div>:<><p>{entry.kind==='pdf'?'页码/旋转沿已保存出处保留；区域不得扩大到整页。':'区域以原图左上角为起点，不能超出已有材料区域。'}</p><div className="wb-reference-fields">{(['x','y','width','height']as const).map(k=><HaloField key={k} label={{x:'引用左侧百分比',y:'引用顶部百分比',width:'引用宽度百分比',height:'引用高度百分比'}[k]}><HaloInput inputMode="decimal" value={value.rect[k]} onChange={e=>update({rect:{...value.rect,[k]:e.target.value}})}/></HaloField>)}</div></>)}
    <p className="wb-halo-hint">已保存出处：{locatorLabel(body.origin?.locator)}{body.origin?.fileName?' · '+body.origin.fileName:''}</p>{body.origin?.url&&<p className="wb-preserve">{body.origin.url}</p>}
    {error&&<HaloNotice tone="warning" title="引用范围尚未就绪" description={error}/>}{reference&&<p>本次：{referenceLocator(host,reference)}</p>}
-   <div className="wb-actions">{body.resourceId&&<button className="wb-button" onClick={()=>setOriginal(true)}>查看所选原件与定位</button>}<button className="wb-button wb-primary" disabled={!reference||duplicate&&!value.replacing||unchanged} onClick={()=>{if(!reference)return;try{onAttach(reference);setNotice(value.replacing?'引用已替换到本地草稿，尚未保存反馈。':'准确引用已附到本地草稿，尚未保存反馈。');}catch(e){setNotice(e.message);}}}>{unchanged?'引用范围未改变':duplicate&&!value.replacing?'已附到本地草稿':value.replacing?'明确替换这份引用':'添加这份准确引用'}</button></div>
-  </>}</section></div>{notice&&<HaloNotice title={notice}/>}<button className="wb-button" onClick={onClose}>完成选择，返回反馈</button>
+   <div className="wb-actions">{body.resourceId&&<button className="wb-button" onClick={()=>setOriginal(true)}>查看所选原件与定位</button>}<button className="wb-button wb-primary" disabled={!reference||duplicate&&!value.replacing||unchanged} onClick={()=>{if(!reference)return;try{onAttach(reference);setNotice((value.replacing?'引用已替换到本地草稿，尚未保存':'准确引用已附到本地草稿，尚未保存')+target+'。');}catch(e){setNotice(e.message);}}}>{unchanged?'引用范围未改变':duplicate&&!value.replacing?'已附到本地草稿':value.replacing?'明确替换这份引用':'添加这份准确引用'}</button></div>
+  </>}</section></div>{notice&&<HaloNotice title={notice}/>}<button className="wb-button" onClick={onClose}>完成选择，返回{target}</button>
  </div>{original&&entry&&body&&originalRef&&<OriginalViewer entry={entry} value={body} client={client} anchor={originalRef.anchor} onClose={()=>setOriginal(false)}/>}</WorkbenchModal>,document.body);
 }

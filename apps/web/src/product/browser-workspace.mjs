@@ -1,11 +1,12 @@
 import {validateWorkbench} from '@trace/product-workspace';
+import {browserWorkbenchFeatures} from './workbench-browser.mjs';
 // Origin-scoped storage for the static deployment. Never fall back to an
 // empty workspace after a read failure, and never report success before commit.
 const DEMO_WORKSPACE = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 const DATABASE = DEMO_WORKSPACE ? 'trace-web-complete-demo-v3' : 'trace-portal-workspace-v1';
 const STORE = 'workspace';
 const COMMANDS = 'commands';
-const info = { features:['capability-packet-v1','capability-feedback-v1'], kind: 'indexeddb', mode: DEMO_WORKSPACE ? 'complete-demo' : 'personal', location: DEMO_WORKSPACE ? '当前浏览器 · 独立演示空间（不会混入个人空间）' : '当前浏览器 · IndexedDB（仅当前网站，不跨设备同步）' };
+const info = { features:browserWorkbenchFeatures, kind: 'indexeddb', mode: DEMO_WORKSPACE ? 'complete-demo' : 'personal', location: DEMO_WORKSPACE ? '当前浏览器 · 独立演示空间（不会混入个人空间）' : '当前浏览器 · IndexedDB（仅当前网站，不跨设备同步）' };
 const stable = value => Array.isArray(value) ? `[${value.map(stable).join(',')}]`
   : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}` : JSON.stringify(value);
 function failure(status, code, message) { return Object.assign(new Error(message), { status, code }); }

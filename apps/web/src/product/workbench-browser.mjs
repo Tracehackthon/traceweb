@@ -2,7 +2,8 @@
 // records. No model call, second content store, or base64 business snapshot.
 import {applyProductOperations,validateProductCommand,validateWorkbench,decodeCapabilityPacket,validResourceDescriptor,stableWorkbenchJson,emptyCanvas,applyCanvasCommand,validateCanvasCommand,validateCanvasDocument,resolveContentRef,freezeCanvasContentRef} from '@trace/product-workspace';
 const database=location.pathname.startsWith('/app/demo')?'trace-web-complete-demo-v3':'trace-portal-workspace-v1';
-const info={kind:'indexeddb',mode:'workbench',features:['capability-packet-v1','capability-feedback-v1'],location:'当前浏览器 · 原件与布局独立保存'};
+export const browserWorkbenchFeatures=Object.freeze(['capability-packet-v1','capability-feedback-v1','message-reference-scope-v1']);
+const info={kind:'indexeddb',mode:'workbench',features:browserWorkbenchFeatures,location:'当前浏览器 · 原件与布局独立保存'};
 const failure=(code,message,status=422)=>Object.assign(new Error(message),{code,status});
 const get=request=>new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
 const sha=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
