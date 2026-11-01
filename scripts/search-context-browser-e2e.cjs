@@ -13,7 +13,7 @@ assert(dist.startsWith(phase + path.sep) && fs.existsSync(path.join(dist, 'index
 fs.mkdirSync(path.join(out, 'tmp'), { recursive: true });
 for (const key of ['TEMP', 'TMP', 'TMPDIR']) process.env[key] = path.join(out, 'tmp');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-const identity = { entrySha256: hash(path.join(dist, 'index.html')), manifestSha256: hash(path.join(dist, '.vite/manifest.json')), driverSha256: hash(__filename) };
+const identity = { entrySha256: hash(path.join(dist, 'index.html')), manifestSha256: hash(path.join(dist, '.vite/manifest.json')), driverSha256: hash(__filename), helperSha256: hash(path.join(__dirname,'helpers/workbench-search-context.cjs')) };
 const checks = [], errors = [], external = [];
 let server, context, page, watch, foreground;
 const check = (name, value) => { assert(value, name); checks.push(name); process.stdout.write('PASS ' + name + '\n'); };

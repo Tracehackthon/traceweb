@@ -167,6 +167,8 @@ module.exports = async function ({ page, state, saved, check, capture, out, base
   check('multi-term search retains same-paragraph AND semantics and counts literal occurrences', (await observation()).target === '3' && (await observation()).countText.includes('28'));
   await button('返回查找前的阅读位置').click(); await paint();
   check('all find, context, directory, switch and return actions leave canonical history unchanged', (await state()).product.revision === initial.revision && JSON.stringify((await host()).sessions[main.id].messages) === original);
+  await openFind();await setSearch('#3');await paint();await button('收起讨论查找').click();
+  check('continuation return regression starts with a genuine independent search checkpoint',await button('返回查找前的阅读位置').count()===1);
   await button('打开段落目录').click(); await textbox('查找目录原话').fill('#3');
   await directory.getByRole('button', { name: '接续第 3 段原话', exact: true }).click(); await directory.waitFor({ state: 'detached' });
   await button('取消接续，保留当前草稿').waitFor();
