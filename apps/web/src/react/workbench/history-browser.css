@@ -41,6 +41,8 @@ html[data-trace-appearance] .wb-shell .wb-discussion-toolbar .wb-button { paddin
 .wb-discussion-browser>.wb-messages { width:100%;max-width:var(--wb-reading-measure); }
 .wb-reading-message-header { flex-wrap:wrap;margin-bottom:12px; }
 .wb-reading-message-header>span { font-size:13px;line-height:20px;font-weight:500; }
+.wb-reading-message-header[data-active-context=true] { position:sticky;top:calc(var(--wb-reading-toolbar-height,0px) - var(--wb-pane-gutter));z-index:2;background:var(--trace-surface-panel);border-radius:var(--trace-radius-control); }
+.wb-history-hit-position { display:inline-block;margin-inline-start:8px;color:var(--trace-text-primary);font-size:12px;line-height:20px;font-variant-numeric:tabular-nums; }
 .wb-discussion-editor { outline:none; }
 .wb-discussion-page-nav { display:flex;justify-content:space-between;gap:12px;margin-block:0 24px; }
 .wb-discussion-page-nav>.wb-button { flex:1; }
@@ -59,9 +61,13 @@ html[data-trace-appearance] .wb-shell .wb-discussion-toolbar .wb-button { paddin
 .wb-directory-current { font-size:11px;font-weight:400;white-space:nowrap;color:var(--trace-text-secondary); }
 .wb-directory-paging>.wb-button { flex:1; }
 .wb-directory-empty { padding:20px 12px;line-height:24px; }
-.wb-thinking-pane:has(.wb-discussion-browser) { scroll-padding-top:calc(var(--wb-reading-toolbar-height,0px) + 8px); }
+.wb-thinking-pane:has(.wb-discussion-browser) { scroll-padding-top:calc(var(--wb-reading-toolbar-height,0px) + 8px);overflow-anchor:none; }
+/* The sticky search editor itself lives inside the excluded reading region.
+   Native caret scrolling must not use that region while a toolbar control owns focus. */
+.wb-thinking-pane:has(.wb-discussion-toolbar:focus-within) { scroll-padding-top:0; }
 [data-reading-message] { scroll-margin-top:8px; }
 .wb-history-mark { background:var(--teal-3);color:inherit;border-radius:3px; }
+.wb-history-mark[data-current-history-hit=true] { background:var(--trace-state-selected);box-shadow:inset 0 -2px var(--trace-focus),var(--trace-state-selected-shadow);color:var(--trace-text-primary);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px; }
 @media(max-width:767px),(max-height:720px){.wb-discussion-toolbar{padding:8px}}
 @media(max-width:767px){.wb-reading-wide,.wb-reading-total{display:none}.wb-reading-narrow{display:inline}.wb-reading-search-actions{gap:4px}.wb-reading-match-arrows{gap:0}.wb-discussion-directory{gap:8px}}
 @media(forced-colors:active){.wb-discussion-toolbar{box-shadow:none;border:1px solid CanvasText}.wb-history-mark{background:Highlight;color:HighlightText}}
