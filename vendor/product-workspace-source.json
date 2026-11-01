@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.11",
+  "version": "0.3.0-frontend.12",
   "recordedAt": "2026-11-01",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.11.tgz",
-    "sha256": "61be84527840853380b9e9534daabc0a3f46d94e0644d6c445ce4f762389cd37",
-    "integrity": "sha512-swLuhOt+qXVlOxu6nNQlp33oMNQWinLXXHNfm9IoDqXri6OmMx5l3gNVNQuTJYm0NhzRGXGfdacOVHxSRYe8xg=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.12.tgz",
+    "sha256": "f836939a909cc1cc8e7b37dc81f17b0543756c139677086366a6e91bc48147bd",
+    "integrity": "sha512-gvn8oRxxZgH2mPdh0mJmmQoAe4AJdMo4PCSBEebKogLGKiLQ9Gi6VZvZjtJUDK3rff8c57h90pYcLk+2gqNW8A=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "15ea1bb48b12b67dd2712b2ba67552d17ce9853a",
+    "head": "ecdc9ee56c56327924a40286ee9459179e1692e5",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "README.md",
-        "sha256": "47a448f5024f9f98703acfb504816540f90b6ca9b19ecc2a9a9c59b16527f799"
+        "sha256": "238ac679554f4058771cf6377f925a7f0e45400ba2d92ef73742191af1d99730"
       },
       {
         "path": "package.json",
-        "sha256": "1ad09baba663374a59f343f4e30c194acf96a6598772e8062d213b0ecbb80180"
+        "sha256": "3e8ba89301fbb05a3cb92de3b7b54af43101e704764d184b177e2fc4a73743f7"
       },
       {
         "path": "src/bridge.mjs",
@@ -47,7 +47,7 @@
       },
       {
         "path": "src/capability-packet-rules.mjs",
-        "sha256": "7198fe93d03b860681e98335f909f8050961ce71abed44d5c4543fc90aa9d14e"
+        "sha256": "e6f30eeee65fd1b4aa5bdfa8705ccddaba4730ffa59a12383cedf34f4bb79c9d"
       },
       {
         "path": "src/chain-model.mjs",
@@ -83,7 +83,7 @@
       },
       {
         "path": "src/index.mjs",
-        "sha256": "d97fee08dd98fe4266f84f92aeac826cd5f198963810eb1aa4328cbce704627a"
+        "sha256": "286f5969df169f66edacdb61d928b48ed4a8446c8271b068a3735284516f33d7"
       },
       {
         "path": "src/scope-contract.mjs",
@@ -91,7 +91,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "89675c5ef08b2d1e62e8c69e44e13398e3ac2b0ca6cd28660d5bb75c94de0201"
+        "sha256": "b401fb475ae2b2fd5af7b72312497f4e8909ce3aaadfb3928a02dd348d2b1538"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -100,6 +100,10 @@
       {
         "path": "src/workspace.mjs",
         "sha256": "59f6bb8da1b38e868b73b53bdbc1e31b59fbf46d882417f3e17e82f905be52ba"
+      },
+      {
+        "path": "src/writeback-plan.mjs",
+        "sha256": "a7be771a14cbbf9135beb79b99b0a8551848ad8387b37f62a7a2c7a316e8383b"
       },
       {
         "path": "tsconfig.types.json",
@@ -123,7 +127,7 @@
       },
       {
         "path": "types/capability-packet-rules.d.mts",
-        "sha256": "9105c0d9b1fc292feabc6cd92d8604b91f0e73726426f3aee41cea775566a253"
+        "sha256": "55f5ef48b616e0b9aea4cd5a158b22609ac70189766db063986e4172e9b06245"
       },
       {
         "path": "types/chain-model.d.mts",
@@ -143,7 +147,7 @@
       },
       {
         "path": "types/index.d.mts",
-        "sha256": "56ef61440e7a1eda4c12352de13d4ccbbd0133730d382dfa6e4ad05f8faf859c"
+        "sha256": "783a3f5f9c63dbd3d19ea350beca73fa6250ea75f28b6bb46bcb6a2b2661fc58"
       },
       {
         "path": "types/scope-contract.d.mts",
@@ -151,11 +155,15 @@
       },
       {
         "path": "types/workbench-model.d.mts",
-        "sha256": "d0f235320babd0739c7fdecd22890c3cb02780a29999fff6dd9e4e1f7b9202de"
+        "sha256": "86433fb3203bad192cba6e311c8ab81729f3415012bcc8e0e60c15292f4bb168"
       },
       {
         "path": "types/worksite-model.d.mts",
         "sha256": "267c7a1e9dc72810913a299799780d06590fcadbeb44e100c498112127168440"
+      },
+      {
+        "path": "types/writeback-plan.d.mts",
+        "sha256": "71b3a6bc9d624929ddf81cdeb8a9c3edf849f53b1bd8b844f9d71b9828b1e657"
       }
     ]
   },

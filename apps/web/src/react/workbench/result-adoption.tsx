@@ -9,12 +9,12 @@ import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
 import {HaloDisclosure} from './halo-disclosure';
 import {ReferencePicker} from './reference-picker';
 import {ReferenceViewer} from './reference-scope';
-import {useWritebackDraft,writebackEntry,writebackVersion,parseWritebackTarget,type WritebackDraft} from './writeback-draft';
+import {useWritebackDraft,writebackEntry,writebackVersion,parseWritebackTarget,writebackExpressionLabels,writebackRelationLabels,type WritebackDraft} from './writeback-draft';
 
 const call=(operation:string,body:any)=>(window as any).traceNative.requestCapability({operation:'workbench.agent.'+operation,...body});
 type Continuation={onOpen?:(ref:ContentRef)=>void;onPlace?:(ref:ContentRef,stillHere:()=>boolean)=>Promise<void>};
-const expressionLabels={note:'线索',question:'未决问题',understanding:'理解',attempt:'尝试'};
-const relationLabels={supplement:'补充',support:'支持',limit:'限定',challenge:'挑战',alternative:'另一种解释',branch:'旁支',unknown:'暂不定义'};
+const expressionLabels=writebackExpressionLabels;
+const relationLabels=writebackRelationLabels;
 const exportRaw=(raw:string)=>{const url=URL.createObjectURL(new Blob([raw],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='Trace-writeback-draft-recovery.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 export function ResultOriginal({run,client,onOpen}:Continuation&{run:Run;client:WorkbenchClient}){
  const {host}=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot),archive=host?.expressions['ai-'+run.id];
@@ -92,7 +92,7 @@ function AdoptionItem({item,run,client,host,refresh,onOpen,onPlace}:Continuation
   {choosing&&<ReferencePicker client={client} purpose="writeback" value={d.picker} onChange={picker=>update({picker})} attached={[]} onAttach={ref=>{update({[choosing]:ref});setChoosing(null);}} onClose={()=>setChoosing(null)}/>}{view&&<ReferenceViewer client={client} reference={view} onClose={()=>setView(null)}/>}
  </article>;
 }
-function ResultVersionPreview({before,after,version}:{before:string;after:string;version:number}){
+export function ResultVersionPreview({before,after,version}:{before:string;after:string;version:number}){
  return <HaloSurface className="wb-version-surface"><Tabs.Root defaultValue="after" className="wb-version-preview"><Tabs.List className="wb-halo-tabs wb-version-tabs" aria-label="写入版本对照"><Tabs.Trigger type="button" value="before">保留的当前版</Tabs.Trigger><Tabs.Trigger type="button" value="after">采纳后预览</Tabs.Trigger></Tabs.List><Tabs.Content value="before" className="wb-version-panel"><header><h5>当前正文</h5><HaloBadge>{version?'v'+version:'尚未新建'}</HaloBadge></header><p className="wb-version-hint">这一版会保留，不被覆盖。</p><div className="wb-version-text" tabIndex={0} aria-label="保留版正文">{before||'尚无内容，确认后才会新建。'}</div></Tabs.Content><Tabs.Content value="after" className="wb-version-panel"><header><h5>确认后新版本</h5><HaloBadge>v{version+1} · 仅预览</HaloBadge></header><p className="wb-version-hint">只有明确确认采纳后才会保存。</p><div className="wb-version-text" tabIndex={0} aria-label="采纳后预览正文">{after}</div></Tabs.Content></Tabs.Root></HaloSurface>;
 }
 export function AdoptedVersions({entry,host}:{entry:ContentEntry;host:any}){

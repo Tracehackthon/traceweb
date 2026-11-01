@@ -4,6 +4,8 @@ import type {ContentHost,ContentRef} from './client';
 import {newReferencePickerState,validReferencePickerState,type ReferencePickerState} from './reference-picker';
 
 export type WritebackDraft={schemaVersion:1;text:string;title:string;target:string;baseVersion:number|null;mode:'append'|'replace';from:ContentRef|null;to:ContentRef|null;relationKind:string;evidence:string;difference:string;uncertainty:string;selection:{start:number;end:number}|null;picker:ReferencePickerState};
+export const writebackExpressionLabels={note:'线索',question:'未决问题',understanding:'理解',attempt:'尝试'};
+export const writebackRelationLabels={supplement:'补充',support:'支持',limit:'限定',challenge:'挑战',alternative:'另一种解释',branch:'旁支',unknown:'暂不定义'};
 const targets=['new-expression:note','new-expression:question','new-expression:understanding','new-expression:attempt','branch:note','branch:question','branch:understanding','branch:attempt','relation','new-capability'];
 export const validWritebackTarget=(x:unknown):x is string=>typeof x==='string'&&(targets.includes(x)||/^(material|capability|expression):[^\x00-\x1f]{1,512}$/.test(x));
 // Only the first colon separates the destination kind. Imported stable content

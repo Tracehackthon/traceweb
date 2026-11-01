@@ -124,6 +124,7 @@ export async function browserWorkspaceRequest(url, options = {}) {
     let value;
     if ((url === '/api/web/workspace'||url==='/api/product/workspace') && method === 'GET') value = await readBrowserWorkspace();
     else if(url==='/api/product/commands'&&method==='POST')value=await (await import('./workbench-browser.mjs')).browserProductCommand(JSON.parse(options.body));
+    else if(/^\/api\/product\/commands\/[a-zA-Z0-9_-]{1,200}$/.test(url)&&method==='GET')value=await (await import('./workbench-browser.mjs')).readBrowserProductCommand(url.slice('/api/product/commands/'.length));
     else if(url==='/api/product/canvases'&&method==='GET')value={items:await (await import('./workbench-browser.mjs')).listBrowserCanvases()};
     else if(/^\/api\/product\/canvases\/[a-zA-Z0-9_-]+(?:\/commands)?$/.test(url)){const api=await import('./workbench-browser.mjs'),id=url.split('/')[4];if(method==='GET'&&!url.endsWith('/commands'))value={document:await api.readBrowserCanvas(id)};else if(method==='POST'&&url.endsWith('/commands'))value=await api.browserCanvasCommand(id,JSON.parse(options.body));else throw failure(405,'METHOD_NOT_ALLOWED','不支持这个布局操作。');}
     else if (url === '/api/web/workspace' && method === 'PUT') value = await putBrowserWorkspace(JSON.parse(options.body));

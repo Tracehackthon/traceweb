@@ -30,6 +30,15 @@ export async function browserProductCommand(command){
     workspaces.put({schemaVersion:1,revision,host},'current');commands.put({fingerprint,revision,host:structuredClone(host),receipt},command.commandId);return{revision,host,receipt,headRevision:revision,storage:info};
   });
 }
+export async function readBrowserProductCommand(id){
+  if(typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,200}$/.test(id))throw failure('INVALID_COMMAND_ID','命令身份无效。');
+  return transaction(['workspace','commands'],'readonly',async tx=>{
+    const [known,row]=await Promise.all([get(tx.objectStore('commands').get(id)),get(tx.objectStore('workspace').get('current'))]);
+    if(!known)throw failure('UNKNOWN_COMMAND','尚未找到这份命令回执；没有推定保存或取消。',404);
+    if(!known.fingerprint?.startsWith('product-v1:')||known.receipt?.protocolVersion!==1||known.receipt.commandId!==id||known.receipt.requestHash!==known.fingerprint.slice('product-v1:'.length))throw failure('COMMAND_CONFLICT','原命令回执格式或身份不一致。',409);
+    return{revision:known.revision,host:known.host,receipt:known.receipt,headRevision:snapshot(row).revision,storage:info};
+  });
+}
 export async function saveBrowserResource(blob){
   if(!(blob instanceof Blob)||blob.size>256*1024*1024)throw failure('RESOURCE_TOO_LARGE','原件超过256 MiB。',413);
   const bytes=await blob.arrayBuffer(),hash=await sha(bytes),type=/^[\w.+-]+\/[\w.+-]+$/.test(blob.type)?blob.type:'application/octet-stream';const resource={id:hash,sha256:hash,mime:type,bytes:blob.size};

@@ -1,6 +1,6 @@
 import {Readable} from 'node:stream'
 import {createProductWorkspace} from '@trace/product-workspace/node'
-import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences} from '@trace/product-workspace'
+import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences,prepareContentWriteback} from '@trace/product-workspace'
 
 const RESPONSE_KIND = 'trace.native-product-response@1'
 const jsonLimit = 8 * 1024 * 1024
@@ -77,41 +77,10 @@ export function createDesktopWorkbench({file}) {
     },
     planAdoption({id,runId,answer,refs,target,expectedVersion,text,title,sourceAnchor}) {
       const snapshot=workspace().read(),host=snapshot.host,operations=originalOperations(host,runId,answer,refs);
-      const source={kind:'expression',id:'ai-'+runId,version:1,...(sourceAnchor?{anchor:sourceAnchor}:{})};let targetRef,relationRef;
-      const conflict=message=>{throw Object.assign(Error(message),{code:'CONTENT_CONFLICT'});};
-      const unique=items=>items.filter((r,i,a)=>a.findIndex(x=>stableWorkbenchJson(x)===stableWorkbenchJson(r))===i);
-      if(target.kind==='material'){
-        const material=host.materials[target.id];if(!material)throw Error('材料已不可用。');
-        const materialRef={kind:'material',id:material.id,version:material.version},expressionId='adopted-'+material.id,item=host.expressions[expressionId];
-        if((item?.version||0)!==expectedVersion)throw Object.assign(Error('材料采纳摘记已有新版本，请重新读取并比较后再采纳。'),{code:'CONTENT_CONFLICT'});
-        if(item&&(item.author!=='user'||item.kind!=='annotation'||!item.versions[item.version].refs.some(r=>r.kind==='material'&&r.id===material.id)))throw Error('采纳摘记身份冲突。');
-        const old=item?.versions[item.version],value={text:old?old.text+'\n\n'+text:text,refs:[...(old?.refs||[materialRef]),source].filter((r,i,a)=>a.findIndex(x=>stableWorkbenchJson(x)===stableWorkbenchJson(r))===i)};
-        operations.push(item?{type:'expression.edit',id:expressionId,expectedVersion,title:item.title,value}:{type:'expression.create',id:expressionId,kind:'annotation',title:'采纳摘记 · '+material.title,author:'user',value});
-        targetRef={kind:'expression',id:expressionId,version:expectedVersion+1};
-      }else if(target.kind==='capability'){
-        const item=host.capabilities[target.id];if(!item||item.version!==expectedVersion)throw Object.assign(Error('能力已有新版本，请重新读取并比较后再采纳。'),{code:'CONTENT_CONFLICT'});
-        if(['disabled','received'].includes(item.status))throw Error('目标能力未采用或已停用；没有自动恢复或修改它。');
-        const value=structuredClone(item.versions[item.version]);value.steps=value.steps?value.steps+'\n\n'+text:text;value.refs=[...value.refs,source];
-        if(value.stepItems)value.stepItems.push({id:'step-'+id,text,checked:false});
-        operations.push({type:'capability.edit',id:item.id,expectedVersion,value,reason:'逐项复核采纳 '+runId});targetRef={kind:'capability',id:item.id,version:expectedVersion+1};
-      }else if(target.kind==='new-capability'){
-        const cid='cap-'+id;operations.push({type:'capability.create',id:cid,value:{title,purpose:'本次AI结果经用户逐项复核保留',scope:'尚未试用，需继续验证',steps:text,evidence:'来自已保存的AI原稿 '+runId,examples:'',refs:[source]}});targetRef={kind:'capability',id:cid,version:1};
-      }else if(target.kind==='expression'){
-        const item=host.expressions[target.id];if(!item||item.version!==expectedVersion)conflict('这条表达已有新版本，请重新读取并比较后再写回。');
-        if(item.author!=='user'||item.kind==='ink'||!['append','replace'].includes(target.mode))throw Error('只能明确修订用户文字表达；AI原稿和手绘不会被覆盖。');
-        const old=item.versions[item.version],value={text:target.mode==='append'&&old.text?old.text+'\n\n'+text:text,refs:unique([...old.refs,source])};
-        operations.push({type:'expression.edit',id:item.id,expectedVersion,title,value});targetRef={kind:'expression',id:item.id,version:expectedVersion+1};
-      }else if(target.kind==='new-expression'||target.kind==='branch'){
-        if(expectedVersion!==0||!['note','question','understanding','attempt'].includes(target.expressionKind))throw Error('请明确新线索、问题、理解或尝试的类型。');
-        const eid='return-'+id;operations.push({type:'expression.create',id:eid,kind:target.expressionKind,title,author:'user',value:{text,refs:[source]}});targetRef={kind:'expression',id:eid,version:1};
-        if(target.kind==='branch'){
-          const rid='branch-'+id;operations.push({type:'relation.create',id:rid,from:target.from,to:targetRef,reason:'从这里另起旁支：'+title,evidence:'用户逐项核对的讨论内容',difference:target.difference||'',uncertainty:target.uncertainty||'',kind:'branch',author:'user',sources:[source]});relationRef={kind:'relation',id:rid,version:1};
-        }
-      }else if(target.kind==='relation'){
-        if(expectedVersion!==0)throw Error('新关系需要从尚未创建的基准开始。');
-        const rid='relation-'+id;operations.push({type:'relation.create',id:rid,from:target.from,to:target.to,reason:text,evidence:target.evidence,difference:target.difference,uncertainty:target.uncertainty,kind:target.relationKind,author:'user',sources:[source]});targetRef={kind:'relation',id:rid,version:1};
-      }else throw Error('请选择明确的写回位置。');
-      return {command:{protocolVersion:1,commandId:id,expectedRevision:snapshot.revision,operations},targetRef,source,...(relationRef?{relationRef}:{})};
+      const source={kind:'expression',id:'ai-'+runId,version:1,...(sourceAnchor?{anchor:sourceAnchor}:{})};
+      const {operations:destination,...planned}=prepareContentWriteback(host,{id,source,target,expectedVersion,text,title,provenance:{purpose:'本次AI结果经用户逐项复核保留',scope:'尚未试用，需继续验证',evidence:'来自已保存的AI原稿 '+runId,reason:'逐项复核采纳 '+runId,annotationTitle:'采纳摘记',branchEvidence:'用户逐项核对的讨论内容'}});
+      operations.push(...destination);
+      return {command:{protocolVersion:1,commandId:id,expectedRevision:snapshot.revision,operations},source,...planned};
     },
     execute(command){return workspace().execute(command)},
     configureFeedbackEvidenceResolver(resolver){workspace().configureFeedbackEvidenceResolver(resolver)},
@@ -135,7 +104,7 @@ export function createDesktopWorkbench({file}) {
     async request(request) {
       if(request?.operation==='workbench.request'){
         const p=request.pathname,m=request.method||'GET'
-        const read=p==='/api/product/workspace'||p==='/api/product/canvases'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}$/.test(p)
+        const read=p==='/api/product/workspace'||p==='/api/product/canvases'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}$/.test(p)||/^\/api\/product\/commands\/[a-zA-Z0-9_-]{1,200}$/.test(p)
         const write=p==='/api/product/commands'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}\/commands$/.test(p)
         if(!(m==='GET'&&read||m==='POST'&&write))throw Error('不支持这个工作台操作')
         const body=m==='POST'?Buffer.from(JSON.stringify(request.body)):undefined

@@ -1,9 +1,10 @@
 import { workspaceRequest, browserStorage } from '../workspace-storage';
 import { responseFromNativeProductCommand } from '../native-product-response.mjs';
+import {stableWorkbenchJson,validateProductCommand} from '@trace/product-workspace';
 
 export interface ContentRef { kind: 'material' | 'expression' | 'capability'; id: string; version: number; anchor?: { type: string; [key: string]: unknown } }
 export interface StepItem { id:string; text:string; checked:boolean }
-export interface ContentValue { usage?:'method'|'template'|'instruction'; prompt?:string; stepItems?:StepItem[]; text?: string; resourceId?: string | null; refs?: ContentRef[]; origin?: { kind: string; url?: string; fileName?: string; locator?: { type: string; [key: string]: unknown }; packet?:{resourceId:string;source:ContentRef;sourceAuthor?:'user'|'agent'} }; ink?: { points: { x: number; y: number }[]; width: number; color: string }; title?: string; purpose?: string; scope?: string; steps?: string; evidence?: string; examples?: string }
+export interface ContentValue { usage?:'method'|'template'|'instruction'; prompt?:string; stepItems?:StepItem[]; text?: string; resourceId?: string | null; refs?: ContentRef[]; origin?: { kind: string; url?: string; fileName?: string; message?:{sessionId:string;messageId:string}; locator?: { type: string; [key: string]: unknown }; packet?:{resourceId:string;source:ContentRef;sourceAuthor?:'user'|'agent';withheld?:'thinking-message'} }; ink?: { points: { x: number; y: number }[]; width: number; color: string }; title?: string; purpose?: string; scope?: string; steps?: string; evidence?: string; examples?: string }
 export interface ContentEntry { changes?:{version:number;reason:string;state?:string;feedback?:{id:string;version:number;sourceVersion:number};transfer?:{direction:'incoming'|'outgoing';packetResourceId:string;packetId:string;createdAt:string;sender:string;recipient:string;source:ContentRef;omittedFields?:string[]}}[]; id: string; title: string; kind: string; version: number; versions: Record<string, ContentValue>; status: string; author?: string; publishedVersions?: number[] }
 export interface Relation { author?:'user'|'agent';modifiedBy?:'user';sources?:ContentRef[];history?:Omit<Relation,'id'|'history'>[]; id: string; from: ContentRef; to: ContentRef; reason: string; evidence: string; difference: string; uncertainty: string; kind: string; status: string; version: number }
 export interface MessageScope {refs:ContentRef[];excluded:ContentRef[];historyIds:string[]}
@@ -19,6 +20,7 @@ export interface CanvasEdge { id: string; from: string; to: string; relationId: 
 export interface CanvasScene { nodes: CanvasNode[]; connections: CanvasEdge[] }
 export interface CanvasDocument extends CanvasScene { schemaVersion: 1; id: string; title: string; revision: number; undo: CanvasScene[]; redo: CanvasScene[] }
 export interface WorkbenchState { features:string[]; ready: boolean; loading: boolean; readError: string | null; host: ContentHost | null; legacy: unknown; revision: number; canvas: CanvasDocument | null; canvases: { id: string; title: string; revision: number }[]; saving: boolean; error: string | null; pending: { path: string; body: unknown; owner?:string } | null }
+export interface PreparedContentCommand {protocolVersion:1;commandId:string;expectedRevision:number;operations:unknown[]}
 type NativeBridge = { requestCapability?: (request: Record<string, unknown>) => Promise<any> };
 const native = () => (window as Window & { traceNative?: NativeBridge }).traceNative;
 const pendingKey='trace-workbench-pending:'+(location.pathname.startsWith('/app/demo')?'demo':'personal');
@@ -84,7 +86,19 @@ export class WorkbenchClient {
     catch (error) { const pending = { path, body: structuredClone(body),...(owner?{owner}:{}) }; try{localStorage.setItem(pendingKey, JSON.stringify(pending));}catch{/* In-memory recovery remains available; no false acknowledgement. */} this.set({ error: error instanceof Error ? error.message : '保存未确认。', pending }); throw error; }
     finally { this.set({ saving: false }); }
   }
-  command(operations: unknown[],owner?:string) { return this.enqueue(async () => { const result = await this.send('/api/product/commands', { protocolVersion: 1, commandId: makeId('content'), expectedRevision: this.state.revision, operations },owner); this.set({ host: result.host, revision: result.revision }); return result; }); }
+  command(operations: unknown[],owner?:string,onPrepared?:(command:PreparedContentCommand)=>void) { return this.enqueue(async () => { const command:PreparedContentCommand={protocolVersion:1,commandId:makeId('content'),expectedRevision:this.state.revision,operations};onPrepared?.(structuredClone(command));const result = await this.send('/api/product/commands',command,owner); this.set({ host: result.host, revision: result.revision }); return result; }); }
+  async inspectCommand(command:PreparedContentCommand):Promise<{status:'committed'|'absent'|'mismatch'|'unknown';error?:string}> {
+    try{
+      validateProductCommand(command);
+      if(!/^[a-zA-Z0-9_-]{1,200}$/.test(command.commandId))throw Error('原命令身份无法通过当前只读入口核对。');
+      const bytes=new TextEncoder().encode(stableWorkbenchJson(command)),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');
+      const result=await jsonRequest('/api/product/commands/'+encodeURIComponent(command.commandId)),r=result.receipt;
+      if(r?.protocolVersion!==1||r.commandId!==command.commandId||r.status!=='committed'||r.requestHash!==hash)return{status:'mismatch',error:'原请求与真实回执不一致'};
+      // Never merge the old receipt snapshot into the current workspace, or
+      // retry another pending command as a side effect of this read.
+      return{status:'committed'};
+    }catch(error){if(error.code==='UNKNOWN_COMMAND'&&error.status===404)return{status:'absent'};return{status:'unknown',error:error.message||'原命令回执暂不可核对；没有推定保存或取消。'};}
+  }
   layout(scene?: CanvasScene, action: 'replace' | 'undo' | 'redo' | 'rename' = 'replace', title?: string, baseRevision=this.state.canvas?.revision,canvasId=this.id,owner?:string) { return this.enqueue(async () => { if (baseRevision===undefined) throw new Error('画布尚未读取。'); const result = await this.send('/api/product/canvases/' + canvasId + '/commands', { protocolVersion: 1, commandId: makeId('layout'), expectedRevision: baseRevision, action, ...(scene ? { scene } : {}), ...(title === undefined ? {} : { title }) },owner); if(this.id===canvasId)this.set({ canvas: result.document }); return result; }); }
   async prepare() { await this.command([{ type: 'workspace.upgrade' }]); await this.load(); if (this.state.canvas?.revision === 0) await this.layout(undefined, 'rename', '新的想法'); await this.load(); }
   async retry() { const pending = this.state.pending; if (!pending) return; this.set({ saving: true }); try { await jsonRequest(pending.path, pending.body); localStorage.removeItem(pendingKey); this.set({ pending: null, error: null }); await this.load(); } catch (error) { this.set({ error: error instanceof Error ? error.message : '重试尚未确认。' }); } finally { this.set({ saving: false }); } }

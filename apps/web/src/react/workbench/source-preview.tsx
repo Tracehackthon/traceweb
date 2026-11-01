@@ -1,5 +1,6 @@
 import {HaloNotice,HaloProgress} from './halo-surfaces';
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {projectThinkingMessageSource} from '@trace/product-workspace';
 import { WorkbenchModal } from './modal';
 import { TraceIcon } from '../ui/icon';
 import { WorkbenchClient, type ContentEntry, type ContentValue, type ContentRef } from './client';
@@ -49,8 +50,14 @@ function OriginalText({ text, locator }: { text: string; locator?: Locator }) {
   return <pre className="wb-original-text" aria-label="完整原文与摘取位置">{end > start ? <>{text.slice(0, start)}<mark ref={mark}>{text.slice(start, end)}</mark>{text.slice(end)}</> : text}</pre>;
 }
 export function OriginalViewer({ entry, value, client, anchor, onClose }: { entry: ContentEntry; value: ContentValue; client: WorkbenchClient; anchor?: ContentRef['anchor']; onClose: () => void }) {
+  const host=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot).host;
   const [url, setUrl] = useState(''), [text, setText] = useState<string | null>(null), [error, setError] = useState(''), [downloadError, setDownloadError] = useState(''),[attempt,setAttempt]=useState(0),[downloading,setDownloading]=useState(false);
   useEffect(() => { let active = true;setError('');setUrl('');setText(null); void (async () => {
+    if(value.origin?.kind==='thinking-message'){
+      const source=projectThinkingMessageSource(host,value);
+      if(source.status!=='available')throw Error(source.reason||'准确原话暂不可用；摘录未改。');
+      setText(source.text);return;
+    }
     if (!value.resourceId) throw Error('没有保存本地原件；原网页地址和已有摘录仍可保留。');
     const url = await client.resourceUrl(value.resourceId); if (!active) return;
     setUrl(url);
@@ -59,7 +66,7 @@ export function OriginalViewer({ entry, value, client, anchor, onClose }: { entr
       if (blob.size > 1_000_000) throw Error('原文超过当前内联预览上限，可下载完整原件；摘录未被改动。');
       const original = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await blob.arrayBuffer()); if (active) setText(original);
     }
-  })().catch(cause => { if (active) setError(cause.message || '原件读取失败，摘录仍保留。'); }); return () => { active = false; }; }, [client, value.resourceId, entry.kind,attempt]);
+  })().catch(cause => { if (active) setError(cause.message || '原件读取失败，摘录仍保留。'); }); return () => { active = false; }; }, [client, value.resourceId, value.origin, host, entry.kind,attempt]);
   const download = async () => {setDownloadError('');setDownloading(true); try { const href = url || (value.resourceId ? await client.resourceUrl(value.resourceId) : ''); if (!href) throw Error('没有可下载的本地原件。'); const a = document.createElement('a'); a.href = href; a.download = value.origin?.fileName || entry.title; a.click(); } catch (cause) { setDownloadError(cause.message); }finally{setDownloading(false);} };
   let locator = anchor && anchor.type !== 'text' ? anchor : value.origin?.locator, anchorWarning = '';
   if (anchor?.type === 'text') {
@@ -72,10 +79,10 @@ export function OriginalViewer({ entry, value, client, anchor, onClose }: { entr
   return <WorkbenchModal title="原件与摘取位置" onClose={onClose}><p className="wb-muted">{entry.title}，{locatorLabel(locator)}。原件只读，自己的摘记不会覆盖它。</p>
     {anchor?.type==='text'&&<blockquote aria-label="引用的保存文字">{value.text?.slice(Number(anchor.start),Number(anchor.end))}</blockquote>}
     {anchorWarning&&<HaloNotice tone="warning" title="原件定位边界" description={anchorWarning}/>}
-    {error && <HaloNotice tone="error" title="原件读取未完成" description={error} actions={value.resourceId?<button className="wb-button" onClick={()=>setAttempt(n=>n+1)}>重试读取原件</button>:undefined}/>}
+    {error && <HaloNotice tone="error" title="原件读取未完成" description={error} actions={value.resourceId?<button className="wb-button" onClick={()=>setAttempt(n=>n+1)}>重试读取原件</button>:value.origin?.kind==='thinking-message'?<button className="wb-button" onClick={()=>{void client.load().then(ok=>{if(ok)setAttempt(n=>n+1);});}}>重新核对准确原话</button>:undefined}/>}
     {url && <LocalMedia kind={entry.kind} title={entry.title} url={url} locator={locator} original />}
     {text !== null && <OriginalText text={text} locator={locator} />}
-    {!url && !error && <HaloProgress label="正在读取原件…"/>}
+    {!url && text===null && !error && <HaloProgress label="正在读取原件…"/>}
     <div className="wb-actions">{value.origin?.url && <a className="wb-button" href={value.origin.url} target="_blank" rel="noopener noreferrer">打开原网页</a>}{value.resourceId && <button className="wb-button" disabled={downloading} aria-busy={downloading} onClick={() => { void download(); }}>下载原件</button>}<button className="wb-button wb-primary" onClick={onClose}>返回线索</button></div>{downloading?<HaloProgress label="正在准备原件下载…"/>:downloadError&&<HaloNotice tone="error" title="原件下载未完成" description={downloadError}/>}
   </WorkbenchModal>;
 }
