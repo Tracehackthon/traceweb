@@ -206,3 +206,5 @@ node scripts/expressive-controls-e2e.cjs
 固定：多词同段AND、字面正则符号、大小写不敏感及#段号语义不改；视图只存身份/偏移/查询，不复制原文或写Product。明确接续仍经同一草稿追加/替换/取消和真实保存回执，原消息正文与scope不可改。高频查找即时，不加装饰运动；44px目标、Halo材质、短窗最多两行及原减少动效设置保留。
 
 验证与发行只以[唯一任务](../../../docs/tasks/trace-frontend-replacement.md#search-context-current)及`.test-results/workbench-search-context/`精确源/产物回执为准。headless全App视觉与原生SQLite保存分开证明；不显示测试窗口、不发OS键鼠、不用先show后hide，也不把DOM几何称为原生截图。
+
+本批按source04／独立6文件driver07完成同源Review、headless视觉及实际EXE真实SQLite链路后，0.2.30已安装。安装/恢复前最新25项自有文件逐项未变，正常入口立即恢复并仅只读核可见窗口；不再并发同EXE原生测试。03取消返回缺口、05复合首失败、ENOSPC及诊断修正均保留，原生raster仍not_run，029气泡partial不消账。精确版本、回退与分范围回执只看上述唯一任务及accepted/installation/delivery记录。
