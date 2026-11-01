@@ -34,6 +34,7 @@ export function createDesktopWorkbench({file}) {
       for(const [role,refs] of [['reference',session.refs],['instruction',message.instructions||[]]])for(const ref of refs){
         if(excluded.has(stableWorkbenchJson(ref)))continue;
         const {item,value}=resolveContentRef(host,ref,{forUse:true});let text=role==='instruction'?value.prompt:ref.kind==='capability'?JSON.stringify(value):value.text;
+        if(ref.anchor&&ref.anchor.type!=='text')throw Error('当前文本执行器不能读取这个媒体局部；未扩大成整份材料发送。请保留引用，或先人工摘取为可读文字。')
         if(ref.anchor?.type==='text')text=text.slice(ref.anchor.start,ref.anchor.end);
         if(!text?.trim())throw Error('所选材料没有文字摘录；不会自动上传原件。');
         fragments.push({id:`${role}:${fragments.length+1}`,role,revision:ref.version,text,title:item.title,ref:structuredClone(ref)});
@@ -79,6 +80,7 @@ export function createDesktopWorkbench({file}) {
         if(excluded.has(stableWorkbenchJson(ref)))continue
         const {item,value}=resolveContentRef(host,ref,{forUse:true})
         let text=role==='instruction'?value.prompt:ref.kind==='capability'?JSON.stringify(value):value.text
+        if(ref.anchor&&ref.anchor.type!=='text')throw Error('当前文本执行器不能读取这个媒体局部；未扩大成整份材料发送。请保留引用，或先人工摘取为可读文字。')
         if(ref.anchor?.type==='text')text=text.slice(ref.anchor.start,ref.anchor.end)
         if(!text?.trim())throw Error('所选材料没有文字摘录，请先摘取文字；不会自动上传原件。')
         fragments.push({id:`${role}:${fragments.length+1}`,role,revision:ref.version,text,title:item.title,ref:structuredClone(ref)})

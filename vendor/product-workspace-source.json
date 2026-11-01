@@ -1,25 +1,25 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.8",
+  "version": "0.3.0-frontend.9",
   "recordedAt": "2026-11-01",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.8.tgz",
-    "sha256": "51225114b98a353dd71afac9e83a8d02e565398932cf85741c12a87f5296e89f",
-    "integrity": "sha512-2if9HLL6bqKc6wdYD0R83FHSNa8ngdbEzc/HXIwOUcxcvYUd1b/iRQXYNxIwlK6vQsMTXOugsytC6dlPT316AQ=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.9.tgz",
+    "sha256": "e266fd4374fb7f2b4c0413404597203191b930e9023f03a3b4cea97355c770f0",
+    "integrity": "sha512-wmRbyu1QSOPrr3L68j4Sxzu2HrSlMDA6Njgti7XTs043iBrKi9N3T7KQlQsgD/kpVANpOWwSiao9Z0jk6POOwQ=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "7da0113dd9d6e406a7da37755e467da6dda7a199",
+    "head": "fe57eb9ade39a5da910b91bc6b070b63f8912c6c",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "package.json",
-        "sha256": "953d63a8cd75b63f47540c4b35719ad5524c768fe2bfa728a52fb95dfc82d1e9"
+        "sha256": "9d3fc2167802a5851eae7fc569d6a252be8ba955a7325598334a18388e7f11a4"
       },
       {
         "path": "tsconfig.types.json",
@@ -27,7 +27,7 @@
       },
       {
         "path": "README.md",
-        "sha256": "d3431b7f4f4a7f0a61b79203c75b1cafd19c5adf7bf61a68971685d5315a43fa"
+        "sha256": "57bfbd5ff9dd883a02e2f7cbb2acba052ff1a1a8ae09ed8ef6ab5f8ccaffabeb"
       },
       {
         "path": "src/bridge.mjs",
@@ -43,7 +43,7 @@
       },
       {
         "path": "src/capability-feedback-rules.mjs",
-        "sha256": "062aba1e33a7690a014b682920cadd66b5e83284426e5c6413e94b1a871e1197"
+        "sha256": "48387b16ca99727f0b1a5d26a209c702f2050fb02bb3f8a95cca93a1515e5464"
       },
       {
         "path": "src/capability-packet-codec.mjs",
@@ -95,7 +95,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "c8c49924aa08ad3c88f9013c5e07722b04c4cedffc6c63dd9443f85b9e3ea728"
+        "sha256": "91a43ea135f339ff1b588991440211d0aad6ec89d55c4709b117dc693a9f5565"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -151,7 +151,7 @@
       },
       {
         "path": "types/workbench-model.d.mts",
-        "sha256": "92da214a6fc34ea899a366dfdb1f6f495eb7abb2987b4e763b3074740334b2dc"
+        "sha256": "ac25fe3bcab80c63a78f5605202d0ed20fa6d92fb9f73ae52b12287b49a75706"
       },
       {
         "path": "types/worksite-model.d.mts",
@@ -161,10 +161,10 @@
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
   "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
-  "revisionReason": "frontend.8 adds version-bound user feedback with explicit unknown targets and trusted native provenance; no consumed previous archive is overwritten.",
+  "revisionReason": "frontend.9 validates new exact text/media anchors against saved source ranges, preserves historical reads and prior feedback anchors; no consumed archive is overwritten.",
   "supersedes": {
-    "version": "0.3.0-frontend.7",
-    "reason": "New optional feedback catalog and atomic explicit follow-up decisions; old profiles only on isolated copies."
+    "version": "0.3.0-frontend.8",
+    "reason": "Strict new selections and effective use, without reinterpreting historical content or adding a fourth reference kind."
   },
   "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates."
 }

@@ -37,7 +37,7 @@ export function HaloSelect(props:HaloSelectProps){
 }
 
 // Local, synchronous search: do not invent a waiting state or delay input/deletion.
-export function HaloSearchInput({value,onValueChange,label,autoFocus,onKeyDown,placeholder}:{value:string;onValueChange:(value:string)=>void;label:string;autoFocus?:boolean;onKeyDown?:React.KeyboardEventHandler<HTMLInputElement>;placeholder?:string}) {
+export function HaloSearchInput({value,onValueChange,label,autoFocus,onKeyDown,placeholder,maxLength}:{value:string;onValueChange:(value:string)=>void;label:string;autoFocus?:boolean;onKeyDown?:React.KeyboardEventHandler<HTMLInputElement>;placeholder?:string;maxLength?:number}) {
   const input=useRef<HTMLInputElement>(null);
-  return <div className="wb-halo-search"><TraceIcon name="search"/><input ref={input} type="text" autoComplete="off" autoFocus={autoFocus} aria-label={label} value={value} onChange={e=>onValueChange(e.target.value)} onKeyDown={onKeyDown} placeholder={placeholder}/>{value && <button type="button" aria-label={'清除'+label} onClick={()=>{onValueChange('');input.current?.focus();}}><TraceIcon name="close" size={16}/></button>}</div>;
+  return <div className="wb-halo-search"><TraceIcon name="search"/><input ref={input} type="text" autoComplete="off" autoFocus={autoFocus} aria-label={label} maxLength={maxLength} value={value} onChange={e=>onValueChange(e.target.value)} onKeyDown={onKeyDown} placeholder={placeholder}/>{value && <button type="button" aria-label={'清除'+label} onClick={()=>{onValueChange('');input.current?.focus();}}><TraceIcon name="close" size={16}/></button>}</div>;
 }
