@@ -10,7 +10,11 @@ function originalOperations(host,runId,answer,refs) {
   const id='ai-'+runId,archive=host.expressions[id];
   // These are provenance, not permission to use a now-disabled method again.
   for(const ref of refs)resolveContentRef(host,ref);
-  if(archive){if(archive.author!=='agent'||archive.kind!=='note'||archive.version!==1||archive.versions[1].text!==answer)throw Error('AI原稿身份冲突，未覆盖。');return [];}
+  if(archive){
+    if(archive.author!=='agent'||archive.kind!=='note'||archive.version!==1||archive.versions[1]?.text!==answer)throw Error('AI原稿身份冲突，未覆盖。');
+    if(stableWorkbenchJson(archive.versions[1].refs)!==stableWorkbenchJson(refs))throw Error('已存AI原稿来源与本次冻结引用不一致，未覆盖或写回。');
+    return [];
+  }
   return [{type:'expression.create',id,kind:'note',title:'AI返回原稿（不可覆盖）',author:'agent',value:{text:answer,refs}}, {type:'expression.decide',id,expectedVersion:1,decision:'saved'}];
 }
 

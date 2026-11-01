@@ -31,9 +31,9 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     guard(hash(payload)===r.input_hash&&hash(result)===r.result_hash,'运行原始记录完整性不一致，未读取或提交反馈。');
     return {payload,result};
   };
-  const presentation=r=>{if(!r.result&&r.status!=='succeeded')return {result:null,sourceError:''};try{return {result:storedReturn(r).result,sourceError:''};}catch{return {result:null,sourceError:'原始输入或返回不可用或完整性不一致；已存状态/回执仍保留，不将损坏正文当作已核验来源。'};}};
+  const presentation=r=>{if(!r.result&&r.status!=='succeeded')return {result:null,sourceRefs:null,sourceError:''};try{const {payload,result}=storedReturn(r);return {result,sourceRefs:payload.fragments.filter(f=>f.ref).map(f=>f.ref),sourceError:''};}catch{return {result:null,sourceRefs:null,sourceError:'原始输入或返回不可用或完整性不一致；已存状态/回执仍保留，不将损坏正文当作已核验来源。'};}};
   const publicRow=r=>{if(!r)return r;const checked=presentation(r);return ({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
-    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceError:checked.sourceError,resultHash:r.result_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
+    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceRefs:checked.sourceRefs,sourceError:checked.sourceError,resultHash:r.result_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
   // Re-read the exact immutable source, both when recording and when viewing.
   // A matching metadata hash alone cannot validate a damaged stored result.
   const feedbackSource=context=>{

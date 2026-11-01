@@ -2,6 +2,7 @@ import React,{useLayoutEffect,useRef,useState,useSyncExternalStore} from 'react'
 import type {WorkbenchClient,ContentEntry,ContentRef,ContentHost} from './client';
 import type {Run} from './task-execution';
 import {resultItems} from '../../../../../shared/workbench-result-items.mjs';
+import {stableWorkbenchJson} from '@trace/product-workspace';
 import {HaloNotice,HaloBadge,HaloSurface} from './halo-surfaces';
 import {Tabs} from 'radix-ui';
 import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
@@ -20,9 +21,9 @@ export function ResultOriginal({run,client,onOpen}:Continuation&{run:Run;client:
  const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState(false),[view,setView]=useState<ContentRef|null>(null),owner=useRef(false);
  useLayoutEffect(()=>{owner.current=true;return()=>{owner.current=false;};},[]);
  const save=async()=>{if(busy)return;setBusy(true);setNotice('');try{await call('archive',{runId:run.id,resultHash:run.resultHash});await client.load();if(owner.current){setError(false);setNotice('AI原稿已单独保留，尚未采用任何观点。');}}catch(e){if(owner.current){setError(true);setNotice(e.message||'原稿保存未确认；可明确重试，不会另建一份原稿。');}}finally{if(owner.current)setBusy(false);}};
- const isArchived=archive?.author==='agent'&&archive.kind==='note'&&archive.version===1&&archive.versions[1]?.text===run.result.answer;
+ const sourceKnown=Array.isArray(run.sourceRefs),isArchived=archive?.author==='agent'&&archive.kind==='note'&&archive.version===1&&archive.versions[1]?.text===run.result.answer&&sourceKnown&&stableWorkbenchJson(archive.versions[1].refs)===stableWorkbenchJson(run.sourceRefs);
  const reference:ContentRef={kind:'expression',id:'ai-'+run.id,version:1};
- return <section aria-label="独立保留AI原稿"><p>原稿可单独保留为可引用线索，不必先采纳某一段，也不等于认可其中判断。</p><div className="wb-actions">{isArchived?<><HaloBadge>原稿已保留 · v1</HaloBadge><button className="wb-button" onClick={()=>setView(reference)}>核对已保存的原稿</button>{onOpen&&<button className="wb-button" onClick={()=>onOpen(reference)}>从原稿继续</button>}</>:<button className="wb-button" disabled={busy||Boolean(run.sourceError)||run.adoptions?.some(a=>a.status==='prepared')} aria-busy={busy} onClick={()=>void save()}>单独保留AI原稿（不采纳）</button>}</div>{(busy||notice)&&<HaloNotice pending={busy} tone={error?'error':busy?'neutral':'success'} title={busy?'正在保存原稿…':notice}/>} {view&&<ReferenceViewer client={client} reference={view} onClose={()=>setView(null)}/>}</section>;
+ return <section aria-label="独立保留AI原稿"><p>原稿可单独保留为可引用线索，不必先采纳某一段，也不等于认可其中判断。</p>{archive&&!isArchived&&<HaloNotice tone="warning" title={sourceKnown?'已存原稿的身份、正文或来源与这次返回不一致':'已存原稿的来源尚未核验'} description="没有覆盖原记录，也没有将它当作已核验原稿。请保留待写回正文，明确核对来源后再继续。"/>}<div className="wb-actions">{isArchived?<><HaloBadge>原稿已保留 · v1</HaloBadge><button className="wb-button" onClick={()=>setView(reference)}>核对已保存的原稿</button>{onOpen&&<button className="wb-button" onClick={()=>onOpen(reference)}>从原稿继续</button>}</>:<button className="wb-button" disabled={busy||Boolean(run.sourceError)||run.adoptions?.some(a=>a.status==='prepared')} aria-busy={busy} onClick={()=>void save()}>{archive?'重新核对原稿身份（不覆盖）':'单独保留AI原稿（不采纳）'}</button>}</div>{(busy||notice)&&<HaloNotice pending={busy} tone={error?'error':busy?'neutral':'success'} title={busy?'正在保存原稿…':notice}/>} {view&&<ReferenceViewer client={client} reference={view} onClose={()=>setView(null)}/>}</section>;
 }
 export function ResultAdoption({run,client,refresh,onOpen,onPlace}:Continuation&{run:Run;client:WorkbenchClient;refresh:()=>Promise<void>}){
  const state=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot);

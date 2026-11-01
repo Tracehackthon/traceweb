@@ -12,7 +12,7 @@ import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
 import {HaloDisclosure} from './halo-disclosure';
 import './task-execution.css';
 
-export type Run={kind?:string;sessionId?:string;messageId?:string;adoptions:any[];id:string;taskId:string;number:number;status:string;mode:string;projectName:string;inputHash:string;scope:Task;runtime:any;events:any[];result:any;resultHash:string;sourceError?:string;adoption?:any;error:string;review?:{decision:string;note:string};created:string;finished:string};
+export type Run={kind?:string;sessionId?:string;messageId?:string;adoptions:any[];id:string;taskId:string;number:number;status:string;mode:string;projectName:string;inputHash:string;scope:Task;runtime:any;events:any[];result:any;resultHash:string;sourceRefs?:ContentRef[]|null;sourceError?:string;adoption?:any;error:string;review?:{decision:string;note:string};created:string;finished:string};
 const labels:Record<string,string>={queued:'等待执行',running:'正在执行',waiting_approval:'等待你的审批',waiting_input:'等待你的回答',cancelling:'正在停止',cancelled:'执行已停止',interrupted:'执行已中断',timed_out:'执行超时',failed:'执行失败',succeeded:'结果已返回，待复核'};
 const active=['queued','running','waiting_approval','waiting_input','cancelling'];
 const bridge=()=> (window as any).traceNative;
