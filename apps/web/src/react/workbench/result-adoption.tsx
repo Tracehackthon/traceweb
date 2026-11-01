@@ -9,7 +9,7 @@ import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
 import {HaloDisclosure} from './halo-disclosure';
 import {ReferencePicker} from './reference-picker';
 import {ReferenceViewer} from './reference-scope';
-import {useWritebackDraft,writebackEntry,writebackVersion,type WritebackDraft} from './writeback-draft';
+import {useWritebackDraft,writebackEntry,writebackVersion,parseWritebackTarget,type WritebackDraft} from './writeback-draft';
 
 const call=(operation:string,body:any)=>(window as any).traceNative.requestCapability({operation:'workbench.agent.'+operation,...body});
 type Continuation={onOpen?:(ref:ContentRef)=>void;onPlace?:(ref:ContentRef,stillHere:()=>boolean)=>Promise<void>};
@@ -32,7 +32,7 @@ export function ResultAdoption({run,client,refresh,onOpen,onPlace}:Continuation&
 function AdoptionItem({item,run,client,host,refresh,onOpen,onPlace}:Continuation&{item:any;run:Run;client:WorkbenchClient;host:ContentHost;refresh:()=>Promise<void>}){
  const record=run.adoptions?.filter(a=>a.itemId===item.id).at(-1),draft=useWritebackDraft(run.id,item,host),d=draft.value;
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[editing,setEditing]=useState(true),[choosing,setChoosing]=useState<'from'|'to'|null>(null),[view,setView]=useState<ContentRef|null>(null),[selection,setSelection]=useState<{start:number;end:number}|null>(null);
- const committed=record?.status==='committed',pending=record?.status==='prepared',entry=writebackEntry(host,d.target),base=d.baseVersion===null?null:entry?.versions[d.baseVersion],targetKind=d.target.split(':')[0];
+ const committed=record?.status==='committed',pending=record?.status==='prepared',entry=writebackEntry(host,d.target),base=d.baseVersion===null?null:entry?.versions[d.baseVersion],targetKind=parseWritebackTarget(d.target).kind;
  const before=base?(targetKind==='capability'?base.steps||'':base.text||''):'',append=targetKind==='material'||targetKind==='capability'||targetKind==='expression'&&d.mode==='append',after=append&&before?before+'\n\n'+d.text:d.text;
  const stale=d.baseVersion!==null&&['material','capability','expression'].includes(targetKind)&&writebackVersion(host,d.target)!==d.baseVersion;
  const update=(patch:Partial<WritebackDraft>)=>{draft.update({...d,...patch});setError('');setNotice('');};
@@ -47,7 +47,7 @@ function AdoptionItem({item,run,client,host,refresh,onOpen,onPlace}:Continuation
   draft.update({...currentDraft,baseVersion:version});setError('');setNotice('已明确将比较基准换为当前 v'+version+'；本地正文保留，尚未写回。');
  };
  const submit=async(decision:string)=>{if(busy||draft.blocked)return;setBusy(true);setError('');setNotice('');try{
-  const [kind,id]=d.target.split(':');if(decision==='adopt'&&(d.baseVersion===null||stale))throw Error('目标版本与已核对的基准不同；请明确比较后继续，未提交写回。');
+  const {kind,id}=parseWritebackTarget(d.target);if(decision==='adopt'&&(d.baseVersion===null||stale))throw Error('目标版本与已核对的基准不同；请明确比较后继续，未提交写回。');
   const destination={kind,id,...(['new-expression','branch'].includes(kind)?{expressionKind:id}:{}),...(kind==='expression'?{mode:d.mode}:{}),...(['relation','branch'].includes(kind)?{from:d.from,to:d.to,relationKind:d.relationKind,evidence:d.evidence,difference:d.difference,uncertainty:d.uncertainty}:{})};
   await call('adopt',{runId:run.id,resultHash:run.resultHash,itemId:item.id,requestId:crypto.randomUUID(),decision,target:destination,expectedVersion:d.baseVersion??0,text:d.text,title:d.title,...(d.selection?{selection:d.selection}:{})});await refresh();await client.load();
  }catch(e){if(draft.isCurrent())setError(e.message||'写回未完成；本项正文和基准仍保留。');}finally{if(draft.isCurrent())setBusy(false);}};
