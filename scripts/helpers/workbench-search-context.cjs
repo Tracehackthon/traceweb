@@ -48,7 +48,9 @@ module.exports = async function ({ page, state, saved, check, capture, out, base
   check('stress history is created through73 genuine full application UI saves', !!main && Object.values(initial.host.sessions).reduce((n, s) => n + s.messages.length, 0) === 73);
   await textbox('查找协作记录').fill('档案第 3 段');
   await page.locator('[data-record-id="' + main.id + '"]').click();
+  await page.locator('[data-search-destination="thinking:'+main.id+'"]').waitFor();await paint();
   const original = JSON.stringify(main.messages), originalDraft = await draft().inputValue();
+  check('initial discussion selection waits for its exact owner and restored genuine draft',originalDraft==='主讨论未保存草稿：查找、返回、切换都不能把它自动保存。');
   await draft().press('Control+Home'); await draft().press('ArrowRight'); await draft().press('Shift+ArrowRight');
   const caret = await draft().evaluate(e => [e.selectionStart, e.selectionEnd]);
   const pane = page.locator('.wb-thinking-pane'), paneBox = await pane.boundingBox();
@@ -133,10 +135,12 @@ module.exports = async function ({ page, state, saved, check, capture, out, base
   check('the matched directory preview shows the exact deep text', await textbox('查找目录原话').inputValue() === '末尾星河' && (await directory.locator('[data-list-item]').innerText()).includes('末尾星河'));
   await directory.locator('[data-list-item]').click(); await directory.waitFor({ state: 'detached' });
   await contextGeometry('10-directory-deep-result');
-  const choose = async query => { await textbox('查找协作记录').fill(query); await page.locator('[data-record-id]').first().click(); await draft().waitFor(); };
-  await choose('海盐第二讨论');
+  const switchObservations=[];
+  const readSwitch=()=>page.evaluate(()=>({activeHit:document.querySelector('[data-current-history-hit=true]')?.textContent,draft:document.querySelector('textarea[aria-label="继续共同思考"]')?.value,selection:[document.querySelector('textarea[aria-label="继续共同思考"]')?.selectionStart,document.querySelector('textarea[aria-label="继续共同思考"]')?.selectionEnd],reading:Object.fromEntries(Object.keys(localStorage).filter(key=>key.includes('reading')).map(key=>[key,localStorage.getItem(key)]))}));
+  const choose = async (query,id) => { await textbox('查找协作记录').fill(query); await page.locator('[data-record-id="'+id+'"]').click(); await page.locator('[data-search-destination="thinking:'+id+'"]').waitFor();const before=await readSwitch();await paint();const after=await readSwitch();switchObservations.push({id,before,after});fs.writeFileSync(path.join(out,'owner-switch-readiness.json'),JSON.stringify(switchObservations,null,2)); };
+  await choose('海盐第二讨论',Object.values(initial.host.sessions).find(session=>session.id!==main.id).id);
   check('another discussion retains its own independent draft', await draft().inputValue() === '第二讨论独立的未保存草稿。');
-  await choose('档案第 3 段');
+  await choose('档案第 3 段',main.id);
   check('switching back retains the active deep occurrence and draft selection', await page.locator('[data-current-history-hit=true]').innerText() === '末尾星河' && await draft().inputValue() === originalDraft && await draft().evaluate((e, c) => e.selectionStart === c[0] && e.selectionEnd === c[1], caret));
   await page.reload(); await page.locator('[data-workbench-ready=true]').waitFor(); await draft().waitFor();
   check('reload preserves active occurrence and independent reading return point', await page.locator('[data-current-history-hit=true]').innerText() === '末尾星河' && await button('返回查找前的阅读位置').count() === 1);
