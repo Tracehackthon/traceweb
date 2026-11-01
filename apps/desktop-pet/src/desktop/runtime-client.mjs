@@ -909,7 +909,7 @@ export function createRuntimeCapabilityClient({
     if (request.operation === 'workspace.request') return nativeWorkspaceRequest(request.pathname, request.method || 'GET', request.body)
     if (request.operation === 'workbench.request') {
       const pathname=request.pathname,method=request.method||'GET'
-      const readable=pathname==='/api/product/workspace'||pathname==='/api/product/canvases'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}$/.test(pathname)
+      const readable=pathname==='/api/product/workspace'||pathname==='/api/product/canvases'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}$/.test(pathname)||/^\/api\/product\/commands\/[a-zA-Z0-9_-]{1,200}$/.test(pathname)
       const writable=pathname==='/api/product/commands'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}\/commands$/.test(pathname)
       if(!(method==='GET'&&readable||method==='POST'&&writable))throw new Error('不支持这个工作台操作')
       const body=method==='POST'?JSON.stringify(request.body):undefined
