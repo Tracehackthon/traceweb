@@ -562,14 +562,22 @@ function positionOverlay() {
 }
 
 function showOverlay() {
-  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  if (quitting) return
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    createOverlayWindow()
+    return
+  }
   positionOverlay()
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
   overlayWindow.showInactive()
 }
 
 function toggleOverlay() {
-  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  if (quitting) return
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    showOverlay()
+    return
+  }
   if (overlayWindow.isVisible()) overlayWindow.hide()
   else showOverlay()
 }
@@ -665,10 +673,17 @@ function createOverlayWindow() {
   })
 
   overlayWindow.setAlwaysOnTop(true, 'floating')
+  const ownedOverlay = overlayWindow
+  ownedOverlay.once('closed', () => {
+    if (overlayWindow !== ownedOverlay) return
+    overlayWindow = undefined
+    overlayReady = false
+    interactiveBounds = []
+  })
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
   overlayWindow.on('hide', () => {
-    if (!overlayWindow.isDestroyed()) overlayWindow.setIgnoreMouseEvents(true, { forward: false })
+    if (!ownedOverlay.isDestroyed()) ownedOverlay.setIgnoreMouseEvents(true, { forward: false })
   })
   overlayWindow.webContents.on('did-start-loading', () => { overlayReady = false })
   overlayWindow.webContents.on('did-finish-load', () => {
@@ -908,13 +923,21 @@ ipcMain.on('trace-native:runtime-status', (event) => {
   event.returnValue = publicBundledRuntimeStatus()
 })
 
+// Chromium can deliver queued overlay IPC after native destruction has begun.
+// Never dereference BrowserWindow.webContents until its owner is proven live.
+function isLiveOverlaySender(event) {
+  if (quitting || !overlayWindow || overlayWindow.isDestroyed()) return false
+  const contents = overlayWindow.webContents
+  return !contents.isDestroyed() && event.sender === contents
+}
+
 ipcMain.on('trace-native:set-ignore-mouse-events', (event, ignore) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents || typeof ignore !== 'boolean') return
+  if (!isLiveOverlaySender(event) || typeof ignore !== 'boolean') return
   overlayWindow.setIgnoreMouseEvents(ignore, { forward: ignore })
 })
 
 ipcMain.on('trace-native:interactive-bounds', (event, payload) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents || !Array.isArray(payload)) return
+  if (!isLiveOverlaySender(event) || !Array.isArray(payload)) return
   interactiveBounds = payload.slice(0, 64).flatMap((value) => {
     if (!value || typeof value !== 'object') return []
     const x = Number(value.x), y = Number(value.y), width = Number(value.width), height = Number(value.height)
@@ -924,7 +947,7 @@ ipcMain.on('trace-native:interactive-bounds', (event, payload) => {
 })
 
 ipcMain.on('trace-native:open-discussion', (event, url) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents || typeof url !== 'string') return
+  if (!isLiveOverlaySender(event) || typeof url !== 'string') return
   openDiscussion(url)
 })
 
@@ -981,12 +1004,12 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
 })
 
 ipcMain.handle('trace-native:placement:get', (event) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
+  if (!isLiveOverlaySender(event)) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
   return currentPlacement()
 })
 
 ipcMain.handle('trace-native:placement:save', (event, payload) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
+  if (!isLiveOverlaySender(event)) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
   return saveCurrentPlacement(payload)
 })
 
