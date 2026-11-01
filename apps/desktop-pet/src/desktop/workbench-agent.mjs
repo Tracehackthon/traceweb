@@ -31,7 +31,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   const storedReturn=r=>{
     guard(r&&r.result,'原始返回暂不可用，未使用另一结果替代。');
     const payload=JSON.parse(r.payload),result=JSON.parse(r.result);
-    guard(hash(payload)===r.input_hash&&hash(result)===r.result_hash,'运行原始记录完整性不一致，未读取或提交反馈。');
+    guard(hash(payload)===r.input_hash&&hash(result)===r.result_hash,'原始输入或返回完整性不一致，未将其作为可核验来源。');
     return {payload,result};
   };
   const presentation=r=>{if(!r.result&&r.status!=='succeeded')return {result:null,sourceRefs:null,sourceError:''};try{const {payload,result}=storedReturn(r);return {result,sourceRefs:payload.fragments.filter(f=>f.ref).map(f=>f.ref),sourceError:''};}catch{return {result:null,sourceRefs:null,sourceError:'原始输入或返回不可用或完整性不一致；已存状态/回执仍保留，不将损坏正文当作已核验来源。'};}};
