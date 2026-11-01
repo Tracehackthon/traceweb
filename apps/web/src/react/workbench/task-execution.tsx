@@ -5,7 +5,7 @@ import {TraceIcon,type IconName} from '../ui/icon';
 import {LiquidButton} from './expressive-controls';
 import {CodeBlock} from './code-block';
 import {ExecutionLog} from './execution-log';
-import {ResultAdoption,ResultOriginal} from './result-adoption';
+import {ResultAdoption,ResultOriginal,UnavailableWritebacks} from './result-adoption';
 import {ReferenceViewer} from './reference-scope';
 import type {ContentRef} from './client';
 import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
@@ -90,6 +90,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
         <div className="wb-actions">{([['accepted','确认结果，仅保留在任务'],['needs_work','需要继续核对'],['rejected','不采用此结果']]as const).map(([decision,label])=><button key={decision} className="wb-button" disabled={busy||Boolean(adopted)||Boolean(error)} onClick={()=>action(()=>call('review',{runId:run.id,resultHash:run.resultHash,decision,note}))}>{label}</button>)}</div>
         {!adopted&&run.review&&<HaloNotice title="复核已保存" description={`${({accepted:'确认保留',needs_work:'需要继续核对',rejected:'不采用'}as any)[run.review.decision]}。复核本身不改写内容；逐项采纳记录见下方。`}/>} </section>}
       {!error&&run.review?.decision==='accepted'&&run.result&&<ResultAdoption run={run} client={client} refresh={refresh} onOpen={onOpenWriteback} onPlace={onPlaceWriteback}/>}
+      {!error&&(!run.result||run.review?.decision!=='accepted')&&<UnavailableWritebacks run={run} client={client} refresh={refresh} onOpen={onOpenWriteback}/>}
       {history.length>1&&<HaloDisclosure title={<>此前运行与回执（{history.length-1}）</>}>{history.slice(0,-1).map(old=><section key={old.id}><strong>第 {old.number} 次：{labels[old.status]}</strong><p>{old.sourceError||old.error||old.result?.answer||'没有已确认结果'}</p><small>{old.runtime.threadId||old.id}</small></section>)}</HaloDisclosure>}
       <ExecutionLog events={run.events} title="已记录的执行事件"/>
     </>}

@@ -61,6 +61,20 @@ export function createDesktopWorkbench({file}) {
       if(operations.length)workspace().execute({protocolVersion:1,commandId:'archive-'+runId,expectedRevision:snapshot.revision,operations});
       return {source:{kind:'expression',id:'ai-'+runId,version:1},adopted:false};
     },
+    async committedAdoption(commandId) {
+      const result=await dispatch('/api/product/commands/'+encodeURIComponent(commandId),'GET');
+      if(result.kind===RESPONSE_KIND&&result.ok===false){if(result.status===404&&result.error?.code==='UNKNOWN_COMMAND')return false;throw Error(result.error?.message||'原写回回执暂不可核对，未推定已保存。');}
+      if(result.receipt?.protocolVersion!==1||result.receipt.commandId!==commandId||result.receipt.status!=='committed')throw Error('原写回回执身份不一致，未推定已保存。');
+      return true;
+    },
+    verifyAdoptionSource({runId,answer,refs,plan}) {
+      const host=workspace().read().host,sourceId='ai-'+runId;
+      if(plan.source?.kind!=='expression'||plan.source.id!==sourceId||plan.source.version!==1)throw Error('原写回来源身份不一致，未执行。');
+      originalOperations(host,runId,answer,refs);
+      const creation=plan.command?.operations?.find(op=>op.type==='expression.create'&&op.id===sourceId);
+      if(creation){if(creation.author!=='agent'||creation.kind!=='note'||creation.value?.text!==answer||stableWorkbenchJson(creation.value.refs)!==stableWorkbenchJson(refs))throw Error('原写回冻结的AI原稿或来源与当前记录不一致，未执行。');}
+      else if(!host.expressions[sourceId])throw Error('原写回引用的AI原稿不可用，未重新创建或改用另一来源。');
+    },
     planAdoption({id,runId,answer,refs,target,expectedVersion,text,title,sourceAnchor}) {
       const snapshot=workspace().read(),host=snapshot.host,operations=originalOperations(host,runId,answer,refs);
       const source={kind:'expression',id:'ai-'+runId,version:1,...(sourceAnchor?{anchor:sourceAnchor}:{})};let targetRef,relationRef;

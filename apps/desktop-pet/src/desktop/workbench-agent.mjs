@@ -24,7 +24,10 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   db.prepare(`UPDATE attempts SET status='interrupted',finished=?,error='上次进程已退出。请核对项目现状后再明确重试；不会自动重跑。' WHERE status IN (${activeStates.map(()=>'?').join(',')})`).run(now(),...activeStates)
   let closed=false,active=null,loading=null
   const row=id=>db.prepare('SELECT * FROM attempts WHERE id=?').get(id)
-  const publicAdoption=r=>({id:r.id,itemId:r.item_id,decision:r.decision,status:r.status,plan:r.plan?{targetRef:JSON.parse(r.plan).targetRef,source:JSON.parse(r.plan).source,reviewedText:JSON.parse(r.plan).reviewedText,relationRef:JSON.parse(r.plan).relationRef}:null,receipt:r.receipt?JSON.parse(r.receipt):null,error:r.error,created:r.created})
+  const publicAdoption=r=>{
+    const plan=r.plan?JSON.parse(r.plan):null,target=plan?.command?.operations?.find(op=>op.id===plan.targetRef.id&&['expression.create','expression.edit','capability.create','capability.edit','relation.create'].includes(op.type));
+    return {id:r.id,itemId:r.item_id,decision:r.decision,status:r.status,plan:plan?{targetRef:plan.targetRef,targetName:target?.title||target?.value?.title||(plan.targetRef.kind==='relation'?'内容之间的关系':'已核对的内容'),source:plan.source,reviewedText:plan.reviewedText,relationRef:plan.relationRef}:null,receipt:r.receipt?JSON.parse(r.receipt):null,error:r.error,created:r.created};
+  }
   const storedReturn=r=>{
     guard(r&&r.result,'原始返回暂不可用，未使用另一结果替代。');
     const payload=JSON.parse(r.payload),result=JSON.parse(r.result);
@@ -110,11 +113,31 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     const id='run-'+randomUUID(),number=(previous?.number||0)+1
     db.prepare('INSERT INTO attempts(id,task_id,number,request_key,input_hash,payload,project,mode,status,created,events) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,request.taskId,number,request.requestId,hash(payload),JSON.stringify(payload),cwd,mode,'queued',now(),JSON.stringify([{sequence:1,type:'run.queued',at:now()}]));notify();setImmediate(()=>void pump());return publicRow(row(id))
   }
-  function applyAdoption(a){
-    guard(a.status==='prepared','此项已处理；不会重复写入。')
-    try{const plan=JSON.parse(a.plan),outcome=store.execute(plan.command);db.prepare("UPDATE adoptions SET status='committed',receipt=?,error=NULL WHERE id=?").run(JSON.stringify(outcome.receipt),a.id)}
-    catch(error){db.prepare('UPDATE adoptions SET status=?,error=? WHERE id=?').run(['CONTENT_CONFLICT','REVISION_CONFLICT'].includes(error.code)?'conflict':'prepared',String(error.message||'写入未确认，请重试原采纳请求。').slice(0,600),a.id)}
-    notify();return publicAdoption(db.prepare('SELECT * FROM adoptions WHERE id=?').get(a.id))
+  const adoptionWrites=new Map();
+  function applyAdoption(a,{cancel=false}={}){
+    const previous=adoptionWrites.get(a.id)||Promise.resolve();
+    const operation=previous.catch(()=>{}).then(async()=>{
+      const current=db.prepare('SELECT * FROM adoptions WHERE id=?').get(a.id);
+      if(current.status==='committed'||current.status==='cancelled')return publicAdoption(current);
+      guard(current.status==='prepared','此项已处理；不会重复写入。');
+      try{
+        const plan=JSON.parse(current.plan),committed=await store.committedAdoption(plan.command.commandId);
+        // Existing Product receipts take priority over a lost acknowledgement.
+        // execute still verifies the exact original command fingerprint.
+        if(cancel&&!committed)db.prepare("UPDATE adoptions SET status='cancelled',error=NULL WHERE id=?").run(current.id);
+        else{
+          if(!committed){
+            const run=row(current.run_id);guard(run?.status==='succeeded'&&JSON.parse(run.review||'null')?.decision==='accepted','这份返回尚未明确认可，未重试写入；原请求和草稿仍保留。');
+            const {payload,result}=storedReturn(run);
+            if(plan.evidence)guard(plan.evidence.runId===run.id&&plan.evidence.inputHash===run.input_hash&&plan.evidence.resultHash===run.result_hash,'原请求冻结的输入或返回版本不一致，未重试写入。');
+            store.verifyAdoptionSource({runId:run.id,answer:result.answer,refs:payload.fragments.filter(f=>f.ref).map(f=>f.ref),plan});
+          }
+          const outcome=store.execute(plan.command);db.prepare("UPDATE adoptions SET status='committed',receipt=?,error=NULL WHERE id=?").run(JSON.stringify(outcome.receipt),current.id);
+        }
+      }catch(error){db.prepare('UPDATE adoptions SET status=?,error=? WHERE id=?').run(['CONTENT_CONFLICT','REVISION_CONFLICT'].includes(error.code)?'conflict':'prepared',String(error.message||'写入未确认，请重试原采纳请求。').slice(0,600),current.id);}
+      notify();return publicAdoption(db.prepare('SELECT * FROM adoptions WHERE id=?').get(current.id));
+    });
+    adoptionWrites.set(a.id,operation);return operation.finally(()=>{if(adoptionWrites.get(a.id)===operation)adoptionWrites.delete(a.id);});
   }
   function adopt(req,r){
     guard(r.status==='succeeded'&&r.result_hash===req.resultHash&&JSON.parse(r.review||'null')?.decision==='accepted','请先确认这份准确版本的返回结果，再逐项采纳。')
@@ -133,7 +156,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       const sourceAnchor=Number.isSafeInteger(item.start)?{type:'text',start:item.start+start,end:item.start+end}:undefined;
       guard(!req.selection||sourceAnchor,'合并尾段无法证明全文中的准确位置，请保留完整原稿或选择前面的独立段落。');
       const refs=JSON.parse(r.payload).fragments.filter(f=>f.ref).map(f=>f.ref)
-      plan={...store.planAdoption({id,runId:r.id,answer:JSON.parse(r.result).answer,refs,target:req.target,expectedVersion:req.expectedVersion,text:req.text,title:req.title,sourceAnchor}),reviewedText:req.text}
+      plan={...store.planAdoption({id,runId:r.id,answer:JSON.parse(r.result).answer,refs,target:req.target,expectedVersion:req.expectedVersion,text:req.text,title:req.title,sourceAnchor}),reviewedText:req.text,evidence:{runId:r.id,inputHash:r.input_hash,resultHash:r.result_hash}}
     }
     db.prepare('INSERT INTO adoptions(id,run_id,item_id,request_key,fingerprint,decision,status,plan,created) VALUES(?,?,?,?,?,?,?,?,?)').run(id,r.id,item.id,req.requestId,fingerprint,req.decision,plan?'prepared':'decided',plan?JSON.stringify(plan):null,now());notify()
     const a=db.prepare('SELECT * FROM adoptions WHERE id=?').get(id);return plan?applyAdoption(a):publicAdoption(a)
@@ -158,6 +181,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
         const receipt=store.archiveResult({runId:r.id,answer:result.answer,refs});notify();return receipt;
       }
       if(req.operation==='workbench.agent.adoption.retry'){const a=db.prepare('SELECT * FROM adoptions WHERE id=? AND run_id=?').get(req.adoptionId,r.id);guard(a,'没有这份采纳请求。');return a.status==='committed'?publicAdoption(a):applyAdoption(a)}
+      if(req.operation==='workbench.agent.adoption.cancel'){const a=db.prepare('SELECT * FROM adoptions WHERE id=? AND run_id=?').get(req.adoptionId,r.id);guard(a,'没有这份采纳请求。');return applyAdoption(a,{cancel:true});}
       if(req.operation==='workbench.agent.cancel'){
         guard(activeStates.includes(r.status),'运行已结束，请复核已有结果。')
         if(r.status==='queued')update(r.id,{status:'cancelled',finished:now()});else{update(r.id,{status:'cancelling'});active?.id===r.id&&active.controller.abort()}
