@@ -1,29 +1,33 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.7",
+  "version": "0.3.0-frontend.8",
   "recordedAt": "2026-11-01",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.7.tgz",
-    "sha256": "502a6d6835909b59cb7153622540d665ed287494b49f91c6e63837a4e7088018",
-    "integrity": "sha512-els3/R5EiTPn/QeKqDlFwHYsCbiiWSzUmzqP+6vhE4GbghL7TnwudlimTg3EpGHnVtvt17B49CzRPjd94N7zLQ=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.8.tgz",
+    "sha256": "51225114b98a353dd71afac9e83a8d02e565398932cf85741c12a87f5296e89f",
+    "integrity": "sha512-2if9HLL6bqKc6wdYD0R83FHSNa8ngdbEzc/HXIwOUcxcvYUd1b/iRQXYNxIwlK6vQsMTXOugsytC6dlPT316AQ=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "5c30839d68bde8e6268e10442cd8d126ac2d5303",
+    "head": "7da0113dd9d6e406a7da37755e467da6dda7a199",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "package.json",
-        "sha256": "4be992bdb9f74194a028d97155eb6e45fef2319bd50f6e209705da113aaf6b41"
+        "sha256": "953d63a8cd75b63f47540c4b35719ad5524c768fe2bfa728a52fb95dfc82d1e9"
+      },
+      {
+        "path": "tsconfig.types.json",
+        "sha256": "d1e01e41c11f04c2a28e89a695ea6a7a483160aec10ca4971d2a8ac6d75bfc2e"
       },
       {
         "path": "README.md",
-        "sha256": "538d5198fda7061d4886782a4bef2926634c54e1a7209b7174dadbfb2d6fbd36"
+        "sha256": "d3431b7f4f4a7f0a61b79203c75b1cafd19c5adf7bf61a68971685d5315a43fa"
       },
       {
         "path": "src/bridge.mjs",
@@ -36,6 +40,10 @@
       {
         "path": "src/canvas-store.mjs",
         "sha256": "e875722755170be904e8700b258a83ebe7267d5d0907d911e7f8f1b8d77ac43d"
+      },
+      {
+        "path": "src/capability-feedback-rules.mjs",
+        "sha256": "062aba1e33a7690a014b682920cadd66b5e83284426e5c6413e94b1a871e1197"
       },
       {
         "path": "src/capability-packet-codec.mjs",
@@ -55,7 +63,7 @@
       },
       {
         "path": "src/commands.mjs",
-        "sha256": "56a134b4934af2ca144675ea1ba2ab7d309bee8d69586a972ec73206c132957c"
+        "sha256": "ccc7493e06a6ec5043552ff257ffc086794cdb90f6b11f8578b00eadb6be4d76"
       },
       {
         "path": "src/comparison-model.mjs",
@@ -87,7 +95,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "58cc7a040fd9731aec1431cb3162539d320a480931054a0a77df07a85b86c480"
+        "sha256": "c8c49924aa08ad3c88f9013c5e07722b04c4cedffc6c63dd9443f85b9e3ea728"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -95,11 +103,7 @@
       },
       {
         "path": "src/workspace.mjs",
-        "sha256": "a6bbdbb0556cab38d4db429a866b121f3ec8f20f00aff7b1ff3ef5810d2962a3"
-      },
-      {
-        "path": "tsconfig.types.json",
-        "sha256": "d1e01e41c11f04c2a28e89a695ea6a7a483160aec10ca4971d2a8ac6d75bfc2e"
+        "sha256": "ea27004cdc88eeb4109797a59eaec4fe49566b94a83920d4aff9faaf5319e1e4"
       },
       {
         "path": "types/bridge.d.mts",
@@ -108,6 +112,10 @@
       {
         "path": "types/canvas-model.d.mts",
         "sha256": "e7a36ab6cebd36eca9bf83b8bb9cfff818f4cd99ce5ed6ec765ab33ede7912c9"
+      },
+      {
+        "path": "types/capability-feedback-rules.d.mts",
+        "sha256": "462b3b34c199b945e62edf130d20006c43c9ad564c286ef4465f0207367a2bfc"
       },
       {
         "path": "types/capability-packet-codec.d.mts",
@@ -123,7 +131,7 @@
       },
       {
         "path": "types/commands.d.mts",
-        "sha256": "cfa1c9b56e6c568780ca4bdfa86f722fbe255aa6d83d77aa6c3a296c957bb39c"
+        "sha256": "d1d8668f741e01999ae1bf16958190a440da6c04a31a518ce94c30abe9140edd"
       },
       {
         "path": "types/comparison-model.d.mts",
@@ -143,7 +151,7 @@
       },
       {
         "path": "types/workbench-model.d.mts",
-        "sha256": "f0de80679e74b812688a926fa38c58cb221de4cb1720e6d5568c5954d98d8b60"
+        "sha256": "92da214a6fc34ea899a366dfdb1f6f495eb7abb2987b4e763b3074740334b2dc"
       },
       {
         "path": "types/worksite-model.d.mts",
@@ -152,11 +160,11 @@
     ]
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
-  "verification": "Domain/type build and artifact identity; native task execution and explicit adoption E2E under .test-results/task-execution-return.",
-  "revisionReason": "frontend.4 remains immutable; frontend.5 adds atomic explicit result adoption receipts independent of runtime status.",
+  "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
+  "revisionReason": "frontend.8 adds version-bound user feedback with explicit unknown targets and trusted native provenance; no consumed previous archive is overwritten.",
   "supersedes": {
-    "version": "0.3.0-frontend.4",
-    "reason": "Task adoption receipts and content mutations share a single Product transaction."
+    "version": "0.3.0-frontend.7",
+    "reason": "New optional feedback catalog and atomic explicit follow-up decisions; old profiles only on isolated copies."
   },
-  "acceptanceNote": "Frontend.7 privacy fix for a UI-proven unreleased frontend.6 defect. Old archive not overwritten. Source/build identity is not sender/receiver business acceptance; installed desktop and personal databases unchanged."
+  "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates."
 }

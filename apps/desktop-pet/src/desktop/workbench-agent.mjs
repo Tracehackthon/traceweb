@@ -27,6 +27,14 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   const publicAdoption=r=>({id:r.id,itemId:r.item_id,decision:r.decision,status:r.status,plan:r.plan?{targetRef:JSON.parse(r.plan).targetRef,source:JSON.parse(r.plan).source,reviewedText:JSON.parse(r.plan).reviewedText}:null,receipt:r.receipt?JSON.parse(r.receipt):null,error:r.error,created:r.created})
   const publicRow=r=>r&&({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
     runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:r.result?JSON.parse(r.result):null,resultHash:r.result_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished})
+  // A saved return is evidence of this frozen scope, not of method effectiveness.
+  store.configureFeedbackEvidenceResolver?.(context=>{
+    guard(!closed,'运行库已关闭；反馈未提交。');const r=row(context.runId);
+    guard(r&&r.status==='succeeded'&&r.task_id===context.taskId&&r.input_hash===context.inputHash&&r.result_hash===context.resultHash,'运行、输入或返回版本不一致；没有使用相似结果替代。');
+    const payload=JSON.parse(r.payload),result=JSON.parse(r.result);guard(hash(payload)===r.input_hash&&hash(result)===r.result_hash,'运行原始记录完整性不一致，未提交反馈。');
+    const refs=payload.fragments.filter(f=>f.ref).map(f=>f.ref).filter((r,i,a)=>a.findIndex(x=>JSON.stringify(x)===JSON.stringify(r))===i);
+    return {...context,verifiedAt:now(),refs,...(payload.kind==='thinking'?{sessionId:payload.sessionId,messageId:payload.messageId}:{})};
+  });
   const notify=()=>{try{onChange()}catch{}}
   const update=(id,patch)=>{if(closed)return;const previous=row(id);if(patch.status&&patch.status!==previous.status){const events=JSON.parse(patch.events||previous.events);events.push({sequence:(events.at(-1)?.sequence||0)+1,type:'run.'+patch.status,at:now()});patch.events=JSON.stringify(events);if(!activeStates.includes(patch.status)){const runtime=JSON.parse(patch.runtime||previous.runtime);delete runtime.interaction;patch.runtime=JSON.stringify(runtime)}}const fields=Object.keys(patch);db.prepare(`UPDATE attempts SET ${fields.map(k=>k+'=?').join(',')} WHERE id=?`).run(...Object.values(patch),id);notify()}
   const latest=task=>db.prepare('SELECT * FROM attempts WHERE task_id=? ORDER BY number DESC LIMIT 1').get(task)

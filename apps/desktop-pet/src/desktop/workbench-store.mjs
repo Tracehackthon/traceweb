@@ -68,6 +68,7 @@ export function createDesktopWorkbench({file}) {
       return {command:{protocolVersion:1,commandId:id,expectedRevision:snapshot.revision,operations},targetRef,source};
     },
     execute(command){return workspace().execute(command)},
+    configureFeedbackEvidenceResolver(resolver){workspace().configureFeedbackEvidenceResolver(resolver)},
     taskSnapshot(id) {
       const host=workspace().read().host,task=host?.tasks?.[id]
       if(!task||task.status!=='prepared')throw Error('任务准备不可用或已取消。')

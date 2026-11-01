@@ -40,7 +40,7 @@ export function AgentTaskBadge({task,runs,ready,error=''}:{task:Task;runs:Run[];
   return <HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-task-state={task.status} data-run-state={run?.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
 }
 
-export function TaskExecution({task,client,executions,onCancelPreparation,thinking}:{task:Task;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onCancelPreparation:()=>void;thinking?:{sessionId:string;messageId:string}}){
+export function TaskExecution({task,client,executions,onCancelPreparation,thinking,onFeedbackResult}:{task:Task;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onCancelPreparation:()=>void;thinking?:{sessionId:string;messageId:string};onFeedbackResult?:(run:Run)=>void}){
   const {runs,refresh,ready,error}=executions,history=runs.filter(r=>r.taskId===task.id),run=history.at(-1);
   const [setup,setSetup]=useState<any>(null),[notice,setNotice]=useState(''),[noticeError,setNoticeError]=useState(false),[busy,setBusy]=useState(false),[write,setWrite]=useState(false),[note,setNote]=useState(''),[answers,setAnswers]=useState<Record<string,string>>({});
   useEffect(()=>{if(bridge())void call('status').then(setSetup).catch(e=>{setNoticeError(true);setNotice(e.message);});},[]);
@@ -73,6 +73,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
       </section>}
       <HaloDisclosure title="本次冻结的输入与范围"><p>目标：{run.scope.goal}</p><p>输入指纹：{run.inputHash}</p><p>明确引用 {run.scope.refs.length} 项 · 排除 {run.scope.excluded.length} 项 · AI 指令 {run.scope.instructions?.length||0} 项；均取保存的准确版本。</p>{run.scope.plan?.map(step=><p key={step.id}>{step.text}</p>)}</HaloDisclosure>
       {run.result&&<section aria-label="Agent返回结果" className="wb-execution-result"><h4>{adopted?'返回结果（采用回执已保存）':'返回结果（尚未写入材料或能力）'}</h4><CodeBlock code={run.result.answer} title="执行返回正文（未自动采用）"/>{run.result.citations?.length>0&&<section><h4>本次引用</h4>{run.result.citations.map((c,i)=><blockquote key={i}><small>{c.contextId}</small><p>{c.quote}</p></blockquote>)}</section>}{run.result.uncertainties?.length>0&&<section><h4>仍不确定</h4><ul>{run.result.uncertainties.map((u,i)=><li key={i}>{u}</li>)}</ul></section>}
+        {onFeedbackResult&&run.status==='succeeded'&&<button className="wb-button" disabled={Boolean(error)} onClick={()=>onFeedbackResult(run)}>记录这次结果的版本反馈</button>}
         <HaloField label="复核备注"><HaloTextarea aria-label="结果复核备注" value={note} onChange={e=>setNote(e.target.value)} rows={3}/></HaloField>
         <div className="wb-actions">{([['accepted','确认结果，仅保留在任务'],['needs_work','需要继续核对'],['rejected','不采用此结果']]as const).map(([decision,label])=><button key={decision} className="wb-button" disabled={busy||Boolean(adopted)||Boolean(error)} onClick={()=>action(()=>call('review',{runId:run.id,resultHash:run.resultHash,decision,note}))}>{label}</button>)}</div>
         {!adopted&&run.review&&<HaloNotice title="复核已保存" description={`${({accepted:'确认保留',needs_work:'需要继续核对',rejected:'不采用'}as any)[run.review.decision]}。复核本身不改写内容；逐项采纳记录见下方。`}/>} </section>}
@@ -84,11 +85,11 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
   </section>;
 }
 
-export function ThinkingExecution({session,client,executions}:{session:Thinking;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>}){
+export function ThinkingExecution({session,client,executions,onFeedbackResult}:{session:Thinking;client:WorkbenchClient;executions:ReturnType<typeof useAgentRuns>;onFeedbackResult?:(run:Run)=>void}){
  const [selected,setSelected]=useState(session.messages.at(-1)?.id||'');
  useEffect(()=>{setSelected(session.messages.at(-1)?.id||'');},[session.messages.length]);
  const message=session.messages.find(m=>m.id===selected);
  if(!message)return <p className="wb-muted">先留下问题或想法，再明确请AI回应；不会自动发送。</p>;
  const task={id:'thinking-'+session.id+'-'+message.id,title:session.title,goal:message.text,refs:session.refs,excluded:session.excluded,instructions:message.instructions||[],status:'prepared',destination:'Trace 内只读思考',results:[]}as Task;
- return <section aria-label="Trace 内真实AI"><label>回应哪段原话<HaloSelect aria-label="选择思考消息" value={selected} onValueChange={value=>setSelected(value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</HaloSelect></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} onCancelPreparation={()=>{}}/></section>;
+ return <section aria-label="Trace 内真实AI"><label>回应哪段原话<HaloSelect aria-label="选择思考消息" value={selected} onValueChange={value=>setSelected(value)}>{session.messages.map((m,i)=><option key={m.id} value={m.id}>第 {i+1} 段：{m.text.slice(0,55)}</option>)}</HaloSelect></label><TaskExecution key={task.id} task={task} client={client} executions={executions} thinking={{sessionId:session.id,messageId:message.id}} onFeedbackResult={onFeedbackResult} onCancelPreparation={()=>{}}/></section>;
 }

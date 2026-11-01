@@ -17,9 +17,9 @@ Operate：浅色中性内容工作台，石墨主操作。三大工作区为思�
 
 `src/react/ui/trace-ui.css` 负责新组件颜色/排版 token；`../../shared/ui-geometry.css` 是全站（含旧页面、介绍/视频及桌面悬浮界面）唯一几何数值所有者，4px网格及4/8/12/16/24px圆角，连续角渐进增强，药丸/圆形保留round。`src/react/ui/icon.tsx` 是 Lucide 映射。Radix 负责菜单、提示及 Tabs 行为，EasyUI 的已核源码按正文适配，不迁入其暗色主题、网站内容或 Motion/Tailwind 依赖。
 
-当前三工作区由 `src/react/workbench/workbench-app.tsx` 承接，找回/准确版本由 `workspace-search.tsx`／`capability-history.tsx` 实现，明确版本包由 `capability-sharing.tsx` 接同源Product命令。`library-workspace.tsx`及旧场景仅承接仍需兼容的旧入口，不能据它另起三工作区导航或恢复旧主题。`workbench-theme.css`、`workbench-typography.css`和`workbench-states.css`是当前工作台在共享令牌上的正式映射；未接通的语义/完整兼容与验收仍回唯一任务。
+当前三工作区由 `src/react/workbench/workbench-app.tsx` 承接，找回/准确版本由 `workspace-search.tsx`／`capability-history.tsx` 实现，明确版本包由 `capability-sharing.tsx` 接同源Product命令；`capability-feedback.tsx`在准确能力版本、讨论消息及准备/返回位置承接反馈，事实与解释分开、未知版本不自动绑定、比较后明确决定。`library-workspace.tsx`及旧场景仅承接仍需兼容的旧入口，不能据它另起三工作区导航或恢复旧主题。`workbench-theme.css`、`workbench-typography.css`和`workbench-states.css`是当前工作台在共享令牌上的正式映射；未接通的语义/完整兼容与验收仍回唯一任务。
 
-三工作区壳及 Infinite Canvas 真实交互已在正式代码和0.2.25安装范围中成立，完整W1—W7功能、所有旧对象兼容和最终替换仍未完成。旧 sage-green/Ambient Field、共享鸟、六动作导航及“五套原型分别权威”不再是新实现的设计约束；不能据旧页面恢复过时默认，也不能用本批版本包或某个组件宣告完整替换。源码Product`.7`与安装0.2.25的`.5`分开记录；不自动安装/迁移用户库。
+三工作区壳及 Infinite Canvas 真实交互已在正式代码和0.2.25安装范围中成立，完整W1—W7功能、所有旧对象兼容和最终替换仍未完成。旧 sage-green/Ambient Field、共享鸟、六动作导航及“五套原型分别权威”不再是新实现的设计约束；不能据旧页面恢复过时默认，也不能用本批版本包或某个组件宣告完整替换。源码Product`.8`与安装0.2.25的`.5`分开记录；不自动安装/迁移用户库。
 
 不引入第二主题、画布引擎或业务 owner。保留旧数据、深链、草稿和桌面桥，支持真实失败、焦点恢复、中文输入法与减少动效。`.impeccable` 旧派生缓存不能覆盖本文及项目正文；本轮不顺手修改其工具内部格式。
 
