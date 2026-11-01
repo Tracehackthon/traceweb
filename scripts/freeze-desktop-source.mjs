@@ -9,7 +9,7 @@ if(!process.argv[2]||!output.startsWith(path.join(root,'.test-results')+path.sep
 await fs.mkdir(output,{recursive:false})
 const dest=path.join(output,'traceweb');await fs.mkdir(dest)
 for(const rel of ['shared','scripts','vendor','apps/web/src','apps/web/public','apps/desktop-pet/src','apps/desktop-pet/build'])await fs.cp(path.join(root,rel),path.join(dest,rel),{recursive:true,errorOnExist:true,force:false})
-for(const rel of ['package.json','package-lock.json','apps/web/package.json','apps/web/index.html','apps/web/legacy.html','apps/web/vite.config.ts','apps/web/pdf-assets.mjs','apps/desktop-pet/package.json','apps/desktop-pet/package-lock.json','apps/desktop-pet/build.mjs','apps/desktop-pet/runtime-contract.json','apps/desktop-pet/README.md','apps/desktop-pet/cordis.patch.yml']){
+for(const rel of ['package.json','package-lock.json','apps/web/package.json','apps/web/server.mjs','apps/web/web-store.mjs','apps/web/tsconfig.json','apps/web/index.html','apps/web/legacy.html','apps/web/vite.config.ts','apps/web/pdf-assets.mjs','apps/desktop-pet/package.json','apps/desktop-pet/package-lock.json','apps/desktop-pet/build.mjs','apps/desktop-pet/runtime-contract.json','apps/desktop-pet/README.md','apps/desktop-pet/cordis.patch.yml']){
   await fs.mkdir(path.dirname(path.join(dest,rel)),{recursive:true});await fs.copyFile(path.join(root,rel),path.join(dest,rel))
 }
 const files=[]
