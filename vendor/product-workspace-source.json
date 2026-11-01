@@ -1,33 +1,29 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.10",
+  "version": "0.3.0-frontend.11",
   "recordedAt": "2026-11-01",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.10.tgz",
-    "sha256": "aab360d83c0d69bd0f75038c98528696dd147d6362a38c6e2b2b05f6f3c200f3",
-    "integrity": "sha512-M7Ak2K3vXONSr3HdhMblTnsAGZIRMA2JtgtF7NSoLJxbOuIIUEJz6/kKy2Kafj9VYAyyG+PwrEAy2ZKXG3i1ig=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.11.tgz",
+    "sha256": "61be84527840853380b9e9534daabc0a3f46d94e0644d6c445ce4f762389cd37",
+    "integrity": "sha512-swLuhOt+qXVlOxu6nNQlp33oMNQWinLXXHNfm9IoDqXri6OmMx5l3gNVNQuTJYm0NhzRGXGfdacOVHxSRYe8xg=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "5fd6d72406c0fcbc9b399d9467bfb493774f415c",
+    "head": "15ea1bb48b12b67dd2712b2ba67552d17ce9853a",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
-        "path": "package.json",
-        "sha256": "17fead137335a43ef66fcd6efe3d7f8b9b9e0ba8aaea19c859436b113bfd2979"
-      },
-      {
-        "path": "tsconfig.types.json",
-        "sha256": "d1e01e41c11f04c2a28e89a695ea6a7a483160aec10ca4971d2a8ac6d75bfc2e"
-      },
-      {
         "path": "README.md",
-        "sha256": "fb0817e7bf99bb912b7212f0cf79123f2f0d352de444c75347c9886858764c23"
+        "sha256": "47a448f5024f9f98703acfb504816540f90b6ca9b19ecc2a9a9c59b16527f799"
+      },
+      {
+        "path": "package.json",
+        "sha256": "1ad09baba663374a59f343f4e30c194acf96a6598772e8062d213b0ecbb80180"
       },
       {
         "path": "src/bridge.mjs",
@@ -51,7 +47,7 @@
       },
       {
         "path": "src/capability-packet-rules.mjs",
-        "sha256": "5d41fab07b37f4f8a229addf6e64a068840b57809c3bbb0a74ced92e21b116e3"
+        "sha256": "7198fe93d03b860681e98335f909f8050961ce71abed44d5c4543fc90aa9d14e"
       },
       {
         "path": "src/chain-model.mjs",
@@ -95,7 +91,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "74b916fe4c67b9195c55043ec86ac80aa087bac0db79560326644af05d2326de"
+        "sha256": "89675c5ef08b2d1e62e8c69e44e13398e3ac2b0ca6cd28660d5bb75c94de0201"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -104,6 +100,10 @@
       {
         "path": "src/workspace.mjs",
         "sha256": "59f6bb8da1b38e868b73b53bdbc1e31b59fbf46d882417f3e17e82f905be52ba"
+      },
+      {
+        "path": "tsconfig.types.json",
+        "sha256": "d1e01e41c11f04c2a28e89a695ea6a7a483160aec10ca4971d2a8ac6d75bfc2e"
       },
       {
         "path": "types/bridge.d.mts",
@@ -161,10 +161,10 @@
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
   "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
-  "revisionReason": "frontend.10 adds immutable per-message scopes and explicit prior-message selection, range-intersection exclusions and corresponding feedback provenance; current archive never overwrites frontend.9.",
+  "revisionReason": "frontend.11 adds typed attempt expressions, exact source refs and preserved relation revisions for explicit result writeback; no consumed archive is overwritten.",
   "supersedes": {
-    "version": "0.3.0-frontend.9",
-    "reason": "New optional message scope schema2 extension; old history remains readable, fresh actual execution must have explicit scope."
+    "version": "0.3.0-frontend.10",
+    "reason": "Additive content schema2 extension; old records stay readable, old strict readers are not rollback writers for new expression/relationship fields."
   },
   "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates."
 }

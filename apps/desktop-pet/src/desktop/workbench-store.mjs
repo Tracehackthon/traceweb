@@ -6,6 +6,14 @@ const RESPONSE_KIND = 'trace.native-product-response@1'
 const jsonLimit = 8 * 1024 * 1024
 const resourceLimit = 256 * 1024 * 1024
 
+function originalOperations(host,runId,answer,refs) {
+  const id='ai-'+runId,archive=host.expressions[id];
+  // These are provenance, not permission to use a now-disabled method again.
+  for(const ref of refs)resolveContentRef(host,ref);
+  if(archive){if(archive.author!=='agent'||archive.kind!=='note'||archive.version!==1||archive.versions[1].text!==answer)throw Error('AI原稿身份冲突，未覆盖。');return [];}
+  return [{type:'expression.create',id,kind:'note',title:'AI返回原稿（不可覆盖）',author:'agent',value:{text:answer,refs}}, {type:'expression.decide',id,expectedVersion:1,decision:'saved'}];
+}
+
 // One canonical SQLite owner for the new workspace. The legacy Runtime keeps
 // its original web.sqlite; no implicit conversion, dual writer or fallback.
 export function createDesktopWorkbench({file}) {
@@ -44,12 +52,16 @@ export function createDesktopWorkbench({file}) {
       if(Buffer.byteLength(JSON.stringify(result))>256*1024)throw Error('本讨论上下文超过256 KiB，请缩小引用范围。');
       return result;
     },
-    planAdoption({id,runId,answer,refs,target,expectedVersion,text,title}) {
-      const snapshot=workspace().read(),host=snapshot.host,operations=[],archiveId='ai-'+runId,archive=host.expressions[archiveId];
-      for(const ref of refs)resolveContentRef(host,ref,{forUse:true});
-      if(archive){if(archive.author!=='agent'||archive.versions[1].text!==answer)throw Error('AI原稿身份冲突，未覆盖。');}
-      else operations.push({type:'expression.create',id:archiveId,kind:'note',title:'AI返回原稿（不可覆盖）',author:'agent',value:{text:answer,refs}}, {type:'expression.decide',id:archiveId,expectedVersion:1,decision:'saved'});
-      const source={kind:'expression',id:archiveId,version:1};let targetRef;
+    archiveResult({runId,answer,refs}) {
+      const snapshot=workspace().read(),operations=originalOperations(snapshot.host,runId,answer,refs);
+      if(operations.length)workspace().execute({protocolVersion:1,commandId:'archive-'+runId,expectedRevision:snapshot.revision,operations});
+      return {source:{kind:'expression',id:'ai-'+runId,version:1},adopted:false};
+    },
+    planAdoption({id,runId,answer,refs,target,expectedVersion,text,title,sourceAnchor}) {
+      const snapshot=workspace().read(),host=snapshot.host,operations=originalOperations(host,runId,answer,refs);
+      const source={kind:'expression',id:'ai-'+runId,version:1,...(sourceAnchor?{anchor:sourceAnchor}:{})};let targetRef,relationRef;
+      const conflict=message=>{throw Object.assign(Error(message),{code:'CONTENT_CONFLICT'});};
+      const unique=items=>items.filter((r,i,a)=>a.findIndex(x=>stableWorkbenchJson(x)===stableWorkbenchJson(r))===i);
       if(target.kind==='material'){
         const material=host.materials[target.id];if(!material)throw Error('材料已不可用。');
         const materialRef={kind:'material',id:material.id,version:material.version},expressionId='adopted-'+material.id,item=host.expressions[expressionId];
@@ -60,13 +72,28 @@ export function createDesktopWorkbench({file}) {
         targetRef={kind:'expression',id:expressionId,version:expectedVersion+1};
       }else if(target.kind==='capability'){
         const item=host.capabilities[target.id];if(!item||item.version!==expectedVersion)throw Object.assign(Error('能力已有新版本，请重新读取并比较后再采纳。'),{code:'CONTENT_CONFLICT'});
+        if(['disabled','received'].includes(item.status))throw Error('目标能力未采用或已停用；没有自动恢复或修改它。');
         const value=structuredClone(item.versions[item.version]);value.steps=value.steps?value.steps+'\n\n'+text:text;value.refs=[...value.refs,source];
         if(value.stepItems)value.stepItems.push({id:'step-'+id,text,checked:false});
         operations.push({type:'capability.edit',id:item.id,expectedVersion,value,reason:'逐项复核采纳 '+runId});targetRef={kind:'capability',id:item.id,version:expectedVersion+1};
       }else if(target.kind==='new-capability'){
         const cid='cap-'+id;operations.push({type:'capability.create',id:cid,value:{title,purpose:'本次AI结果经用户逐项复核保留',scope:'尚未试用，需继续验证',steps:text,evidence:'来自已保存的AI原稿 '+runId,examples:'',refs:[source]}});targetRef={kind:'capability',id:cid,version:1};
-      }else throw Error('请选择材料摘记或能力草稿作为采纳位置。');
-      return {command:{protocolVersion:1,commandId:id,expectedRevision:snapshot.revision,operations},targetRef,source};
+      }else if(target.kind==='expression'){
+        const item=host.expressions[target.id];if(!item||item.version!==expectedVersion)conflict('这条表达已有新版本，请重新读取并比较后再写回。');
+        if(item.author!=='user'||item.kind==='ink'||!['append','replace'].includes(target.mode))throw Error('只能明确修订用户文字表达；AI原稿和手绘不会被覆盖。');
+        const old=item.versions[item.version],value={text:target.mode==='append'&&old.text?old.text+'\n\n'+text:text,refs:unique([...old.refs,source])};
+        operations.push({type:'expression.edit',id:item.id,expectedVersion,title,value});targetRef={kind:'expression',id:item.id,version:expectedVersion+1};
+      }else if(target.kind==='new-expression'||target.kind==='branch'){
+        if(expectedVersion!==0||!['note','question','understanding','attempt'].includes(target.expressionKind))throw Error('请明确新线索、问题、理解或尝试的类型。');
+        const eid='return-'+id;operations.push({type:'expression.create',id:eid,kind:target.expressionKind,title,author:'user',value:{text,refs:[source]}});targetRef={kind:'expression',id:eid,version:1};
+        if(target.kind==='branch'){
+          const rid='branch-'+id;operations.push({type:'relation.create',id:rid,from:target.from,to:targetRef,reason:'从这里另起旁支：'+title,evidence:'用户逐项核对的讨论内容',difference:target.difference||'',uncertainty:target.uncertainty||'',kind:'branch',author:'user',sources:[source]});relationRef={kind:'relation',id:rid,version:1};
+        }
+      }else if(target.kind==='relation'){
+        if(expectedVersion!==0)throw Error('新关系需要从尚未创建的基准开始。');
+        const rid='relation-'+id;operations.push({type:'relation.create',id:rid,from:target.from,to:target.to,reason:text,evidence:target.evidence,difference:target.difference,uncertainty:target.uncertainty,kind:target.relationKind,author:'user',sources:[source]});targetRef={kind:'relation',id:rid,version:1};
+      }else throw Error('请选择明确的写回位置。');
+      return {command:{protocolVersion:1,commandId:id,expectedRevision:snapshot.revision,operations},targetRef,source,...(relationRef?{relationRef}:{})};
     },
     execute(command){return workspace().execute(command)},
     configureFeedbackEvidenceResolver(resolver){workspace().configureFeedbackEvidenceResolver(resolver)},

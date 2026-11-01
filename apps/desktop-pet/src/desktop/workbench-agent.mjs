@@ -24,7 +24,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   db.prepare(`UPDATE attempts SET status='interrupted',finished=?,error='上次进程已退出。请核对项目现状后再明确重试；不会自动重跑。' WHERE status IN (${activeStates.map(()=>'?').join(',')})`).run(now(),...activeStates)
   let closed=false,active=null,loading=null
   const row=id=>db.prepare('SELECT * FROM attempts WHERE id=?').get(id)
-  const publicAdoption=r=>({id:r.id,itemId:r.item_id,decision:r.decision,status:r.status,plan:r.plan?{targetRef:JSON.parse(r.plan).targetRef,source:JSON.parse(r.plan).source,reviewedText:JSON.parse(r.plan).reviewedText}:null,receipt:r.receipt?JSON.parse(r.receipt):null,error:r.error,created:r.created})
+  const publicAdoption=r=>({id:r.id,itemId:r.item_id,decision:r.decision,status:r.status,plan:r.plan?{targetRef:JSON.parse(r.plan).targetRef,source:JSON.parse(r.plan).source,reviewedText:JSON.parse(r.plan).reviewedText,relationRef:JSON.parse(r.plan).relationRef}:null,receipt:r.receipt?JSON.parse(r.receipt):null,error:r.error,created:r.created})
   const storedReturn=r=>{
     guard(r&&r.result,'原始返回暂不可用，未使用另一结果替代。');
     const payload=JSON.parse(r.payload),result=JSON.parse(r.result);
@@ -120,7 +120,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     guard(r.status==='succeeded'&&r.result_hash===req.resultHash&&JSON.parse(r.review||'null')?.decision==='accepted','请先确认这份准确版本的返回结果，再逐项采纳。')
     storedReturn(r);
     const item=resultItems(JSON.parse(r.result).answer).find(x=>x.id===req.itemId);guard(item&&identity(req.requestId)&&['adopt','saved','rejected'].includes(req.decision),'采纳条目或请求身份不正确。')
-    const fingerprint=hash({runId:r.id,resultHash:req.resultHash,itemId:req.itemId,decision:req.decision,target:req.target,expectedVersion:req.expectedVersion,text:req.text,title:req.title}),known=db.prepare('SELECT * FROM adoptions WHERE request_key=?').get(req.requestId)
+    const fingerprint=hash({runId:r.id,resultHash:req.resultHash,itemId:req.itemId,decision:req.decision,target:req.target,expectedVersion:req.expectedVersion,text:req.text,title:req.title,...(req.selection?{selection:req.selection}:{})}),known=db.prepare('SELECT * FROM adoptions WHERE request_key=?').get(req.requestId)
     if(known){guard(known.fingerprint===fingerprint,'同一采纳请求不能更换内容或目标。');return known.status==='prepared'?applyAdoption(known):publicAdoption(known)}
     const prior=db.prepare('SELECT * FROM adoptions WHERE run_id=? AND item_id=? ORDER BY rowid DESC LIMIT 1').get(r.id,item.id)
     guard(!prior||prior.status!=='prepared','本项有尚未确认的写入，请先重试原采纳请求。')
@@ -128,8 +128,12 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     const id='adopt-'+randomUUID();let plan=null
     if(req.decision==='adopt'){
       guard(typeof req.text==='string'&&req.text.trim()&&req.text.length<=64000&&typeof req.title==='string'&&req.title.trim()&&req.title.length<=200&&Number.isSafeInteger(req.expectedVersion)&&req.expectedVersion>=0,'请核对要采纳的正文、标题和目标版本。')
+      let start=0,end=item.text.length;
+      if(req.selection){({start,end}=req.selection);const split=n=>n>0&&n<item.text.length&&/[\uD800-\uDBFF]/.test(item.text[n-1])&&/[\uDC00-\uDFFF]/.test(item.text[n]);guard(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>=0&&end>start&&end<=item.text.length&&!split(start)&&!split(end),'原稿选段超出范围或切断完整字符；没有写回。');}
+      const sourceAnchor=Number.isSafeInteger(item.start)?{type:'text',start:item.start+start,end:item.start+end}:undefined;
+      guard(!req.selection||sourceAnchor,'合并尾段无法证明全文中的准确位置，请保留完整原稿或选择前面的独立段落。');
       const refs=JSON.parse(r.payload).fragments.filter(f=>f.ref).map(f=>f.ref)
-      plan={...store.planAdoption({id,runId:r.id,answer:JSON.parse(r.result).answer,refs,target:req.target,expectedVersion:req.expectedVersion,text:req.text,title:req.title}),reviewedText:req.text}
+      plan={...store.planAdoption({id,runId:r.id,answer:JSON.parse(r.result).answer,refs,target:req.target,expectedVersion:req.expectedVersion,text:req.text,title:req.title,sourceAnchor}),reviewedText:req.text}
     }
     db.prepare('INSERT INTO adoptions(id,run_id,item_id,request_key,fingerprint,decision,status,plan,created) VALUES(?,?,?,?,?,?,?,?,?)').run(id,r.id,item.id,req.requestId,fingerprint,req.decision,plan?'prepared':'decided',plan?JSON.stringify(plan):null,now());notify()
     const a=db.prepare('SELECT * FROM adoptions WHERE id=?').get(id);return plan?applyAdoption(a):publicAdoption(a)
@@ -148,6 +152,11 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       if(req.operation==='workbench.agent.retry')return submit(req,true)
       const r=row(req.runId);guard(r,'没有这个运行记录。')
       if(req.operation==='workbench.agent.adopt')return adopt(req,r)
+      if(req.operation==='workbench.agent.archive'){
+        guard(r.status==='succeeded'&&r.result_hash===req.resultHash,'请先核对这份准确版本的真实返回。');
+        const {payload,result}=storedReturn(r),refs=payload.fragments.filter(f=>f.ref).map(f=>f.ref);
+        const receipt=store.archiveResult({runId:r.id,answer:result.answer,refs});notify();return receipt;
+      }
       if(req.operation==='workbench.agent.adoption.retry'){const a=db.prepare('SELECT * FROM adoptions WHERE id=? AND run_id=?').get(req.adoptionId,r.id);guard(a,'没有这份采纳请求。');return a.status==='committed'?publicAdoption(a):applyAdoption(a)}
       if(req.operation==='workbench.agent.cancel'){
         guard(activeStates.includes(r.status),'运行已结束，请复核已有结果。')

@@ -1,45 +1,72 @@
-import React,{useState,useSyncExternalStore} from 'react';
-import type {WorkbenchClient,ContentEntry} from './client';
+import React,{useLayoutEffect,useRef,useState,useSyncExternalStore} from 'react';
+import type {WorkbenchClient,ContentEntry,ContentRef,ContentHost} from './client';
 import type {Run} from './task-execution';
 import {resultItems} from '../../../../../shared/workbench-result-items.mjs';
 import {HaloNotice,HaloBadge,HaloSurface} from './halo-surfaces';
 import {Tabs} from 'radix-ui';
 import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
 import {HaloDisclosure} from './halo-disclosure';
+import {ReferencePicker} from './reference-picker';
+import {ReferenceViewer} from './reference-scope';
+import {useWritebackDraft,writebackEntry,writebackVersion,type WritebackDraft} from './writeback-draft';
 
 const call=(operation:string,body:any)=>(window as any).traceNative.requestCapability({operation:'workbench.agent.'+operation,...body});
-export function ResultAdoption({run,client,refresh}:{run:Run;client:WorkbenchClient;refresh:()=>Promise<void>}){
- const state=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot);
- return <section aria-label="逐项采纳" className="wb-result-adoption"><h4>逐项采纳</h4><p>按原稿段落核对，可修改本项采纳正文。材料原文不覆盖：写成关联摘记；能力追加方法并生成新草稿版本，不自动发布。AI原稿另存且不可覆盖。</p>{resultItems(run.result.answer).map(item=><AdoptionItem key={item.id} item={item} run={run} client={client} host={state.host} refresh={refresh}/>)}</section>;
+type Continuation={onOpen?:(ref:ContentRef)=>void;onPlace?:(ref:ContentRef,stillHere:()=>boolean)=>Promise<void>};
+const expressionLabels={note:'线索',question:'未决问题',understanding:'理解',attempt:'尝试'};
+const relationLabels={supplement:'补充',support:'支持',limit:'限定',challenge:'挑战',alternative:'另一种解释',branch:'旁支',unknown:'暂不定义'};
+const exportRaw=(raw:string)=>{const url=URL.createObjectURL(new Blob([raw],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='Trace-writeback-draft-recovery.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+export function ResultOriginal({run,client,onOpen}:Continuation&{run:Run;client:WorkbenchClient}){
+ const {host}=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot),archive=host?.expressions['ai-'+run.id];
+ const [busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState(false),[view,setView]=useState<ContentRef|null>(null),owner=useRef(false);
+ useLayoutEffect(()=>{owner.current=true;return()=>{owner.current=false;};},[]);
+ const save=async()=>{if(busy)return;setBusy(true);setNotice('');try{await call('archive',{runId:run.id,resultHash:run.resultHash});await client.load();if(owner.current){setError(false);setNotice('AI原稿已单独保留，尚未采用任何观点。');}}catch(e){if(owner.current){setError(true);setNotice(e.message||'原稿保存未确认；可明确重试，不会另建一份原稿。');}}finally{if(owner.current)setBusy(false);}};
+ const isArchived=archive?.author==='agent'&&archive.kind==='note'&&archive.version===1&&archive.versions[1]?.text===run.result.answer;
+ const reference:ContentRef={kind:'expression',id:'ai-'+run.id,version:1};
+ return <section aria-label="独立保留AI原稿"><p>原稿可单独保留为可引用线索，不必先采纳某一段，也不等于认可其中判断。</p><div className="wb-actions">{isArchived?<><HaloBadge>原稿已保留 · v1</HaloBadge><button className="wb-button" onClick={()=>setView(reference)}>核对已保存的原稿</button>{onOpen&&<button className="wb-button" onClick={()=>onOpen(reference)}>从原稿继续</button>}</>:<button className="wb-button" disabled={busy||Boolean(run.sourceError)||run.adoptions?.some(a=>a.status==='prepared')} aria-busy={busy} onClick={()=>void save()}>单独保留AI原稿（不采纳）</button>}</div>{(busy||notice)&&<HaloNotice pending={busy} tone={error?'error':busy?'neutral':'success'} title={busy?'正在保存原稿…':notice}/>} {view&&<ReferenceViewer client={client} reference={view} onClose={()=>setView(null)}/>}</section>;
 }
-function AdoptionItem({item,run,client,host,refresh}:any){
- const record=run.adoptions?.filter(a=>a.itemId===item.id).at(-1);
- const draftKey='trace-adoption:'+run.id+':'+item.id;let draft:any={};try{draft=JSON.parse(localStorage.getItem(draftKey)||'{}');}catch{}
- const [text,setText]=useState(record?.plan?.reviewedText||draft.text||item.text),[target,setTarget]=useState(draft.target||'new-capability'),[title,setTitle]=useState(draft.title||item.text.slice(0,40)),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const committed=record?.status==='committed',pending=record?.status==='prepared';
- const saveDraft=(patch:any)=>{try{localStorage.setItem(draftKey,JSON.stringify({text,target,title,...patch}));}catch{setError('采纳草稿未能落盘，请复制后再关闭。');}};
- const submit=async(decision:string)=>{if(busy)return;setBusy(true);setError('');try{
-   const [kind,id]=target.split(':');let expectedVersion=0;
-   if(kind==='material')expectedVersion=host.expressions['adopted-'+id]?.version||0;
-   if(kind==='capability')expectedVersion=host.capabilities[id]?.version||0;
-   await call('adopt',{runId:run.id,resultHash:run.resultHash,itemId:item.id,requestId:crypto.randomUUID(),decision,target:{kind,id},expectedVersion,text,title});
-   await refresh();await client.load();
- }catch(e){setError(e.message||'采纳未完成；本项正文保留。');}finally{setBusy(false);}};
- const retry=async()=>{setBusy(true);setError('');try{await call('adoption.retry',{runId:run.id,adoptionId:record.id});await refresh();await client.load();}catch(e){setError(e.message);}finally{setBusy(false);}};
- const targetRef=record?.plan?.targetRef,entry=targetRef&&(targetRef.kind==='capability'?host?.capabilities:host?.expressions)?.[targetRef.id];
- const [targetKind,targetId]=target.split(':'),previewEntry=targetKind==='material'?host?.expressions['adopted-'+targetId]:targetKind==='capability'?host?.capabilities[targetId]:null;
- const priorText=previewEntry?(targetKind==='material'?previewEntry.versions[previewEntry.version].text:previewEntry.versions[previewEntry.version].steps):'';
+export function ResultAdoption({run,client,refresh,onOpen,onPlace}:Continuation&{run:Run;client:WorkbenchClient;refresh:()=>Promise<void>}){
+ const state=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot);
+ return <section aria-label="逐项采纳" className="wb-result-adoption"><h4>逐项采纳</h4><p>先选择要保留的内容，再决定写到哪里。线索、问题、理解和尝试不必升级为能力；原稿与用户改写分开保存，未选的段落不自动写回。</p>{resultItems(run.result.answer).map(item=><AdoptionItem key={item.id} item={item} run={run} client={client} host={state.host} refresh={refresh} onOpen={onOpen} onPlace={onPlace}/>)}</section>;
+}
+function AdoptionItem({item,run,client,host,refresh,onOpen,onPlace}:Continuation&{item:any;run:Run;client:WorkbenchClient;host:ContentHost;refresh:()=>Promise<void>}){
+ const record=run.adoptions?.filter(a=>a.itemId===item.id).at(-1),draft=useWritebackDraft(run.id,item,host),d=draft.value;
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[editing,setEditing]=useState(true),[choosing,setChoosing]=useState<'from'|'to'|null>(null),[view,setView]=useState<ContentRef|null>(null),[selection,setSelection]=useState<{start:number;end:number}|null>(null);
+ const committed=record?.status==='committed',pending=record?.status==='prepared',entry=writebackEntry(host,d.target),base=d.baseVersion===null?null:entry?.versions[d.baseVersion],targetKind=d.target.split(':')[0];
+ const before=base?(targetKind==='capability'?base.steps||'':base.text||''):'',append=targetKind==='material'||targetKind==='capability'||targetKind==='expression'&&d.mode==='append',after=append&&before?before+'\n\n'+d.text:d.text;
+ const stale=d.baseVersion!==null&&['material','capability','expression'].includes(targetKind)&&writebackVersion(host,d.target)!==d.baseVersion;
+ const update=(patch:Partial<WritebackDraft>)=>{draft.update({...d,...patch});setError('');setNotice('');};
+ const target=(value:string)=>{const next=writebackEntry(host,value);update({target:value,baseVersion:writebackVersion(host,value),...(next?{title:next.title}:{})});};
+ const rebase=async()=>{if(!await client.load())return;const current=client.getSnapshot().host;if(!current)return;const version=writebackVersion(current,d.target);if(version===null){setError('目标已不可用；写回正文仍保留，请明确选择其它去向。');return;}if(draft.isCurrent()){update({baseVersion:version});setNotice('已明确将比较基准换为当前 v'+version+'；本地正文保留，尚未写回。');}};
+ const submit=async(decision:string)=>{if(busy||draft.blocked)return;setBusy(true);setError('');setNotice('');try{
+  const [kind,id]=d.target.split(':');if(decision==='adopt'&&(d.baseVersion===null||stale))throw Error('目标版本与已核对的基准不同；请明确比较后继续，未提交写回。');
+  const destination={kind,id,...(['new-expression','branch'].includes(kind)?{expressionKind:id}:{}),...(kind==='expression'?{mode:d.mode}:{}),...(['relation','branch'].includes(kind)?{from:d.from,to:d.to,relationKind:d.relationKind,evidence:d.evidence,difference:d.difference,uncertainty:d.uncertainty}:{})};
+  await call('adopt',{runId:run.id,resultHash:run.resultHash,itemId:item.id,requestId:crypto.randomUUID(),decision,target:destination,expectedVersion:d.baseVersion??0,text:d.text,title:d.title,...(d.selection?{selection:d.selection}:{})});await refresh();await client.load();
+ }catch(e){if(draft.isCurrent())setError(e.message||'写回未完成；本项正文和基准仍保留。');}finally{if(draft.isCurrent())setBusy(false);}};
+ const retry=async()=>{setBusy(true);setError('');try{await call('adoption.retry',{runId:run.id,adoptionId:record.id});await refresh();await client.load();}catch(e){if(draft.isCurrent())setError(e.message);}finally{if(draft.isCurrent())setBusy(false);}};
+ const targetRef=record?.plan?.targetRef,actual=targetRef&&(targetRef.kind==='relation'?host.relations[targetRef.id]:targetRef.kind==='capability'?host.capabilities[targetRef.id]:host.expressions[targetRef.id]);
+ const refLabel=(ref:ContentRef|null)=>{if(!ref)return'尚未选择';const item=({material:host.materials,expression:host.expressions,capability:host.capabilities}[ref.kind])[ref.id];return(item?.title||'来源不可用')+' · v'+ref.version;};
+ const requiredEndpoints=targetKind==='relation'?Boolean(d.from&&d.to):targetKind==='branch'?Boolean(d.from):true;
  return <article aria-label={item.id} className="wb-adoption-item" data-item-id={item.id} data-adoption-status={record?.status||'unreviewed'}>
-  <h5>原稿第 {item.id.replace('paragraph-','')} 段</h5><HaloDisclosure title="查看本项 AI 原稿"><p>{item.text}</p></HaloDisclosure>
-  {committed?<section className="wb-adopted-review" aria-label="已采纳正文"><h5>本项已采纳正文</h5><p tabIndex={0}>{record?.plan?.reviewedText||text}</p></section>:<HaloField label="本项采纳正文"><HaloTextarea aria-label="本项采纳正文" rows={4} value={text} readOnly={busy||pending} onChange={e=>{setText(e.target.value);saveDraft({text:e.target.value});}}/></HaloField>}
-  {!committed&&!pending&&<><HaloField label="采纳位置"><HaloSelect aria-label="采纳位置" disabled={busy} value={target} onValueChange={value=>{setTarget(value);saveDraft({target:value});}}><option value="new-capability">新建能力草稿</option>{Object.values(host?.materials||{}).map((m:any)=><option key={m.id} value={'material:'+m.id}>材料摘记：{m.title}</option>)}{Object.values(host?.capabilities||{}).filter((c:any)=>c.status!=='disabled').map((c:any)=><option key={c.id} value={'capability:'+c.id}>追加能力方法：{c.title} · v{c.version}</option>)}</HaloSelect></HaloField>{target==='new-capability'&&<HaloField label="能力草稿名称"><HaloInput aria-label="能力草稿名称" disabled={busy} maxLength={200} value={title} onChange={e=>{setTitle(e.target.value);saveDraft({title:e.target.value});}}/></HaloField>}
-  <HaloDisclosure title={<>预览本项写入效果 · 当前 v{previewEntry?.version||0}</>}><ResultVersionPreview before={priorText} after={priorText?priorText+'\n\n'+text:text} version={previewEntry?.version||0}/></HaloDisclosure>
-  <div className="wb-actions"><button className="wb-button wb-primary" disabled={busy||!text.trim()||!title.trim()} aria-busy={busy} onClick={()=>submit('adopt')}>{busy?'正在核对回执…':'确认采纳本项'}</button><button className="wb-button" disabled={busy} onClick={()=>submit('saved')}>仅保留本项</button><button className="wb-button" disabled={busy} onClick={()=>submit('rejected')}>不采纳本项</button></div></>}
-  {pending&&<><HaloNotice pending={busy} tone={busy?'neutral':'error'} title={busy?'正在核对原采纳请求…':error||record.error||'采纳尚未确认'} description="原请求已保存，重启后也能确认重试；不会另建一条内容。"/><button className="wb-button" disabled={busy} onClick={retry}>重试原采纳请求</button></>}
+  <h5>原稿第 {item.id.replace('paragraph-','')} 段</h5><HaloDisclosure title="查看本项 AI 原稿"><p>{item.text}</p>{!committed&&!pending&&Number.isSafeInteger(item.start)&&<><HaloTextarea aria-label="选择本项原稿局部" rows={4} readOnly value={item.text} onSelect={e=>{const el=e.currentTarget;setSelection(el.selectionEnd>el.selectionStart?{start:el.selectionStart,end:el.selectionEnd}:null);}}/><button type="button" className="wb-button" disabled={!selection||draft.blocked||busy} onClick={()=>{if(selection)update({selection,text:item.text.slice(selection.start,selection.end)});}}>用选中的原文作为本项草稿</button></>}</HaloDisclosure>
+  {draft.blocked&&<HaloNotice tone="warning" title="写回草稿需要恢复" description={draft.error} actions={<><button className="wb-button" onClick={()=>exportRaw(draft.raw||'')}>导出原始写回草稿</button><button className="wb-button" onClick={draft.restart}>明确重新开始本项草稿</button></>}/>}
+  {committed?<section className="wb-adopted-review" aria-label="已采纳正文"><h5>本项已采纳正文</h5><p tabIndex={0}>{record?.plan?.reviewedText||d.text}</p></section>:!editing?<button className="wb-button" onClick={()=>setEditing(true)}>继续这份写回草稿</button>:<HaloField label="本项采纳正文"><HaloTextarea aria-label="本项采纳正文" rows={4} value={d.text} readOnly={busy||pending||draft.blocked} onChange={e=>update({text:e.target.value})}/></HaloField>}
+  {!committed&&!pending&&editing&&<>
+   {d.selection&&<p>仅写回原稿本段字符 {d.selection.start}—{d.selection.end} 的选段及你的改写，全文仍保留。<button className="wb-button" disabled={busy||draft.blocked} onClick={()=>update({selection:null})}>恢复整段来源范围（不改草稿）</button></p>}
+   <HaloField label="采纳位置"><HaloSelect aria-label="采纳位置" disabled={busy||draft.blocked} value={d.target} onValueChange={target}>{Object.entries(expressionLabels).map(([kind,label])=><option key={kind} value={'new-expression:'+kind}>新建{label}</option>)}<option value="relation">形成两条内容之间的关系</option>{Object.entries(expressionLabels).map(([kind,label])=><option key={'branch'+kind} value={'branch:'+kind}>另起旁支 · {label}</option>)}{Object.values(host.expressions).filter(e=>e.author==='user'&&e.kind!=='ink').map(e=><option key={e.id} value={'expression:'+e.id}>修订表达：{e.title} · v{e.version}</option>)}{Object.values(host.materials).map(m=><option key={m.id} value={'material:'+m.id}>材料摘记：{m.title}</option>)}<option value="new-capability">新建能力草稿</option>{Object.values(host.capabilities).filter(c=>!['disabled','received'].includes(c.status)).map(c=><option key={c.id} value={'capability:'+c.id}>追加能力方法：{c.title} · v{c.version}</option>)}</HaloSelect></HaloField>
+   {targetKind!=='relation'&&<HaloField label={d.target==='new-capability'?'能力草稿名称':'写回内容名称'}><HaloInput aria-label={d.target==='new-capability'?'能力草稿名称':'写回内容名称'} disabled={busy||draft.blocked} maxLength={200} value={d.title} onChange={e=>update({title:e.target.value})}/></HaloField>}
+   {targetKind==='expression'&&<HaloField label="修订方式"><HaloSelect aria-label="修订方式" value={d.mode} disabled={busy||draft.blocked} onValueChange={mode=>update({mode:mode as 'append'|'replace'})}><option value="replace">作为这条表达的新版本（旧版保留）</option><option value="append">追加到已核对的正文之后</option></HaloSelect></HaloField>}
+   {['relation','branch'].includes(targetKind)&&<><div className="wb-actions"><button className="wb-button" disabled={busy||draft.blocked} onClick={()=>setChoosing('from')}>选择关系起点：{refLabel(d.from)}</button>{targetKind==='relation'&&<button className="wb-button" disabled={busy||draft.blocked} onClick={()=>setChoosing('to')}>选择关系终点：{refLabel(d.to)}</button>}</div>{targetKind==='relation'&&<><HaloField label="关系类型"><HaloSelect aria-label="关系类型" value={d.relationKind} disabled={busy||draft.blocked} onValueChange={relationKind=>update({relationKind})}>{Object.entries(relationLabels).map(([kind,label])=><option key={kind} value={kind}>{label}</option>)}</HaloSelect></HaloField><HaloField label="关系依据"><HaloTextarea aria-label="关系依据" disabled={busy||draft.blocked} value={d.evidence} onChange={e=>update({evidence:e.target.value})}/></HaloField></>}<HaloField label="差异与适用边界"><HaloTextarea aria-label="差异与适用边界" disabled={busy||draft.blocked} value={d.difference} onChange={e=>update({difference:e.target.value})}/></HaloField><HaloField label="仍不确定的地方"><HaloTextarea aria-label="仍不确定的地方" disabled={busy||draft.blocked} value={d.uncertainty} onChange={e=>update({uncertainty:e.target.value})}/></HaloField><p>明确确认后才保存语义{targetKind==='branch'?'旁支':'关系'}，不会把同框自动解释为关联；原稿只是来源，不是既有事实。</p></>}
+   <HaloDisclosure title={<>预览本项写入效果 · 已核对 v{d.baseVersion??'未知'}</>}><ResultVersionPreview before={before} after={after} version={d.baseVersion??0}/>{['relation','branch'].includes(targetKind)&&<p>{refLabel(d.from)} → {targetKind==='branch'?'新旁支内容':refLabel(d.to)}。依据、差异和不确定处分别保存。</p>}</HaloDisclosure>
+   {(stale||d.baseVersion===null)&&<HaloNotice tone="warning" title="写回基准需要重新比较" description="目标已经变化或旧草稿未保存基准。没有自动换成最新版，也没有覆盖正文。"/>}
+   <div className="wb-actions"><button className="wb-button wb-primary" disabled={busy||draft.blocked||stale||d.baseVersion===null||!requiredEndpoints||!d.text.trim()||!d.title.trim()} aria-busy={busy} onClick={()=>void submit('adopt')}>{busy?'正在核对回执…':'确认采纳本项'}</button><button className="wb-button" disabled={busy||draft.blocked} onClick={()=>void submit('saved')}>仅保留本项</button><button className="wb-button" disabled={busy||draft.blocked} onClick={()=>void submit('rejected')}>不采纳本项</button><button className="wb-button" disabled={busy} onClick={()=>setEditing(false)}>取消本次写回，保留草稿</button></div>
+  </>}
+  {pending&&<><HaloNotice pending={busy} tone={busy?'neutral':'error'} title={busy?'正在核对原采纳请求…':error||record.error||'采纳尚未确认'} description="原请求已保存，重启后也能确认重试；不会另建一条内容。"/><button className="wb-button" disabled={busy} onClick={()=>void retry()}>重试原采纳请求</button></>}
   {record?.status==='conflict'&&<HaloNotice tone="error" title={record.error} description="旧请求没有覆盖新版本。请重新读取、比较后再明确采纳。"/>}
   {record?.status==='decided'&&<p role="status">{record.decision==='saved'?'本项仅保留，未写入内容。':'本项不采纳，原稿仍保留。'}可以重新核对再决定。</p>}
-  {committed&&<><HaloNotice title={'已采纳到 '+(entry?.title||'内容')+' · v'+targetRef.version} description="原AI全文、原材料和旧版本都保留；再次点击不会重复写入。"/>{entry&&<AdoptedVersions entry={entry} host={host}/>}</>}
-  {error&&!pending&&!committed&&record?.status!=='conflict'&&<HaloNotice tone="error" title="本项采纳尚未确认" description={error}/>}<button className="wb-button" disabled={busy} onClick={()=>{void client.load();}}>重新读取目标版本</button>
+  {committed&&<><HaloNotice title={'已采纳到 '+(actual&&'title'in actual?actual.title:targetRef?.kind==='relation'?'关系':'内容')+' · v'+targetRef.version} description="原AI全文、原材料和旧版本都保留；再次点击不会重复写入。"/>{actual&&targetRef.kind!=='relation'&&<AdoptedVersions entry={actual as ContentEntry} host={host}/>}<div className="wb-actions"><button className="wb-button" onClick={()=>setView(record.plan.source)}>核对本项原稿来源</button>{targetRef.kind!=='relation'&&onOpen&&<button className="wb-button" onClick={()=>onOpen(targetRef)}>从这条内容继续</button>}{targetRef.kind!=='relation'&&onPlace&&<button className="wb-button" disabled={busy} onClick={async()=>{setBusy(true);try{await onPlace(targetRef,draft.isCurrent);}catch(e){if(draft.isCurrent())setError('内容已保存，画布放置未确认：'+e.message);}finally{if(draft.isCurrent())setBusy(false);}}}>放到当前画布并继续</button>}{targetRef.kind==='relation'&&actual&&onOpen&&<button className="wb-button" onClick={()=>onOpen((actual as any).from)}>查看这条关系的起点</button>}</div></>}
+  {error&&!pending&&<HaloNotice tone="error" title={committed?'内容已保存，后续操作未完成':'本项采纳尚未确认'} description={error}/>}{draft.error&&!draft.blocked&&<HaloNotice tone="warning" title="本地草稿需要保留" description={draft.error}/>} {notice&&<HaloNotice title={notice}/>}
+  {!committed&&!pending&&<button className="wb-button" disabled={busy||draft.blocked} onClick={()=>void rebase()}>重新读取目标版本</button>}
+  {choosing&&<ReferencePicker client={client} purpose="writeback" value={d.picker} onChange={picker=>update({picker})} attached={[]} onAttach={ref=>{update({[choosing]:ref});setChoosing(null);}} onClose={()=>setChoosing(null)}/>}{view&&<ReferenceViewer client={client} reference={view} onClose={()=>setView(null)}/>}
  </article>;
 }
 function ResultVersionPreview({before,after,version}:{before:string;after:string;version:number}){
