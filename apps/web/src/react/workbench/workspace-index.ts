@@ -38,8 +38,18 @@ export function indexWorkspace(host:ContentHost):SearchHit[]{
   return rows;
 }
 
+// Preview and navigation must use the same saved part, in the same order.
+// Header-only terms do not prevent a body match; terms split across different
+// bodies can match the record, but cannot claim an exact message destination.
+export function selectSearchPart(parts:string[],terms:string[]){
+  const bodies=parts.map(part=>part.toLocaleLowerCase()),unique=[...new Set(terms.map(term=>term.toLocaleLowerCase()).filter(Boolean))],bodyTerms=unique.filter(term=>bodies.some(body=>body.includes(term)));
+  let index=parts.length?0:-1,best=0;
+  bodies.forEach((body,at)=>{const score=bodyTerms.filter(term=>body.includes(term)).length;if(score>best){index=at;best=score;}});
+  return {index,hasMatch:best>0,dispersed:best>0&&best<bodyTerms.length};
+}
+
 export function previewSearchHit(parts:string[],terms:string[]):string{
-  const body=parts.find(part=>terms.some(term=>part.toLocaleLowerCase().includes(term)))||parts[0]||'没有已保存的正文';
+  const body=parts[selectSearchPart(parts,terms).index]||'没有已保存的正文';
   const at=terms.length?Math.max(0,body.toLocaleLowerCase().indexOf(terms.find(term=>body.toLocaleLowerCase().includes(term))||'')):0;
   // Work in Unicode characters: neither emoji nor supplementary CJK characters
   // are sliced into lone surrogate halves at the excerpt boundary.
