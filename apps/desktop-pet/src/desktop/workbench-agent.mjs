@@ -25,16 +25,27 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   let closed=false,active=null,loading=null
   const row=id=>db.prepare('SELECT * FROM attempts WHERE id=?').get(id)
   const publicAdoption=r=>({id:r.id,itemId:r.item_id,decision:r.decision,status:r.status,plan:r.plan?{targetRef:JSON.parse(r.plan).targetRef,source:JSON.parse(r.plan).source,reviewedText:JSON.parse(r.plan).reviewedText}:null,receipt:r.receipt?JSON.parse(r.receipt):null,error:r.error,created:r.created})
-  const publicRow=r=>r&&({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
-    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:r.result?JSON.parse(r.result):null,resultHash:r.result_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished})
-  // A saved return is evidence of this frozen scope, not of method effectiveness.
-  store.configureFeedbackEvidenceResolver?.(context=>{
-    guard(!closed,'运行库已关闭；反馈未提交。');const r=row(context.runId);
+  const storedReturn=r=>{
+    guard(r&&r.result,'原始返回暂不可用，未使用另一结果替代。');
+    const payload=JSON.parse(r.payload),result=JSON.parse(r.result);
+    guard(hash(payload)===r.input_hash&&hash(result)===r.result_hash,'运行原始记录完整性不一致，未读取或提交反馈。');
+    return {payload,result};
+  };
+  const presentation=r=>{if(!r.result&&r.status!=='succeeded')return {result:null,sourceError:''};try{return {result:storedReturn(r).result,sourceError:''};}catch{return {result:null,sourceError:'原始输入或返回不可用或完整性不一致；已存状态/回执仍保留，不将损坏正文当作已核验来源。'};}};
+  const publicRow=r=>{if(!r)return r;const checked=presentation(r);return ({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
+    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceError:checked.sourceError,resultHash:r.result_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
+  // Re-read the exact immutable source, both when recording and when viewing.
+  // A matching metadata hash alone cannot validate a damaged stored result.
+  const feedbackSource=context=>{
+    guard(!closed,'运行库已关闭；反馈来源未读取。');
+    guard(identity(context.runId)&&identity(context.taskId)&&/^[a-f0-9]{64}$/.test(context.inputHash)&&/^[a-f0-9]{64}$/.test(context.resultHash),'反馈来源身份不正确。');
+    const r=row(context.runId);
     guard(r&&r.status==='succeeded'&&r.task_id===context.taskId&&r.input_hash===context.inputHash&&r.result_hash===context.resultHash,'运行、输入或返回版本不一致；没有使用相似结果替代。');
-    const payload=JSON.parse(r.payload),result=JSON.parse(r.result);guard(hash(payload)===r.input_hash&&hash(result)===r.result_hash,'运行原始记录完整性不一致，未提交反馈。');
+    const {payload,result}=storedReturn(r);
     const refs=payload.fragments.filter(f=>f.ref).map(f=>f.ref).filter((r,i,a)=>a.findIndex(x=>JSON.stringify(x)===JSON.stringify(r))===i);
-    return {...context,verifiedAt:now(),refs,...(payload.kind==='thinking'?{sessionId:payload.sessionId,messageId:payload.messageId}:{})};
-  });
+    return {status:r.status,result,context:{kind:'native-result',runId:r.id,taskId:r.task_id,inputHash:r.input_hash,resultHash:r.result_hash,verifiedAt:now(),refs,...(payload.kind==='thinking'?{sessionId:payload.sessionId,messageId:payload.messageId}:{})}};
+  };
+  store.configureFeedbackEvidenceResolver?.(context=>feedbackSource(context).context);
   const notify=()=>{try{onChange()}catch{}}
   const update=(id,patch)=>{if(closed)return;const previous=row(id);if(patch.status&&patch.status!==previous.status){const events=JSON.parse(patch.events||previous.events);events.push({sequence:(events.at(-1)?.sequence||0)+1,type:'run.'+patch.status,at:now()});patch.events=JSON.stringify(events);if(!activeStates.includes(patch.status)){const runtime=JSON.parse(patch.runtime||previous.runtime);delete runtime.interaction;patch.runtime=JSON.stringify(runtime)}}const fields=Object.keys(patch);db.prepare(`UPDATE attempts SET ${fields.map(k=>k+'=?').join(',')} WHERE id=?`).run(...Object.values(patch),id);notify()}
   const latest=task=>db.prepare('SELECT * FROM attempts WHERE task_id=? ORDER BY number DESC LIMIT 1').get(task)
@@ -101,6 +112,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   }
   function adopt(req,r){
     guard(r.status==='succeeded'&&r.result_hash===req.resultHash&&JSON.parse(r.review||'null')?.decision==='accepted','请先确认这份准确版本的返回结果，再逐项采纳。')
+    storedReturn(r);
     const item=resultItems(JSON.parse(r.result).answer).find(x=>x.id===req.itemId);guard(item&&identity(req.requestId)&&['adopt','saved','rejected'].includes(req.decision),'采纳条目或请求身份不正确。')
     const fingerprint=hash({runId:r.id,resultHash:req.resultHash,itemId:req.itemId,decision:req.decision,target:req.target,expectedVersion:req.expectedVersion,text:req.text,title:req.title}),known=db.prepare('SELECT * FROM adoptions WHERE request_key=?').get(req.requestId)
     if(known){guard(known.fingerprint===fingerprint,'同一采纳请求不能更换内容或目标。');return known.status==='prepared'?applyAdoption(known):publicAdoption(known)}
@@ -122,6 +134,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       guard(!closed,'执行记录已关闭。')
       if(req.operation==='workbench.agent.status'){let cwd;try{cwd=project()}catch{}return {available:Boolean(getExecutable()),projectName:cwd?path.basename(cwd):null,projectSelected:Boolean(cwd)}}
       if(req.operation==='workbench.agent.check'){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),65000);try{return {ready:true,...await qualify(project(),controller.signal)}}finally{clearTimeout(timer)}}
+      if(req.operation==='workbench.agent.feedback.source')return feedbackSource(req)
       if(req.operation==='workbench.agent.list')return {items:db.prepare('SELECT * FROM attempts ORDER BY created').all().map(publicRow)}
       if(req.operation==='workbench.agent.submit')return submit(req)
       if(req.operation==='workbench.agent.think'){guard(identity(req.sessionId)&&identity(req.messageId),'讨论身份不正确。');return submit({...req,taskId:'thinking-'+req.sessionId+'-'+req.messageId,mode:'thinking'})}
@@ -148,6 +161,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       if(req.operation==='workbench.agent.review'){
         guard(req.decision==='accepted'||!db.prepare("SELECT id FROM adoptions WHERE run_id=? AND status IN ('prepared','committed') LIMIT 1").get(r.id),'已有采纳或待确认请求；复核不会撤回内容，请到内容版本继续处理。')
         guard(r.status==='succeeded'&&r.result_hash===req.resultHash&&['accepted','rejected','needs_work'].includes(req.decision)&&typeof req.note==='string'&&req.note.length<=8000,'复核目标、结果版本或内容不正确。')
+        if(req.decision==='accepted')storedReturn(r);
         update(r.id,{review:JSON.stringify({decision:req.decision,note:req.note,resultHash:r.result_hash,at:now()})});return publicRow(row(r.id))
       }
       throw Error('不支持这个执行操作。')
