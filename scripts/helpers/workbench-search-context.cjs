@@ -171,6 +171,12 @@ module.exports = async function ({ page, state, saved, check, capture, out, base
   await directory.getByRole('button', { name: '接续第 3 段原话', exact: true }).click(); await directory.waitFor({ state: 'detached' });
   await button('取消接续，保留当前草稿').waitFor();
   check('continuing a hit still asks before changing an occupied draft', await draft().inputValue() === originalDraft);
+  await button('取消接续，保留当前草稿').click();
+  await paint();await page.waitForTimeout(500);
+  check('cancelling an occupied-draft choice retains its explicit return to the original paragraph',await button('返回原话').count()===1&&await draft().inputValue()===originalDraft);
+  await button('返回原话').click();
+  check('editor return remains separate from the earlier search reading checkpoint',await page.locator('[data-reading-message="'+main.messages[2].id+'"]').count()===1&&await button('返回查找前的阅读位置').count()===1);
+  await page.locator('[data-reading-message="'+main.messages[2].id+'"]').getByRole('button',{name:'接着这段写',exact:true}).click();
   await button('把原话追加到当前草稿').click();
   if (await button('明确使用当前草稿范围').count()) await button('明确使用当前草稿范围').click();
   await button('留下这段思考').click(); await page.getByText('思考记录已保存', { exact: true }).waitFor(); await saved();
