@@ -20,8 +20,9 @@ export function useWritebackDraft(runId:string,item:{id:string;text:string},host
   throw Error('写回草稿格式无法识别；原始记录未覆盖。');
  }catch(e){return{value:empty(),raw,error:e.message||'写回草稿无法读取；没有覆盖原记录。'};}});
  const [value,setValue]=useState<WritebackDraft>(initial.value),[error,setError]=useState(initial.error),[blocked,setBlocked]=useState(Boolean(initial.error));
+ const current=useRef(value);current.current=value;
  const owner=useRef(false);useLayoutEffect(()=>{owner.current=true;return()=>{owner.current=false;};},[key]);
  const isCurrent=()=>owner.current;
- const write=(next:WritebackDraft)=>{if(!isCurrent())return;setValue(next);try{localStorage.setItem(key,JSON.stringify(next));setError('');}catch{setError('写回草稿暂未落盘；请先复制正文或导出，再关闭。');}};
- return {value,error,blocked,raw:initial.raw,isCurrent,update:(next:WritebackDraft)=>{if(!blocked)write(next);},restart:()=>{if(window.confirm('明确重新开始此项写回草稿？请先导出原记录；已保存原稿、内容和采纳回执不会删除。')){setBlocked(false);write(empty());}}};
+ const write=(next:WritebackDraft)=>{if(!isCurrent())return;current.current=next;setValue(next);try{localStorage.setItem(key,JSON.stringify(next));setError('');}catch{setError('写回草稿暂未落盘；请先复制正文或导出，再关闭。');}};
+ return {value,error,blocked,raw:initial.raw,isCurrent,latest:()=>current.current,update:(next:WritebackDraft)=>{if(!blocked)write(next);},restart:()=>{if(window.confirm('明确重新开始此项写回草稿？请先导出原记录；已保存原稿、内容和采纳回执不会删除。')){setBlocked(false);write(empty());}}};
 }

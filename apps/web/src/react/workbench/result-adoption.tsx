@@ -36,7 +36,15 @@ function AdoptionItem({item,run,client,host,refresh,onOpen,onPlace}:Continuation
  const stale=d.baseVersion!==null&&['material','capability','expression'].includes(targetKind)&&writebackVersion(host,d.target)!==d.baseVersion;
  const update=(patch:Partial<WritebackDraft>)=>{draft.update({...d,...patch});setError('');setNotice('');};
  const target=(value:string)=>{const next=writebackEntry(host,value);update({target:value,baseVersion:writebackVersion(host,value),...(next?{title:next.title}:{})});};
- const rebase=async()=>{if(!await client.load())return;const current=client.getSnapshot().host;if(!current)return;const version=writebackVersion(current,d.target);if(version===null){setError('目标已不可用；写回正文仍保留，请明确选择其它去向。');return;}if(draft.isCurrent()){update({baseVersion:version});setNotice('已明确将比较基准换为当前 v'+version+'；本地正文保留，尚未写回。');}};
+ const rebase=async()=>{
+  const selectedTarget=draft.latest().target;
+  if(!await client.load()||!draft.isCurrent())return;
+  const currentDraft=draft.latest(),currentHost=client.getSnapshot().host;if(!currentHost)return;
+  if(currentDraft.target!==selectedTarget){setNotice('已读取保存内容；草稿去向已改变，未修改当前写回基准。');return;}
+  const version=writebackVersion(currentHost,selectedTarget);
+  if(version===null){setError('目标已不可用；写回正文仍保留，请明确选择其它去向。');return;}
+  draft.update({...currentDraft,baseVersion:version});setError('');setNotice('已明确将比较基准换为当前 v'+version+'；本地正文保留，尚未写回。');
+ };
  const submit=async(decision:string)=>{if(busy||draft.blocked)return;setBusy(true);setError('');setNotice('');try{
   const [kind,id]=d.target.split(':');if(decision==='adopt'&&(d.baseVersion===null||stale))throw Error('目标版本与已核对的基准不同；请明确比较后继续，未提交写回。');
   const destination={kind,id,...(['new-expression','branch'].includes(kind)?{expressionKind:id}:{}),...(kind==='expression'?{mode:d.mode}:{}),...(['relation','branch'].includes(kind)?{from:d.from,to:d.to,relationKind:d.relationKind,evidence:d.evidence,difference:d.difference,uncertainty:d.uncertainty}:{})};
