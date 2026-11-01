@@ -59,6 +59,10 @@ export class WorkbenchClient {
   private urls = new Map<string, Promise<string>>();
   private id = 'canvas-main';
   private loadSequence=0;
+  // Only revision floors, not retained scenes or another layout database.
+  // A successful write to a non-current board still constrains later reads.
+  private canvasRevisions=new Map<string,number>();
+  private rememberCanvasRevision(document:CanvasDocument){this.canvasRevisions.set(document.id,Math.max(this.canvasRevisions.get(document.id)||0,document.revision));}
   constructor(){
     this.refreshRecovery();
     if(this.state.pending)this.state={...this.state,error:'上次操作尚未确认，可用原命令核对。'};
@@ -94,8 +98,14 @@ export class WorkbenchClient {
     try {
       const result = await jsonRequest('/api/product/workspace');
       if (result.host?.schemaVersion !== 2 && !(this.state.host && result.revision<this.state.revision)) { if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, loading: false, readError: null, host: null, legacy: result.host, revision: result.revision }); return true; }
-      const [layout, list] = await Promise.all([jsonRequest('/api/product/canvases/' + canvasId), jsonRequest('/api/product/canvases')]);
+      let [layout, list] = await Promise.all([jsonRequest('/api/product/canvases/' + canvasId), jsonRequest('/api/product/canvases')]);
       if(sequence!==this.loadSequence)return false;
+      const floor=this.canvasRevisions.get(canvasId)||0;
+      if(layout.document.revision<floor&&!(this.state.canvas?.id===canvasId&&this.state.canvas.revision>=floor)){
+        layout=await jsonRequest('/api/product/canvases/'+canvasId);
+        if(sequence!==this.loadSequence)return false;
+        if(layout.document.revision<(this.canvasRevisions.get(canvasId)||0))throw Error('这份画布读取早于刚确认的布局；原工作面仍保留，请重新读取。');
+      }
       // Content and layout have separate monotonic revisions. A read started
       // before a successful write may finish later; keep the newer accepted
       // snapshot without invalidating the requested canvas switch or loading.
@@ -103,7 +113,7 @@ export class WorkbenchClient {
       const canvas=currentCanvas?.id===canvasId&&currentCanvas.revision>layout.document.revision?currentCanvas:layout.document;
       const canvases=list.items.map(item=>item.id===canvas.id&&item.revision<canvas.revision?{id:canvas.id,title:canvas.title,revision:canvas.revision}:item);
       if(canvas.revision>0&&!canvases.some(item=>item.id===canvas.id))canvases.push({id:canvas.id,title:canvas.title,revision:canvas.revision});
-      this.id=canvasId;this.set({ready:true,loading:false,readError:null,...(newerContent?{host:result.host,legacy:null,revision:result.revision}:{}),features:Array.isArray(result.storage?.features)?result.storage.features:[],canvas,canvases});return true;
+      this.rememberCanvasRevision(canvas);this.id=canvasId;this.set({ready:true,loading:false,readError:null,...(newerContent?{host:result.host,legacy:null,revision:result.revision}:{}),features:Array.isArray(result.storage?.features)?result.storage.features:[],canvas,canvases});return true;
     } catch (error) {
       // A failed refresh is not a first load. Keep the mounted editors and
       // last verified document; do not acknowledge or clear a pending write.
@@ -146,7 +156,7 @@ export class WorkbenchClient {
       return{status:'committed'};
     }catch(error){if(error.code==='UNKNOWN_COMMAND'&&error.status===404)return{status:'absent'};return{status:'unknown',error:error.message||'原命令回执暂不可核对；没有推定保存或取消。'};}
   }
-  layout(scene?: CanvasScene, action: 'replace' | 'undo' | 'redo' | 'rename' = 'replace', title?: string, baseRevision=this.state.canvas?.revision,canvasId=this.id,owner?:string) { return this.enqueue(async () => { if (baseRevision===undefined) throw new Error('画布尚未读取。'); const result = await this.send('/api/product/canvases/' + canvasId + '/commands', { protocolVersion: 1, commandId: makeId('layout'), expectedRevision: baseRevision, action, ...(scene ? { scene } : {}), ...(title === undefined ? {} : { title }) },owner); if(this.id===canvasId&&(!this.state.canvas||result.document.revision>=this.state.canvas.revision))this.set({ canvas: result.document }); return result; }); }
+  layout(scene?: CanvasScene, action: 'replace' | 'undo' | 'redo' | 'rename' = 'replace', title?: string, baseRevision=this.state.canvas?.revision,canvasId=this.id,owner?:string) { return this.enqueue(async () => { if (baseRevision===undefined) throw new Error('画布尚未读取。'); const result = await this.send('/api/product/canvases/' + canvasId + '/commands', { protocolVersion: 1, commandId: makeId('layout'), expectedRevision: baseRevision, action, ...(scene ? { scene } : {}), ...(title === undefined ? {} : { title }) },owner); this.rememberCanvasRevision(result.document);if(this.id===canvasId&&(!this.state.canvas||result.document.revision>=this.state.canvas.revision))this.set({ canvas: result.document }); return result; }); }
   async prepare() { await this.command([{ type: 'workspace.upgrade' }]); await this.load(); if (this.state.canvas?.revision === 0) await this.layout(undefined, 'rename', '新的想法'); await this.load(); }
   retry(expected:PendingWrite){
     const frozen=structuredClone(expected);
