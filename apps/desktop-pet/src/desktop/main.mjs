@@ -43,6 +43,8 @@ let bundledRuntime
 const discussionWindows = new Set()
 let zhihuAuthWindow
 let interactiveBounds = []
+let overlayNativeRegion = false
+let overlayRegionSignature = ''
 let codexEventPollTimer
 let codexEventPollInFlight = false
 let runtimeHeartbeatFailures = 0
@@ -568,8 +570,12 @@ function showOverlay() {
     return
   }
   positionOverlay()
+  overlayNativeRegion = false
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
   overlayWindow.showInactive()
+  // Windows floating placement can drop behind normal windows when moved below the taskbar.
+  overlayWindow.setAlwaysOnTop(true, process.platform === 'win32' ? 'pop-up-menu' : 'floating')
+  applyOverlayInteractiveRegion()
 }
 
 function toggleOverlay() {
@@ -672,18 +678,24 @@ function createOverlayWindow() {
     },
   })
 
-  overlayWindow.setAlwaysOnTop(true, 'floating')
+  overlayWindow.setAlwaysOnTop(true, process.platform === 'win32' ? 'pop-up-menu' : 'floating')
   const ownedOverlay = overlayWindow
   ownedOverlay.once('closed', () => {
     if (overlayWindow !== ownedOverlay) return
     overlayWindow = undefined
     overlayReady = false
     interactiveBounds = []
+    overlayNativeRegion = false
+    overlayRegionSignature = ''
   })
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
+  // An empty setShape list restores a fullscreen rectangle, so never use it
+  // for the initial transparent surface before the renderer reports its UI.
+  if (process.platform === 'win32') ownedOverlay.setShape([{ x: 0, y: 0, width: 1, height: 1 }])
   overlayWindow.on('hide', () => {
     if (!ownedOverlay.isDestroyed()) ownedOverlay.setIgnoreMouseEvents(true, { forward: false })
+    if (overlayWindow === ownedOverlay) overlayNativeRegion = false
   })
   overlayWindow.webContents.on('did-start-loading', () => { overlayReady = false })
   overlayWindow.webContents.on('did-finish-load', () => {
@@ -931,8 +943,38 @@ function isLiveOverlaySender(event) {
   return !contents.isDestroyed() && event.sender === contents
 }
 
+function applyOverlayInteractiveRegion() {
+  if (quitting || !overlayWindow || overlayWindow.isDestroyed() || process.platform !== 'win32') return
+  const window = overlayWindow
+  const size = window.getContentBounds()
+  const zoom = window.webContents.getZoomFactor()
+  const rects = interactiveBounds.flatMap(rect => {
+    // CSS pixels become window-local DIP, never physical screen pixels. Keep
+    // the authored shadows/labels inside the native drawing/hit-test region.
+    const x = Math.max(0, Math.floor((rect.x - 20) * zoom))
+    const y = Math.max(0, Math.floor((rect.y - 20) * zoom))
+    const right = Math.min(size.width, Math.ceil((rect.x + rect.width + 20) * zoom))
+    const bottom = Math.min(size.height, Math.ceil((rect.y + rect.height + 20) * zoom))
+    return right > x && bottom > y ? [{ x, y, width: right - x, height: bottom - y }] : []
+  })
+  const shape = rects.length ? rects : [{ x: 0, y: 0, width: 1, height: 1 }]
+  const signature = JSON.stringify(shape)
+  if (signature !== overlayRegionSignature) {
+    window.setShape(shape)
+    overlayRegionSignature = signature
+  }
+  // Windows can now hit the visible pet without first receiving a forwarded
+  // mousemove. The native shape, not blur/mouseleave races, owns passthrough.
+  const enabled = rects.length > 0
+  if (enabled !== overlayNativeRegion) {
+    overlayNativeRegion = enabled
+    window.setIgnoreMouseEvents(!enabled, { forward: !enabled })
+  }
+}
+
 ipcMain.on('trace-native:set-ignore-mouse-events', (event, ignore) => {
   if (!isLiveOverlaySender(event) || typeof ignore !== 'boolean') return
+  if (process.platform === 'win32' && overlayNativeRegion) return
   overlayWindow.setIgnoreMouseEvents(ignore, { forward: ignore })
 })
 
@@ -944,6 +986,7 @@ ipcMain.on('trace-native:interactive-bounds', (event, payload) => {
     if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0 || width > 20_000 || height > 20_000) return []
     return [{ x, y, width, height }]
   })
+  applyOverlayInteractiveRegion()
 })
 
 ipcMain.on('trace-native:open-discussion', (event, url) => {
