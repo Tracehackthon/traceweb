@@ -1,3 +1,4 @@
+const readSinglePending=require('./workbench-pending-record.cjs');
 // Complete application journeys, UI-created records and authoritative owner
 // reads. No reducer/unit/component tests, user data, or real model calls.
 const {selectValue}=require('./select-control.cjs');
@@ -23,7 +24,7 @@ module.exports=async({page,state,saved,check,capture,out,windowSize,restartDeskt
   if(process.argv.includes('--search-scroll-only')){await nav('能力库').click();await scrollJourney();return;}
   if(process.argv.includes('--search-placement-only')){
     await button('写下第一点想法').click();await box('标题').fill('隔离搜索放置恢复');await box('我的表达').fill('原内容保持一份；同一个失败请求只应确认一次。');await button('保存修改').click();await saved();await button('关闭线索详情').click();const baseline=await state();
-    const pending=()=>page.evaluate(()=>localStorage.getItem('trace-workbench-pending:personal'));
+    const pending=()=>readSinglePending(page);
     const place=()=>rows().getByRole('button',{name:'放到画布：隔离搜索放置恢复',exact:true});
     const recovery=()=>dialog().getByRole('button',{name:'核对并重试原命令',exact:true});
     const failPlacement=async()=>{await search('隔离搜索放置恢复','expression');await injectLayoutFailure();await place().click();await page.waitForFunction(()=>document.querySelector('.wb-save-status')?.textContent.includes('保存尚未确认'));await recovery().waitFor();};

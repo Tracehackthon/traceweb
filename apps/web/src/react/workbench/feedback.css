@@ -9,6 +9,7 @@ html[data-trace-appearance] :is(.wb-shell,.wb-dialog) .wb-halo-notice[data-compa
 .wb-feedback-recovery>.wb-actions { padding:0!important;border:0!important; }
 .wb-feedback-recovery>.wb-halo-disclosure { margin:0; }
 .wb-feedback-detail { white-space:pre-wrap;overflow-wrap:anywhere; }
+.wb-feedback-command { max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:var(--wb-text-meta);line-height:var(--wb-leading-meta); }
 .wb-main:has(>.wb-feedback-global) { display:flex;flex-direction:column; }
 .wb-main:has(>.wb-feedback-global)>:is(.wb-canvas-layout,.wb-library-layout,.wb-collaboration,.wb-onboarding) { flex:1;min-height:0;height:auto; }
 .wb-feedback-global { position:relative;order:-1;flex:none;margin:12px 24px;max-height:36dvh;overflow:auto;padding:12px 16px;border-radius:12px;background:var(--trace-surface-panel);box-shadow:var(--trace-state-idle-shadow); }

@@ -1,3 +1,4 @@
+const readSinglePending=require('./workbench-pending-record.cjs');
 // Full formal UI and its actual IndexedDB/SQLite owner. All fixture content is
 // authored here; no simulated model response or provider execution is accepted.
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
@@ -172,7 +173,7 @@ module.exports = async ({page, state, saved, check, capture, out, windowSize, de
   // Save failure and newer local edits: the original persisted command, not the
   // latest picker selection, is retried by the existing single recovery owner.
   await injectContentFailure();await button('保存这条反馈').click();await button('核对并重试原命令').waitFor();
-  const pending=JSON.parse(await page.evaluate(()=>localStorage.getItem('trace-workbench-pending:personal')));
+  const pending=JSON.parse(await readSinglePending(page));
   const attachment=page.locator('.wb-feedback-attachments article').first();await attachment.getByRole('button',{name:'从反馈草稿移除，不删原件',exact:true}).click();
   await box('实际观察').fill('保存失败后继续编辑的观察，尚未提交。');await button('核对并重试原命令').click();await saved();
   await page.getByText('原请求已核对保存；后来编辑的草稿仍保留，尚未保存。',{exact:true}).waitFor();
@@ -228,8 +229,8 @@ module.exports = async ({page, state, saved, check, capture, out, windowSize, de
   await windowSize(1440,940);await page.emulateMedia({colorScheme:'light',reducedMotion:'no-preference'});await closeLatest();
   const recovery=feedback().getByRole('region',{name:'未确认操作恢复',exact:true});
   if(!await recovery.getByRole('button',{name:'保留本地草稿，读取当前版本',exact:true}).isVisible())await recovery.locator('summary').click();
-  await recovery.getByRole('button',{name:'保留本地草稿，读取当前版本',exact:true}).click();await recovery.waitFor({state:'detached'});
-  check('explicit authoritative reread resolves the rejected request without saving or losing the later reference draft',(await state()).product.revision===beforeInvalid.product.revision&&await page.evaluate(()=>localStorage.getItem('trace-workbench-pending:personal'))===null&&(await storedDraft()).value.picker.start==='1500'&&(await storedDraft()).value.value.refs[0].anchor.startMs===100);
+  const rejectedOriginal=await readSinglePending(page);await recovery.getByRole('button',{name:'保留本地草稿，读取当前版本',exact:true}).click();check('ordinary authoritative reread retains the exact rejected request',await readSinglePending(page)===rejectedOriginal);page.once('dialog',dialog=>dialog.accept());await recovery.getByRole('button',{name:'停止重试这份本地请求',exact:true}).click();await recovery.waitFor({state:'detached'});
+  check('explicit local stop after reread retains the later reference draft and does not save or cancel a server command',(await state()).product.revision===beforeInvalid.product.revision&&await readSinglePending(page)===null&&(await storedDraft()).value.picker.start==='1500'&&(await storedDraft()).value.value.refs[0].anchor.startMs===100);
   await closeLatest();
   fs.writeFileSync(path.join(out,'reference-final-state.json'),JSON.stringify({product:(await state()).product,media:media.map(m=>({id:m.id,kind:m.kind,source:m.versions[1].origin})),scope:'Real UI-created citations and feedback retrieval; no model execution, user database, packaged main or physical IME acceptance.'},null,2));
 };
