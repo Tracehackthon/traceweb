@@ -2,6 +2,7 @@
 // genuine-result fixture; this driver can never start an Agent/model operation.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {DatabaseSync}=require('node:sqlite');
+const {spawn}=require('node:child_process'),{once}=require('node:events');
 const {selectValue}=require('./select-control.cjs');
 const original=require('./workbench-feedback-source.cjs');
 
@@ -71,7 +72,17 @@ exports.run=async({page,state,saved,check,capture,out,desktop,app,source})=>{
   }else{
    const value=next.expressions[ref.id];check('typed or existing expression is the actual single versioned user object',value.author==='user'&&value.versions[ref.version].text===text&&(destination==='expression'?value.version===expression.version+1&&JSON.stringify(value.versions[expression.version])===JSON.stringify(expression.versions[expression.version]):value.kind===destination.split(':')[1]&&value.version===1)&&value.versions[ref.version].refs.some(r=>r.id===plan.source.id&&r.anchor));
    if(destination.startsWith('branch:'))check('branch records a real relationship without forcing a capability or task',plan.relationRef&&next.relations[plan.relationRef.id].kind==='branch'&&next.relations[plan.relationRef.id].from.id===material.id&&next.relations[plan.relationRef.id].to.id===ref.id&&JSON.stringify(next.tasks)===JSON.stringify(baseline.tasks));
-   await b(item,'放到当前画布并继续').click();await page.locator('.wb-inspector').waitFor();await saved();
+   if(process.env.TRACE_WRITEBACK_LAYOUT_FAILURE==='1'){
+    const prior=structuredClone(await state()),script=path.join(out,'hold-layout-write.cjs');fs.writeFileSync(script,"const{DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[2]);db.exec('BEGIN IMMEDIATE');console.log('LOCKED');process.stdin.once('data',()=>{db.exec('ROLLBACK');db.close();process.exit(0)});");
+    const writer=spawn(process.execPath,[script,path.join(out,'product.sqlite')],{stdio:['pipe','pipe','pipe'],windowsHide:true,env:{...process.env,TEMP:path.join(out,'tmp'),TMP:path.join(out,'tmp')}});let pending;
+    try{
+     await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Actual layout writer did not lock')),10000);writer.stdout.on('data',chunk=>{if(String(chunk).includes('LOCKED')){clearTimeout(timer);resolve();}});writer.once('error',reject);});await b(item,'放到当前画布并继续').click();await item.getByText('内容已保存，后续操作未完成',{exact:true}).waitFor();await page.getByRole('button',{name:'核对并重试原命令',exact:true}).waitFor();pending=await page.evaluate(()=>JSON.parse(localStorage.getItem('trace-workbench-pending:personal')));
+     const failed=await state();check('a real layout lock preserves the already-adopted content and exact failed layout command',JSON.stringify(failed.product)===JSON.stringify(prior.product)&&JSON.stringify(failed.canvases)===JSON.stringify(prior.canvases)&&/^\/api\/product\/canvases\/[^/]+\/commands$/.test(pending.path)&&pending.body.scene.nodes.some(n=>n.ref.id===ref.id&&n.ref.version===ref.version));fs.writeFileSync(path.join(out,'layout-failure-observation.json'),JSON.stringify({contentRevision:failed.product.revision,pending,bodyAlreadySaved:true},null,2));await capture('writeback-layout-lock-failure');
+    }finally{if(writer.exitCode===null&&!writer.signalCode){const ended=once(writer,'exit');writer.stdin.end('release');await ended;}}
+    await page.getByRole('button',{name:'核对并重试原命令',exact:true}).click();await saved();const retried=await state();check('only the original layout request is retried without another business write',JSON.stringify(retried.product)===JSON.stringify(prior.product)&&retried.canvases.flatMap(c=>c.nodes).filter(n=>n.ref?.kind===ref.kind&&n.ref.id===ref.id&&n.ref.version===ref.version).length===1&&await page.evaluate(()=>localStorage.getItem('trace-workbench-pending:personal'))===null);
+   }
+   const beforePlace=JSON.stringify((await state()).canvases);await b(item,'放到当前画布并继续').click();await page.locator('.wb-inspector').waitFor();await saved();
+   if(process.env.TRACE_WRITEBACK_LAYOUT_FAILURE==='1')check('continuing after recovered placement reuses the saved node instead of inserting it twice',JSON.stringify((await state()).canvases)===beforePlace);
    check('saved writeback is placed as an exact reference in the same Infinite Canvas, never a second body',(await state()).canvases.some(c=>c.nodes.some(n=>n.ref?.kind===ref.kind&&n.ref.id===ref.id&&n.ref.version===ref.version&&!JSON.stringify(n).includes(text))));
    await page.getByRole('button',{name:'围绕这条线索讨论',exact:true}).click();const sessions=(await host()).sessions,fresh=Object.values(sessions).find(s=>!baseline.sessions[s.id]);
    check('continue starts at the written object only, not automatic entire original graph or history',fresh&&fresh.refs.length===1&&fresh.refs[0].id===ref.id&&fresh.refs[0].version===ref.version&&fresh.messages.length===0);
