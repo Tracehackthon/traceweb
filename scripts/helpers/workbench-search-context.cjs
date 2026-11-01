@@ -127,7 +127,7 @@ module.exports = async function ({ page, state, saved, check, capture, out, base
   await capture('08-original-reading-restored');
   await openFind(); await setSearch('末尾星河');
   await contextGeometry('09-one-deep-result');
-  check('single occurrence disables redundant previous and next controls', await button('上一段匹配').isDisabled() && await button('下一段匹配').isDisabled());
+  check('single occurrence disables redundant previous and next controls', await button('上一处匹配').isDisabled() && await button('下一处匹配').isDisabled());
   await button('打开匹配段落目录').click();
   const directory = page.getByRole('dialog', { name: '讨论段落目录', exact: true });
   check('the matched directory preview shows the exact deep text', await textbox('查找目录原话').inputValue() === '末尾星河' && (await directory.locator('[data-list-item]').innerText()).includes('末尾星河'));

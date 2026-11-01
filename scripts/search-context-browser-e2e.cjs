@@ -8,6 +8,7 @@ const phase = path.join(root, '.test-results/workbench-search-context');
 const out = path.resolve(process.env.TRACE_E2E_OUTPUT_DIR || '');
 const dist = path.resolve(process.env.TRACE_E2E_DIST_DIR || '');
 assert(out.startsWith(phase + path.sep) && !fs.existsSync(path.join(out, 'report.json')));
+assert(!fs.existsSync(path.join(out,'profile')),'Use a fresh profile; never reuse a stale verification owner');
 assert(dist.startsWith(phase + path.sep) && fs.existsSync(path.join(dist, 'index.html')));
 fs.mkdirSync(path.join(out, 'tmp'), { recursive: true });
 for (const key of ['TEMP', 'TMP', 'TMPDIR']) process.env[key] = path.join(out, 'tmp');
@@ -39,7 +40,7 @@ const state = () => page.evaluate(async () => {
     const browserProcesses = await browserSession.send('SystemInfo.getProcessInfo');
     const browserVersion = await browserSession.send('Browser.getVersion');
     assert(browserProcesses.processInfo.some(process => process.type === 'browser' && process.id > 0), 'Own browser CDP returns authoritative process identity');
-    watch.rememberBrowserPids(browserProcesses.processInfo.map(process => process.id));
+    await watch.rememberBrowserPids(browserProcesses.processInfo.map(process => process.id));
     fs.writeFileSync(path.join(out, 'headless-process-identity.json'), JSON.stringify({ browserProcesses, browserVersion, launchProfile: profile, headless: true, identitySource: 'Browser-scoped CDP session obtained directly from the newly launched persistent context; no externally supplied endpoint' }, null, 2));
     page = context.pages()[0]; page.setDefaultTimeout(15000);
     page.on('pageerror', e => errors.push(e.message));

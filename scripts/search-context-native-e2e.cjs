@@ -10,10 +10,11 @@ const check=(name,value)=>{assert(value,name);checks.push(name);process.stdout.w
 const timeout=(promise,ms)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(Error('Bounded hidden capture unavailable')),ms))]);
 (async()=>{
  try{
-  native=await launchHiddenNative({exe,out,asarSha256:expected});
+  native=await launchHiddenNative({exe,out,asarSha256:expected,mainSha256:process.env.TRACE_EXPECTED_MAIN_SHA256});
   const page=native.page;page.setDefaultTimeout(12000);
   page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   const ready=page.locator('[data-workbench-ready=true]');
+  await page.waitForFunction(()=>document.querySelector('[data-workbench-ready=true]')||[...document.querySelectorAll('button')].some(button=>button.textContent==='开始画布'));
   const start=page.getByRole('button',{name:'开始画布',exact:true});if(await start.count())await start.click();await ready.waitFor();
   const state=async()=>({product:await page.evaluate(()=>window.traceNative.requestCapability({operation:'workbench.request',pathname:'/api/product/workspace',method:'GET'}))});
   const frame=await timeout(page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>resolve({frame:true,visibility:document.visibilityState})))),3000);

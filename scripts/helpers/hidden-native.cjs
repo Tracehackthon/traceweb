@@ -2,6 +2,7 @@
 // global-shortcut boundaries only; the packaged main, preload and stores stay real.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {spawn}=require('node:child_process');
+const {pathToFileURL}=require('node:url');
 const {chromium}=require('playwright');
 const {startForegroundWatch}=require('./foreground-watch.cjs');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -20,15 +21,19 @@ function visibilityGuard(config){
   if(!process.argv.includes('--user-data-dir='+config.profile))throw Error('Wrong profile argument');
   app.setPath('userData',config.profile);
   const guard=globalThis.__searchVisibilityGuard={nonce:config.nonce,pid:process.pid,profile:app.getPath('userData'),installedBeforeReady:!app.isReady(),attempts:[],violations:[],windows:[],originals:{}};
+  const blockedMethods={};
   for(const method of ['show','showInactive','focus','moveTop']){
     const original=BrowserWindow.prototype[method];if(typeof original!=='function')throw Error('No native method: '+method);
     guard.originals[method]=String(original);
     const blocked=function(){guard.attempts.push({method,id:this.isDestroyed()?null:this.id,at:Date.now()});};
     Object.defineProperty(BrowserWindow.prototype,method,{value:blocked,writable:false,configurable:false});
+    blockedMethods[method]=blocked;
     if(BrowserWindow.prototype[method]!==blocked)throw Error('Visibility method guard missing');
   }
   for(const method of ['register','registerAll'])Object.defineProperty(globalShortcut,method,{value:()=>{guard.attempts.push({method:'shortcut.'+method,at:Date.now()});return false;},writable:false,configurable:false});
   app.prependListener('browser-window-created',(_,window)=>{
+    // Instance methods must not shadow the sealed prototype boundary.
+    for(const [method,blocked] of Object.entries(blockedMethods)){Object.defineProperty(window,method,{value:blocked,writable:false,configurable:false});if(window[method]!==blocked)throw Error('Instance visibility guard missing: '+method);}
     window.setFocusable(false);window.webContents.setBackgroundThrottling(false);
     const setFocusable=window.setFocusable.bind(window);
     Object.defineProperty(window,'setFocusable',{value:value=>{if(value){guard.attempts.push({method:'setFocusable(true)',id:window.id,at:Date.now()});return;}return setFocusable(false);},writable:false,configurable:false});
@@ -40,46 +45,70 @@ function visibilityGuard(config){
   return{nonce:guard.nonce,pid:process.pid,profile:guard.profile,ready:app.isReady(),windowCount:BrowserWindow.getAllWindows().length,blockedMethods:Object.keys(guard.originals),beforeReady:guard.installedBeforeReady};
 }
 
-exports.launchHiddenNative=async function({exe,out,asarSha256}){
+exports.launchHiddenNative=async function({exe,out,asarSha256,mainSha256}){
   const asar=path.join(path.dirname(exe),'resources/app.asar');if(hash(asar)!==asarSha256)throw Error('Native ASAR differs');
+  if(!/^[0-9a-f]{64}$/.test(mainSha256||''))throw Error('Bind the exact packaged main before starting native validation');
+  const mainURL=pathToFileURL(path.join(asar,'lib/desktop/main.mjs')).href;
+  if(fs.existsSync(path.join(out,'profile')))throw Error('Native verification requires a fresh profile; never reactivate an old instance');
   for(const name of ['profile','project','tmp','appdata','localappdata'])fs.mkdirSync(path.join(out,name),{recursive:true});
   const profile=path.join(out,'profile'),nonce=crypto.randomUUID();
   const watch=await startForegroundWatch(out,profile);
-  let child,inspector,browser,ack,released=false,logs='';
+  let child,inspector,browser,ack,released=false,bootstrapReleased=false,logs='',spawnError,exited=false,browserSession;
   const write=()=>fs.writeFileSync(path.join(out,'native-bootstrap.log'),logs);
   const cleanup=async()=>{
+    // Never disconnect an unguarded paused debugger before terminating its owner:
+    // some debugger states resume when their last client disconnects.
+    if(child?.pid&&!exited&&!released){child.kill();await Promise.race([new Promise(resolve=>exited?resolve():child.once('exit',resolve)),delay(10000)]);if(!exited)throw Error('Paused self process still alive; keep debugger and observer attached');}
     if(inspector&&ack){await inspector.evaluate("require('electron').app.quit();true").catch(()=>{});}
     if(browser)await browser.close().catch(()=>{});
     inspector?.close();
-    if(child&&child.exitCode===null){await Promise.race([new Promise(resolve=>child.once('exit',resolve)),delay(6000)]);if(child.exitCode===null)child.kill();}
+    if(child?.pid&&!exited){await Promise.race([new Promise(resolve=>child.once('exit',resolve)),delay(6000)]);if(!exited){child.kill();await Promise.race([new Promise(resolve=>exited?resolve():child.once('exit',resolve)),delay(10000)]);if(!exited)throw Error('Own process still alive; observer deliberately left running');}}
     write();const foreground=await watch.stop();return foreground;
   };
   try{
-    child=spawn(exe,['--inspect-brk=127.0.0.1:0','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0','--user-data-dir='+profile],{windowsHide:true,cwd:path.dirname(exe),stdio:['ignore','pipe','pipe'],env:{...process.env,APPDATA:path.join(out,'appdata'),LOCALAPPDATA:path.join(out,'localappdata'),TEMP:path.join(out,'tmp'),TMP:path.join(out,'tmp'),TMPDIR:path.join(out,'tmp'),TRACE_AGENT_ENABLED:'0',TRACE_CLOUD_ORIGIN:'https://127.0.0.1:1',TRACE_PROJECT_DIR:path.join(out,'project'),TRACE_DESKTOP_INTEGRATIONS_FILE:path.join(out,'no-integrations.json')}});
-    watch.rememberNativePid(child.pid);
+    const env={...process.env,APPDATA:path.join(out,'appdata'),LOCALAPPDATA:path.join(out,'localappdata'),TEMP:path.join(out,'tmp'),TMP:path.join(out,'tmp'),TMPDIR:path.join(out,'tmp'),TRACE_AGENT_ENABLED:'0',TRACE_CLOUD_ORIGIN:'https://127.0.0.1:1',TRACE_PROJECT_DIR:path.join(out,'project'),TRACE_DESKTOP_INTEGRATIONS_FILE:path.join(out,'no-integrations.json')};
+    for(const key of ['NODE_OPTIONS','NODE_PATH','NODE_INSPECT_RESUME_ON_START','ELECTRON_RUN_AS_NODE','ELECTRON_NO_ASAR'])delete env[key];
+    child=spawn(exe,['--inspect-brk=127.0.0.1:0','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0','--user-data-dir='+profile],{windowsHide:true,cwd:path.dirname(exe),stdio:['ignore','pipe','pipe'],env});
+    child.on('error',error=>{spawnError=error;});
+    child.once('exit',()=>{exited=true;});
+    await watch.rememberNativePid(child.pid);
     const collect=chunk=>{logs+=String(chunk);write();};child.stdout.on('data',collect);child.stderr.on('data',collect);
-    let endpoint;for(let step=0;step<200;step++){endpoint=/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/.exec(logs)?.[1];if(endpoint)break;if(child.exitCode!==null)throw Error('Native exited before the debugger barrier');await delay(50);}
+    let endpoint;for(let step=0;step<200;step++){if(spawnError)throw spawnError;endpoint=/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/.exec(logs)?.[1];if(endpoint)break;if(child.exitCode!==null)throw Error('Native exited before the debugger barrier');await delay(50);}
     if(!endpoint)throw Error('No inspector barrier; never resume');
-    const socket=new WebSocket(endpoint);await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});inspector=new Inspector(socket);
+    const socket=new WebSocket(endpoint);await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{socket.close();reject(Error('Inspector WebSocket open timed out before release'));},8000);socket.addEventListener('open',()=>{clearTimeout(timer);resolve();},{once:true});socket.addEventListener('error',error=>{clearTimeout(timer);reject(error);},{once:true});});inspector=new Inspector(socket);
     await inspector.send('Runtime.enable');
-    // If Electron/require is unavailable at the barrier, this throws. There is no
-    // "resume once and retry" fallback: no product main may run without the ACK.
+    await inspector.send('Debugger.enable');
+    // inspect-brk has TWO barriers: the early Node wait cannot require Electron.
+    // Bootstrap and the statically reviewed, side-effect-free ESM imports may run
+    // until the first-code pause. Never resume an unexpected frame or exception.
+    const breakpoint=await inspector.send('Debugger.setBreakpointByUrl',{url:mainURL,lineNumber:17,columnNumber:0});
+    if(!breakpoint.breakpointId)throw Error('No exact entry breakpoint; never initialize bootstrap');
+    await inspector.send('Debugger.setPauseOnExceptions',{state:'all'});
+    await inspector.send('Runtime.runIfWaitingForDebugger');bootstrapReleased=true;
+    let pause;for(let step=0;step<200;step++){pause=inspector.events.find(event=>event.method==='Debugger.paused');if(pause)break;if(exited)throw Error('Native exited before entry pause');await delay(25);}
+    if(!pause)throw Error('No automatic first-code pause; terminate while debugger remains attached');
+    fs.writeFileSync(path.join(out,'automatic-entry-pause-raw.json'),JSON.stringify(pause,null,2));
+    const frame=pause.params.callFrames[0],parsed=inspector.events.find(event=>event.method==='Debugger.scriptParsed'&&event.params.scriptId===frame?.location?.scriptId)?.params;
+    const source=frame?await inspector.send('Debugger.getScriptSource',{scriptId:frame.location.scriptId}):null;
+    const entry={mainURL,actualURL:parsed?.url||frame?.url,line:frame?.location?.lineNumber,column:frame?.location?.columnNumber,reason:pause.params.reason,mainSha256:source?crypto.createHash('sha256').update(source.scriptSource).digest('hex'):null,breakpoint};
+    fs.writeFileSync(path.join(out,'automatic-entry-pause.json'),JSON.stringify(entry,null,2));
+    if(entry.actualURL!==mainURL||entry.mainSha256!==mainSha256||entry.line!==17)throw Error('Unexpected first-code pause; never resume');
     ack=await inspector.evaluate('('+visibilityGuard.toString()+')('+JSON.stringify({pid:child.pid,profile,nonce})+')');
-    if(ack?.nonce!==nonce||ack.pid!==child.pid||ack.profile!==profile||ack.ready!==false||ack.windowCount!==0||!ack.beforeReady||ack.blockedMethods.length!==4)throw Error('Pre-main visibility ACK invalid; never release');
-    fs.writeFileSync(path.join(out,'pre-main-guard-ack.json'),JSON.stringify({ack,asarSha256,guardSourceSha256:crypto.createHash('sha256').update(visibilityGuard.toString()).digest('hex')},null,2));
-    await inspector.send('Debugger.enable');await inspector.send('Runtime.runIfWaitingForDebugger');
-    for(let step=0;step<100;step++){if(inspector.events.some(event=>event.method==='Debugger.paused'))break;await delay(20);}
-    if(!inspector.events.some(event=>event.method==='Debugger.paused'))throw Error('No entry pause after guarded release; stop self process');
+    if(ack?.nonce!==nonce||ack.pid!==child.pid||ack.profile!==profile||ack.ready!==false||ack.windowCount!==0||!ack.beforeReady||ack.blockedMethods.length!==4)throw Error('Pre-main visibility ACK invalid; never resume');
+    fs.writeFileSync(path.join(out,'pre-main-guard-ack.json'),JSON.stringify({ack,entry,asarSha256,guardSourceSha256:crypto.createHash('sha256').update(visibilityGuard.toString()).digest('hex')},null,2));
     const confirmed=await inspector.evaluate('Boolean(globalThis.__searchVisibilityGuard?.nonce==='+JSON.stringify(nonce)+')');if(!confirmed)throw Error('Guard lost before entry resume');
+    await inspector.send('Debugger.setPauseOnExceptions',{state:'none'});
     await inspector.send('Debugger.resume');released=true;
     let chromeEndpoint;for(let step=0;step<300;step++){chromeEndpoint=/DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/.exec(logs)?.[1];if(chromeEndpoint)break;if(child.exitCode!==null)throw Error('Guarded native main exited');await delay(50);}
     if(!chromeEndpoint)throw Error('Guarded Chromium endpoint unavailable');
     browser=await chromium.connectOverCDP(chromeEndpoint,{timeout:15000});
+    browserSession=await browser.newBrowserCDPSession();
+    await watch.rememberBrowserPids((await browserSession.send('SystemInfo.getProcessInfo')).processInfo.map(process=>process.id));
     let page;for(let step=0;step<200;step++){page=browser.contexts().flatMap(context=>context.pages()).find(page=>page.url().startsWith('trace-app://'));if(page)break;await delay(50);}
     if(!page)throw Error('Actual packaged workbench did not open hidden');
     const identity=await inspector.evaluate("(()=>{const {app,BrowserWindow}=require('electron');return{pid:process.pid,version:app.getVersion(),packaged:app.isPackaged,appPath:app.getAppPath(),profile:app.getPath('userData'),windows:BrowserWindow.getAllWindows().map(w=>({id:w.id,visible:w.isVisible(),focused:w.isFocused(),focusable:w.isFocusable()}))}})()");
     if(!identity.packaged||identity.windows.some(window=>window.visible||window.focused||window.focusable))throw Error('Hidden native identity/visibility guard failed');
     fs.writeFileSync(path.join(out,'native-identity.json'),JSON.stringify({identity,asarSha256,releasedAfterAck:released},null,2));
-    return{page,browser,identity,inspector,async close(){const guard=await inspector.evaluate('globalThis.__searchVisibilityGuard');fs.writeFileSync(path.join(out,'visibility-guard-final.json'),JSON.stringify(guard,null,2));const foreground=await cleanup();if(guard.violations.length||!foreground.passed)throw Error('Native visibility/foreground boundary violated');return{guard,foreground};}};
-  }catch(error){fs.writeFileSync(path.join(out,'bootstrap-failure.json'),JSON.stringify({message:error.message,stack:error.stack,released,ack,pid:child?.pid},null,2));await cleanup().catch(cleanupError=>fs.writeFileSync(path.join(out,'cleanup-failure.txt'),cleanupError.stack));throw error;}
+    return{page,browser,identity,inspector,async close(){let guard,readError,foreground;try{await watch.rememberBrowserPids((await browserSession.send('SystemInfo.getProcessInfo')).processInfo.map(process=>process.id));guard=await inspector.evaluate('globalThis.__searchVisibilityGuard');fs.writeFileSync(path.join(out,'visibility-guard-final.json'),JSON.stringify(guard,null,2));}catch(error){readError=error;}finally{foreground=await cleanup();}if(readError)throw readError;if(guard.violations.length||!foreground.passed)throw Error('Native visibility/foreground boundary violated');return{guard,foreground};}};
+  }catch(error){fs.writeFileSync(path.join(out,'bootstrap-failure.json'),JSON.stringify({message:error.message,stack:error.stack,bootstrapReleased,productResumed:released,released,ack,pid:child?.pid},null,2));await cleanup().catch(cleanupError=>fs.writeFileSync(path.join(out,'cleanup-failure.txt'),cleanupError.stack));throw error;}
 };
