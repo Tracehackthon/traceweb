@@ -12,6 +12,8 @@ const timeout=(promise,ms)=>Promise.race([promise,new Promise((_,reject)=>setTim
  try{
   native=await launchHiddenNative({exe,out,asarSha256:expected,mainSha256:process.env.TRACE_EXPECTED_MAIN_SHA256});
   const page=native.page;page.setDefaultTimeout(12000);
+  // Renderer-only viewport override; never resizes, shows or focuses an OS window.
+  await page.setViewportSize({width:1440,height:940});
   page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   const ready=page.locator('[data-workbench-ready=true]');
   await page.waitForFunction(()=>document.querySelector('[data-workbench-ready=true]')||[...document.querySelectorAll('button')].some(button=>button.textContent==='开始画布'));

@@ -3,6 +3,8 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {spawn}=require('node:child_process');
 const {pathToFileURL}=require('node:url');
+const {createRequire}=require('node:module');
+const {extractFile}=createRequire(path.resolve(__dirname,'../../apps/desktop-pet/package.json'))('@electron/asar');
 const {chromium}=require('playwright');
 const {startForegroundWatch}=require('./foreground-watch.cjs');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -48,7 +50,12 @@ function visibilityGuard(config){
 exports.launchHiddenNative=async function({exe,out,asarSha256,mainSha256}){
   const asar=path.join(path.dirname(exe),'resources/app.asar');if(hash(asar)!==asarSha256)throw Error('Native ASAR differs');
   if(!/^[0-9a-f]{64}$/.test(mainSha256||''))throw Error('Bind the exact packaged main before starting native validation');
-  const mainURL=pathToFileURL(path.join(asar,'lib/desktop/main.mjs')).href;
+  if(crypto.createHash('sha256').update(extractFile(asar,path.join('lib','desktop','main.mjs'))).digest('hex')!==mainSha256)throw Error('Packaged main differs before any launch');
+  // Captured first-code pause in accepted029 is the side-effect-free leaf import,
+  // not main: only exported function declarations, before any product startup.
+  const entryURL=pathToFileURL(path.join(asar,'lib/desktop/runtime-readiness.mjs')).href;
+  const entrySha256='a02e812e272f1ffdf9ad0e7bb2b2710c04ffe5509c6da91cc5b0ef864b43b146';
+  if(crypto.createHash('sha256').update(extractFile(asar,path.join('lib','desktop','runtime-readiness.mjs'))).digest('hex')!==entrySha256)throw Error('Reviewed first-code leaf differs');
   if(fs.existsSync(path.join(out,'profile')))throw Error('Native verification requires a fresh profile; never reactivate an old instance');
   for(const name of ['profile','project','tmp','appdata','localappdata'])fs.mkdirSync(path.join(out,name),{recursive:true});
   const profile=path.join(out,'profile'),nonce=crypto.randomUUID();
@@ -81,7 +88,7 @@ exports.launchHiddenNative=async function({exe,out,asarSha256,mainSha256}){
     // inspect-brk has TWO barriers: the early Node wait cannot require Electron.
     // Bootstrap and the statically reviewed, side-effect-free ESM imports may run
     // until the first-code pause. Never resume an unexpected frame or exception.
-    const breakpoint=await inspector.send('Debugger.setBreakpointByUrl',{url:mainURL,lineNumber:17,columnNumber:0});
+    const breakpoint=await inspector.send('Debugger.setBreakpointByUrl',{url:entryURL,lineNumber:0,columnNumber:0});
     if(!breakpoint.breakpointId)throw Error('No exact entry breakpoint; never initialize bootstrap');
     await inspector.send('Debugger.setPauseOnExceptions',{state:'all'});
     await inspector.send('Runtime.runIfWaitingForDebugger');bootstrapReleased=true;
@@ -90,13 +97,15 @@ exports.launchHiddenNative=async function({exe,out,asarSha256,mainSha256}){
     fs.writeFileSync(path.join(out,'automatic-entry-pause-raw.json'),JSON.stringify(pause,null,2));
     const frame=pause.params.callFrames[0],parsed=inspector.events.find(event=>event.method==='Debugger.scriptParsed'&&event.params.scriptId===frame?.location?.scriptId)?.params;
     const source=frame?await inspector.send('Debugger.getScriptSource',{scriptId:frame.location.scriptId}):null;
-    const entry={mainURL,actualURL:parsed?.url||frame?.url,line:frame?.location?.lineNumber,column:frame?.location?.columnNumber,reason:pause.params.reason,mainSha256:source?crypto.createHash('sha256').update(source.scriptSource).digest('hex'):null,breakpoint};
+    const entry={entryURL,expectedEntrySha256:entrySha256,expectedMainSha256:mainSha256,actualURL:parsed?.url||frame?.url,line:frame?.location?.lineNumber,column:frame?.location?.columnNumber,reason:pause.params.reason,entrySha256:source?crypto.createHash('sha256').update(source.scriptSource).digest('hex'):null,breakpoint};
     fs.writeFileSync(path.join(out,'automatic-entry-pause.json'),JSON.stringify(entry,null,2));
-    if(entry.actualURL!==mainURL||entry.mainSha256!==mainSha256||entry.line!==17)throw Error('Unexpected first-code pause; never resume');
+    const entryReason=pause.params.reason==='Break on start'||pause.params.reason==='other'&&pause.params.hitBreakpoints?.includes(breakpoint.breakpointId);
+    if(!entryReason||entry.actualURL!==entryURL||entry.entrySha256!==entrySha256||entry.line!==0)throw Error('Unexpected first-code pause; never resume');
     ack=await inspector.evaluate('('+visibilityGuard.toString()+')('+JSON.stringify({pid:child.pid,profile,nonce})+')');
     if(ack?.nonce!==nonce||ack.pid!==child.pid||ack.profile!==profile||ack.ready!==false||ack.windowCount!==0||!ack.beforeReady||ack.blockedMethods.length!==4)throw Error('Pre-main visibility ACK invalid; never resume');
     fs.writeFileSync(path.join(out,'pre-main-guard-ack.json'),JSON.stringify({ack,entry,asarSha256,guardSourceSha256:crypto.createHash('sha256').update(visibilityGuard.toString()).digest('hex')},null,2));
     const confirmed=await inspector.evaluate('Boolean(globalThis.__searchVisibilityGuard?.nonce==='+JSON.stringify(nonce)+')');if(!confirmed)throw Error('Guard lost before entry resume');
+    await inspector.send('Debugger.removeBreakpoint',{breakpointId:breakpoint.breakpointId});
     await inspector.send('Debugger.setPauseOnExceptions',{state:'none'});
     await inspector.send('Debugger.resume');released=true;
     let chromeEndpoint;for(let step=0;step<300;step++){chromeEndpoint=/DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/.exec(logs)?.[1];if(chromeEndpoint)break;if(child.exitCode!==null)throw Error('Guarded native main exited');await delay(50);}
