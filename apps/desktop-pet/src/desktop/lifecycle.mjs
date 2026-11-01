@@ -35,6 +35,7 @@ export function createDesktopShutdownController({
   destroyTray,
   stopPolling,
   closeCapability,
+  flushStorage,
   closeRuntime,
   onStart,
   timeoutMs = 5_000,
@@ -48,6 +49,10 @@ export function createDesktopShutdownController({
       callSafely(() => onStart?.(reason))
       callSafely(stopPolling)
       callSafely(closeCapability)
+
+      // Renderer drafts are DOMStorage, not Runtime SQLite. Flush while their
+      // sessions/windows still exist, before destroying surfaces or app.exit.
+      await waitForCleanup(callSafely(flushStorage), timeoutMs)
 
       const windows = callSafely(listWindows) || []
       for (const window of windows) {

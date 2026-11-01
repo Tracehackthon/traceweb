@@ -96,6 +96,9 @@ await writeFile(resolve(desktopOutDir,'workbench-store-provenance.json'),JSON.st
 await build({
   absWorkingDir: root,
   entryPoints: ['src/desktop/renderer.tsx'],
+  // The desktop package and the shared Radix/Lucide imports must use one React
+  // dispatcher, even when both workspace roots have their own node_modules.
+  alias: { react: resolve(root, '../../node_modules/react'), 'react-dom': resolve(root, '../../node_modules/react-dom') },
   outfile: resolve(desktopOutDir, 'renderer.js'),
   bundle: true,
   format: 'iife',

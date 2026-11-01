@@ -65,6 +65,9 @@ const desktopLaunchIntent = launchIntent(process.argv)
 const shutdownController = createDesktopShutdownController({
   app,
   listWindows: () => BrowserWindow.getAllWindows(),
+  flushStorage: () => {
+    for (const active of new Set(BrowserWindow.getAllWindows().filter(window => !window.isDestroyed()).map(window => window.webContents.session))) active.flushStorageData()
+  },
   destroyTray: () => {
     if (tray && !tray.isDestroyed()) tray.destroy()
     tray = undefined
