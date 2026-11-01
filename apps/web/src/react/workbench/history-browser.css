@@ -1,0 +1,61 @@
+/* Browsing remains instant. Existing Halo surfaces own input, button, modal
+   motion and focus. No decorative movement on text or pagination. */
+.wb-records-browser { display:flex;flex-direction:column;gap:12px;min-height:0; }
+.wb-records-meta,.wb-history-paging,.wb-reading-actions,.wb-reading-message-header { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+.wb-records-meta>.wb-halo-control { width:136px;flex:none; }
+.wb-records-meta>span,.wb-history-paging>span,.wb-reading-count { font-size:12px;line-height:20px;font-variant-numeric:tabular-nums; }
+.wb-record-preview { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;font-size:13px;line-height:22px;color:var(--trace-text-secondary);font-weight:400; }
+.wb-records-browser .wb-list-row { align-items:flex-start; }
+.wb-records-browser .wb-list-row>svg { margin-top:calc((var(--wb-leading-body,24px) - var(--wb-action-icon,18px))/2); }
+.wb-records-browser .wb-list-row>span { flex:1; }
+.wb-records-count { display:flex;align-items:center;gap:8px;white-space:nowrap; }
+.wb-records-count>span { font-size:12px;line-height:20px;font-variant-numeric:tabular-nums; }
+.wb-collaboration>.wb-list-pane { display:flex;flex-direction:column; }
+.wb-collaboration>.wb-list-pane>.wb-records-browser { flex:1;margin-top:16px; }
+.wb-records-browser>div:has(>.wb-record-list) { min-height:0;flex:1; }
+.wb-records-browser .wb-record-list { max-height:100%;height:100%; }
+.wb-history-paging { flex-wrap:wrap; }
+.wb-history-paging>.wb-button { flex:1; }
+.wb-dialog[open]:has(.wb-records-browser) { display:flex;flex-direction:column;height:min(720px,calc(100dvh - 32px));overflow:hidden; }
+.wb-dialog:has(.wb-records-browser)>header { flex:none; }
+.wb-collection-modal:has(.wb-records-browser) { display:flex;flex-direction:column;min-height:0;flex:1; }
+.wb-collection-modal:has(.wb-records-browser)>.wb-list-pane { display:flex;flex-direction:column;min-height:0;flex:1; }
+.wb-collection-modal .wb-records-browser { min-height:0;flex:1;margin-top:16px; }
+.wb-collection-modal:has(.wb-records-browser)>.wb-collection-create { flex:none; }
+.wb-discussion-browser { min-width:0; }
+.wb-discussion-toolbar { position:sticky;top:calc(0px - var(--wb-pane-gutter));z-index:3;display:grid;gap:8px;padding:12px;background:var(--trace-surface-panel);border-radius:var(--trace-radius-control);box-shadow:var(--trace-shadow-menu); }
+.wb-reading-actions { flex-wrap:wrap; }
+.wb-reading-actions>div { display:flex;align-items:center;flex-wrap:wrap;gap:8px; }
+.wb-reading-actions .wb-history-paging>.wb-button { flex:none; }
+.wb-discussion-browser>.wb-messages { width:100%;max-width:var(--wb-reading-measure); }
+.wb-reading-message-header { flex-wrap:wrap;margin-bottom:12px; }
+.wb-reading-message-header>span { font-size:13px;line-height:20px;font-weight:500; }
+.wb-discussion-editor { outline:none; }
+.wb-discussion-editor>p { margin-block:0 12px; }
+.wb-discussion-directory { display:grid;gap:16px; }
+.wb-discussion-directory>p { margin:0; }
+.wb-discussion-directory>.wb-item-list { max-height:42dvh; }
+.wb-reading-matches>span { font-size:12px;line-height:20px; }
+@media(max-width:767px){
+  .wb-discussion-toolbar { padding:8px; }
+  .wb-reading-actions>div { width:100%; }
+  .wb-reading-actions>div>.wb-button { flex:1; }
+  .wb-reading-actions .wb-history-paging { display:grid;grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media(forced-colors:active){.wb-discussion-toolbar{box-shadow:none;border:1px solid CanvasText;}}
+
+.wb-reading-top { display:grid;grid-template-columns:minmax(0,1fr) auto; }
+.wb-reading-top>div { flex-wrap:nowrap; }
+@media(max-width:767px){.wb-reading-top>div{width:auto}.wb-reading-top>div>.wb-button{flex:none}}
+
+html[data-trace-appearance] .wb-shell .wb-discussion-toolbar .wb-button { padding-inline:8px; }
+@media(max-width:767px){.wb-reading-actions .wb-history-paging:has(.wb-reading-return){grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+.wb-thinking-pane:has(.wb-discussion-browser) { scroll-padding-top:calc(var(--wb-reading-toolbar-height,0px) + 8px); }
+[data-reading-message] { scroll-margin-top:8px; }
+.wb-history-mark { background:var(--teal-3);color:inherit;border-radius:3px; }
+@media(forced-colors:active){.wb-history-mark{background:Highlight;color:HighlightText}}
+
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(.wb-records-browser,.wb-discussion-toolbar,.wb-discussion-directory) .wb-halo-search>input:focus-visible { outline:none;box-shadow:none; }
+.wb-collaboration .wb-halo-segmented>button { flex:1 1 auto;white-space:nowrap; }
+.wb-collaboration .wb-halo-segment-count { flex:none; }
