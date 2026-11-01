@@ -826,7 +826,7 @@ export function createRuntimeCapabilityClient({
       try {
         const value = JSON.parse(text)
         if (value && typeof value === 'object' && value.storage && typeof value.storage === 'object') {
-          value.storage = { kind: value.storage.kind || 'sqlite', label: 'Trace 桌面端本机空间' }
+          value.storage = { kind: value.storage.kind || 'sqlite', label: 'Trace 桌面端本机空间', features: Array.isArray(value.storage.features) ? value.storage.features.filter(feature=>feature==='capability-packet-v1') : [] }
         }
         text = JSON.stringify(value)
       } catch {
@@ -918,7 +918,7 @@ export function createRuntimeCapabilityClient({
       const text=await response.text();if(Buffer.byteLength(text)>8*1024*1024)throw new Error('工作台响应超过8 MiB')
       let value;try{value=JSON.parse(text)}catch{throw new Error('工作台响应不是有效JSON')}
       if(!response.ok)return{kind:NATIVE_PRODUCT_RESPONSE_KIND,ok:false,status:response.status,error:value.error}
-      if(value.storage)value.storage={kind:value.storage.kind||'sqlite',label:'Trace 桌面端本机空间'}
+      if(value.storage)value.storage={kind:value.storage.kind||'sqlite',label:'Trace 桌面端本机空间',features:Array.isArray(value.storage.features)?value.storage.features.filter(feature=>feature==='capability-packet-v1'):[]}
       return value
     }
     if (request.operation === 'product.resource.save' || request.operation === 'product.resource.read') {

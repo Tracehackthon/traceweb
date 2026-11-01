@@ -1,8 +1,8 @@
 // The same Product rules as SQLite, with an explicit IDB v2 upgrade and Blob
 // records. No model call, second content store, or base64 business snapshot.
-import {applyProductOperations,validateProductCommand,validateWorkbench,validResourceDescriptor,stableWorkbenchJson,emptyCanvas,applyCanvasCommand,validateCanvasCommand,validateCanvasDocument,resolveContentRef,freezeCanvasContentRef} from '@trace/product-workspace';
+import {applyProductOperations,validateProductCommand,validateWorkbench,decodeCapabilityPacket,validResourceDescriptor,stableWorkbenchJson,emptyCanvas,applyCanvasCommand,validateCanvasCommand,validateCanvasDocument,resolveContentRef,freezeCanvasContentRef} from '@trace/product-workspace';
 const database=location.pathname.startsWith('/app/demo')?'trace-web-complete-demo-v3':'trace-portal-workspace-v1';
-const info={kind:'indexeddb',mode:'workbench',location:'当前浏览器 · 原件与布局独立保存'};
+const info={kind:'indexeddb',mode:'workbench',features:['capability-packet-v1'],location:'当前浏览器 · 原件与布局独立保存'};
 const failure=(code,message,status=422)=>Object.assign(new Error(message),{code,status});
 const get=request=>new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
 const sha=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
@@ -17,13 +17,13 @@ export async function browserProductCommand(command){
   // would let IndexedDB auto-commit. Preflight bytes, then atomically compare
   // descriptors again. A known receipt remains replayable if a source is lost.
   const prior=await transaction(['commands'],'readonly',tx=>get(tx.objectStore('commands').get(command.commandId)));
-  if(!prior){const ids=[...new Set(command.operations.flatMap(op=>op.type==='resource.register'?[op.resource.id]:op.type==='material.create'&&op.value.resourceId?[op.value.resourceId]:[]))];for(const id of ids)await readBrowserResource(id);}
+  if(!prior){const ids=[...new Set(command.operations.flatMap(op=>op.type==='resource.register'?[op.resource.id]:op.type==='material.create'&&op.value.resourceId?[op.value.resourceId]:op.type==='capability.package.receive'?[op.packetResourceId,...op.manifest.resources.map(r=>r.id)]:op.type==='capability.package.export'?[op.packetResourceId]:[]))];for(const id of ids)await readBrowserResource(id);for(const op of command.operations)if(op.type==='capability.package.export'||op.type==='capability.package.receive'){const row=await readBrowserResource(op.packetResourceId),packet=await decodeCapabilityPacket(row.blob);if(stableWorkbenchJson(packet.manifest)!==stableWorkbenchJson(op.manifest))throw failure('PACKET_CONTENT_CONFLICT','命令说明与版本包原件不一致，未提交。',409);}}
   return transaction(['workspace','commands','resources'],'readwrite',async tx=>{
     const workspaces=tx.objectStore('workspace'),commands=tx.objectStore('commands'),resources=tx.objectStore('resources');
     const [row,known]=await Promise.all([get(workspaces.get('current')),get(commands.get(command.commandId))]);const saved=snapshot(row);
     if(known){if(known.fingerprint!==fingerprint)throw failure('COMMAND_CONFLICT','同一命令ID不能包含不同操作。',409);if(!known.host||!known.receipt)throw failure('COMMAND_CONFLICT','该命令ID已用于旧版保存。',409);return{revision:known.revision,host:known.host,receipt:known.receipt,headRevision:saved.revision,storage:info};}
     if(saved.revision!==command.expectedRevision)throw failure('REVISION_CONFLICT','另一窗口已有更新；草稿没有覆盖保存。',409);
-    const host=applyProductOperations(saved.host,command.operations),ids=command.operations.flatMap(op=>op.type==='resource.register'?[op.resource.id]:op.type==='material.create'&&op.value.resourceId?[op.value.resourceId]:[]);
+    const host=applyProductOperations(saved.host,command.operations),ids=command.operations.flatMap(op=>op.type==='resource.register'?[op.resource.id]:op.type==='material.create'&&op.value.resourceId?[op.value.resourceId]:op.type==='capability.package.receive'?[op.packetResourceId,...op.manifest.resources.map(r=>r.id)]:op.type==='capability.package.export'?[op.packetResourceId]:[]);
     const originalResources=await Promise.all(ids.map(id=>get(resources.get(id))));for(let i=0;i<ids.length;i++)if(!originalResources[i]||stableWorkbenchJson(originalResources[i].resource)!==stableWorkbenchJson(host.resources[ids[i]]))throw failure('RESOURCE_UNAVAILABLE','原件没有完整保存或元信息不一致。',409);
     const revision=saved.revision+1,receipt={protocolVersion:1,receiptId:'product:'+command.commandId,commandId:command.commandId,status:'committed',beforeRevision:saved.revision,afterRevision:revision,requestHash:fingerprint.slice('product-v1:'.length),hostDelivery:'not_requested'};
     workspaces.put({schemaVersion:1,revision,host},'current');commands.put({fingerprint,revision,host:structuredClone(host),receipt},command.commandId);return{revision,host,receipt,headRevision:revision,storage:info};

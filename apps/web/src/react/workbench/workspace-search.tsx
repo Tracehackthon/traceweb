@@ -14,7 +14,7 @@ export interface SearchHit {key:string;group:Exclude<SearchGroup,'all'>;title:st
 const groups:{value:SearchGroup;label:string}[]=[{value:'all',label:'全部工作区'},{value:'material',label:'材料'},{value:'expression',label:'我的表达与 AI 原稿'},{value:'capability',label:'能力'},{value:'thinking',label:'共同思考'},{value:'task',label:'外部任务'}];
 const materialLabels:Record<string,string>={text:'文字材料',dialogue:'对话片段',code:'代码',image:'图片',video:'视频片段',audio:'音频',pdf:'PDF 局部',web:'网页摘录',ink:'手绘'};
 const expressionLabels:Record<string,string>={note:'我的表达',annotation:'我的摘记',question:'未决问题',understanding:'当前理解',ink:'手绘'};
-const statusLabels:Record<string,string>={pending:'待采用的 AI 原稿',accepted:'已采用',saved:'暂存',rejected:'已拒绝',disabled:'已停用',draft:'草稿',published:'个人库已发布',trial:'试用准备'};
+const statusLabels:Record<string,string>={pending:'待采用的 AI 原稿',accepted:'已采用',saved:'暂存',rejected:'已拒绝',disabled:'已停用',received:'已接收，未采用',draft:'草稿',published:'个人库已发布',trial:'试用准备'};
 const materialIcon=(kind:string):IconName=>kind==='video'?'video':kind==='audio'?'audio':kind==='image'?'image':kind==='code'?'code':kind==='web'?'external':kind==='dialogue'?'discussion':kind==='ink'?'pencil':'document';
 
 // Only canonical saved content is indexed. Layout changes do not rebuild this

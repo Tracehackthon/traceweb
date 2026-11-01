@@ -66,7 +66,7 @@ export function HaloProgress({value=null,max=1,label,valueText}:{value?:number|n
   </div>;
 }
 
-const stateLabels:Record<string,string>={draft:'草稿',published:'个人库已发布',trial:'试用准备',disabled:'已停用'};
+const stateLabels:Record<string,string>={draft:'草稿',published:'个人库已发布',trial:'试用准备',disabled:'已停用',received:'已接收，未采用'};
 export function CapabilityStatus({status}:{status:string}){
   return <HaloBadge data-capability-status={status} icon={status==='published'?'check':status==='disabled'?'idle':status==='trial'?'pending':'pencil'} tone={status==='published'?'success':status==='trial'?'accent':'neutral'}>{stateLabels[status]||status}</HaloBadge>;
 }

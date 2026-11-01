@@ -3,8 +3,8 @@ import { responseFromNativeProductCommand } from '../native-product-response.mjs
 
 export interface ContentRef { kind: 'material' | 'expression' | 'capability'; id: string; version: number; anchor?: { type: string; [key: string]: unknown } }
 export interface StepItem { id:string; text:string; checked:boolean }
-export interface ContentValue { usage?:'method'|'template'|'instruction'; prompt?:string; stepItems?:StepItem[]; text?: string; resourceId?: string | null; refs?: ContentRef[]; origin?: { kind: string; url?: string; fileName?: string; locator?: { type: string; [key: string]: unknown } }; ink?: { points: { x: number; y: number }[]; width: number; color: string }; title?: string; purpose?: string; scope?: string; steps?: string; evidence?: string; examples?: string }
-export interface ContentEntry { id: string; title: string; kind: string; version: number; versions: Record<string, ContentValue>; status: string; author?: string; publishedVersions?: number[] }
+export interface ContentValue { usage?:'method'|'template'|'instruction'; prompt?:string; stepItems?:StepItem[]; text?: string; resourceId?: string | null; refs?: ContentRef[]; origin?: { kind: string; url?: string; fileName?: string; locator?: { type: string; [key: string]: unknown }; packet?:{resourceId:string;source:ContentRef;sourceAuthor?:'user'|'agent'} }; ink?: { points: { x: number; y: number }[]; width: number; color: string }; title?: string; purpose?: string; scope?: string; steps?: string; evidence?: string; examples?: string }
+export interface ContentEntry { changes?:{version:number;reason:string;state?:string;transfer?:{direction:'incoming'|'outgoing';packetResourceId:string;packetId:string;createdAt:string;sender:string;recipient:string;source:ContentRef;omittedFields?:string[]}}[]; id: string; title: string; kind: string; version: number; versions: Record<string, ContentValue>; status: string; author?: string; publishedVersions?: number[] }
 export interface Relation { id: string; from: ContentRef; to: ContentRef; reason: string; evidence: string; difference: string; uncertainty: string; kind: string; status: string; version: number }
 export interface Thinking { id: string; title: string; refs: ContentRef[]; excluded: ContentRef[]; instructions?:ContentRef[]; messages: { id: string; text: string; author: string; instructions?:ContentRef[]; template?:ContentRef }[]; status: string }
 export interface Task { execution?:{source:'trace-agent-runtime';runId:string;requestId:string;contextHash:string}; instructions?:ContentRef[]; plan?:StepItem[]; template?:ContentRef; id: string; title: string; goal: string; destination: string; refs: ContentRef[]; excluded: ContentRef[]; status: string; results: unknown[] }
@@ -14,7 +14,7 @@ export interface CanvasNode { id: string; ref: ContentRef | null; position: { x:
 export interface CanvasEdge { id: string; from: string; to: string; relationId: string | null }
 export interface CanvasScene { nodes: CanvasNode[]; connections: CanvasEdge[] }
 export interface CanvasDocument extends CanvasScene { schemaVersion: 1; id: string; title: string; revision: number; undo: CanvasScene[]; redo: CanvasScene[] }
-export interface WorkbenchState { ready: boolean; loading: boolean; readError: string | null; host: ContentHost | null; legacy: unknown; revision: number; canvas: CanvasDocument | null; canvases: { id: string; title: string; revision: number }[]; saving: boolean; error: string | null; pending: { path: string; body: unknown; owner?:string } | null }
+export interface WorkbenchState { features:string[]; ready: boolean; loading: boolean; readError: string | null; host: ContentHost | null; legacy: unknown; revision: number; canvas: CanvasDocument | null; canvases: { id: string; title: string; revision: number }[]; saving: boolean; error: string | null; pending: { path: string; body: unknown; owner?:string } | null }
 type NativeBridge = { requestCapability?: (request: Record<string, unknown>) => Promise<any> };
 const native = () => (window as Window & { traceNative?: NativeBridge }).traceNative;
 const pendingKey='trace-workbench-pending:'+(location.pathname.startsWith('/app/demo')?'demo':'personal');
@@ -46,7 +46,7 @@ async function resourceBlob(id: string): Promise<Blob> {
 }
 
 export class WorkbenchClient {
-  private state: WorkbenchState = { ready: false, loading: false, readError: null, host: null, legacy: null, revision: 0, canvas: null, canvases: [], saving: false, error: null, pending: null };
+  private state: WorkbenchState = { features:[], ready: false, loading: false, readError: null, host: null, legacy: null, revision: 0, canvas: null, canvases: [], saving: false, error: null, pending: null };
   private listeners = new Set<() => void>();
   private queue: Promise<unknown> = Promise.resolve();
   private urls = new Map<string, Promise<string>>();
@@ -63,7 +63,7 @@ export class WorkbenchClient {
       const result = await jsonRequest('/api/product/workspace');
       if (result.host?.schemaVersion !== 2) { if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, loading: false, readError: null, host: null, legacy: result.host, revision: result.revision }); return true; }
       const [layout, list] = await Promise.all([jsonRequest('/api/product/canvases/' + canvasId), jsonRequest('/api/product/canvases')]);
-      if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, loading: false, readError: null, host: result.host, legacy: null, revision: result.revision, canvas: layout.document, canvases: list.items });return true;
+      if(sequence!==this.loadSequence)return false;this.id=canvasId;this.set({ ready: true, loading: false, readError: null, host: result.host, legacy: null, features:Array.isArray(result.storage?.features)?result.storage.features:[], revision: result.revision, canvas: layout.document, canvases: list.items });return true;
     } catch (error) {
       // A failed refresh is not a first load. Keep the mounted editors and
       // last verified document; do not acknowledge or clear a pending write.

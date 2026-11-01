@@ -21,7 +21,7 @@ export function createDesktopWorkbench({file}) {
     if(status>=400){const value=JSON.parse(bytes.toString('utf8'));return {kind:RESPONSE_KIND,ok:false,status,error:value.error}}
     if(type==='application/json' || method==='POST'){
       const value=JSON.parse(bytes.toString('utf8'))
-      if(value.storage)value.storage={kind:'sqlite',label:'Trace 桌面新工作区（旧内容独立保留）'}
+      if(value.storage)value.storage={kind:'sqlite',label:'Trace 桌面新工作区（旧内容独立保留）',features:value.storage.features||[]}
       return value
     }
     return {bytes:new Uint8Array(bytes),mime:headers['content-type']||'application/octet-stream'}
