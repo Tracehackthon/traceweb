@@ -5,7 +5,7 @@ const {DatabaseSync}=require('node:sqlite');
 const {selectValue}=require('./select-control.cjs');
 const original=require('./workbench-feedback-source.cjs');
 
-exports.run=async({page,state,saved,check,capture,out,desktop,source})=>{
+exports.run=async({page,state,saved,check,capture,out,desktop,app,source})=>{
  assert.ok(desktop);
  const destination=process.env.TRACE_WRITEBACK_TARGET||'new-expression:question';
  assert.ok(['new-expression:note','new-expression:question','new-expression:understanding','new-expression:attempt','expression','relation','branch:question','saved','rejected','cancel'].includes(destination));
@@ -18,6 +18,17 @@ exports.run=async({page,state,saved,check,capture,out,desktop,source})=>{
  await item.getByRole('textbox',{name:'本项采纳正文',exact:true}).waitFor();
  check('genuine reviewed result is displayed by actual native source, with no new execution',await page.locator('.wb-execution[data-run-id="'+source.run.id+'"]').getAttribute('data-status')==='succeeded');
  const title='Writeback-'+destination.replace(/[:]/g,'-'),text='WritebackBodyNeedle：这是用户核对后的新表达，不是AI原稿或普遍成立的结论。';
+ let partial=null;
+ if(process.env.TRACE_WRITEBACK_PARTIAL==='1'){
+  const disclosure=item.locator('summary').filter({hasText:'查看本项 AI 原稿'});assert.equal(await disclosure.count(),1);await disclosure.click();const raw=item.getByRole('textbox',{name:'选择本项原稿局部',exact:true});await raw.waitFor();const body=await raw.inputValue(),count=Math.min(8,Math.floor(Array.from(body).length/2));assert.ok(count>0);
+  const selectionMethod=process.env.TRACE_WRITEBACK_PARTIAL_METHOD||'keyboard';assert.ok(['keyboard','dom'].includes(selectionMethod));
+  const nativeFocus=await app.evaluate(({BrowserWindow})=>({window:BrowserWindow.getAllWindows()[0].isFocused(),contents:BrowserWindow.getAllWindows()[0].webContents.isFocused(),visible:BrowserWindow.getAllWindows()[0].isVisible()}));
+  if(selectionMethod==='dom')await raw.evaluate((el,end)=>{el.focus();el.setSelectionRange(0,end);el.dispatchEvent(new Event('select',{bubbles:true}));document.dispatchEvent(new Event('selectionchange',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));},Array.from(body).slice(0,count).join('').length);
+  else {await raw.focus();await raw.press('Control+Home');for(let i=0;i<count;i++)await raw.press('Shift+ArrowRight');}
+  const range=await raw.evaluate(el=>({start:el.selectionStart,end:el.selectionEnd}));fs.writeFileSync(path.join(out,'partial-selection-observation.json'),JSON.stringify({selectionMethod,nativeFocus,body,count,range,limits:selectionMethod==='dom'?'Browser text-selection API only; not a physical or focusable native keyboard acceptance.':'Actual CDP keystrokes; hidden window focus conditions recorded.'},null,2));assert.ok(range.end>range.start&&range.end<body.length);await b(item,'用选中的原文作为本项草稿').click();
+  check('explicit source selection changes only the local writeback draft',await item.getByRole('textbox',{name:'本项采纳正文',exact:true}).inputValue()===body.slice(range.start,range.end));
+  assert.equal(source.run.result.answer.indexOf(body),source.run.result.answer.lastIndexOf(body),'Retained real source must identify this shown paragraph uniquely');partial={selectionMethod,body,...range,offset:source.run.result.answer.indexOf(body)};
+ }
  await item.getByRole('textbox',{name:'本项采纳正文',exact:true}).fill(text);
  const before=JSON.stringify((await state()).product);
  if(['saved','rejected','cancel'].includes(destination)){
@@ -26,7 +37,7 @@ exports.run=async({page,state,saved,check,capture,out,desktop,source})=>{
   else {await item.getByText(destination==='saved'?'本项仅保留，未写入内容。可以重新核对再决定。':'本项不采纳，原稿仍保留。可以重新核对再决定。',{exact:true}).waitFor();check('non-adoption records only the real decision, not a fabricated writeback',JSON.stringify((await state()).product)===before&&await item.getByRole('textbox',{name:'本项采纳正文',exact:true}).inputValue()===text);}
  }else{
   let chosen=destination;
-  const expression=Object.values(baseline.expressions).find(e=>e.author==='user'&&e.kind!=='ink');
+  const expression=source.identity?baseline.expressions[source.identity.targetExpressionId]:Object.values(baseline.expressions).find(e=>e.author==='user'&&e.kind!=='ink');
   if(destination==='expression'){assert.ok(expression);chosen='expression:'+expression.id;}
   await selectValue(item.getByRole('combobox',{name:'采纳位置',exact:true}),chosen);
   if(destination!=='relation')await item.getByRole('textbox',{name:'写回内容名称',exact:true}).fill(title);
@@ -49,6 +60,8 @@ exports.run=async({page,state,saved,check,capture,out,desktop,source})=>{
   await capture('writeback-before-'+destination.replace(/[:]/g,'-'));await b(item,'确认采纳本项').click();await item.locator('[aria-label="已采纳正文"]').waitFor();await saved();
   let next=await host();const ledger=new DatabaseSync(path.join(out,'executions/agent.sqlite'),{readOnly:true}),adoption=ledger.prepare('SELECT plan,status FROM adoptions WHERE run_id=? AND item_id=? ORDER BY rowid DESC LIMIT 1').get(source.run.id,'paragraph-3');ledger.close();assert.equal(adoption.status,'committed');const plan=JSON.parse(adoption.plan),ref=plan.targetRef;
   check('actual native adoption points to exact protected original and saved reviewed text',plan.reviewedText===text&&next.expressions[plan.source.id].author==='agent'&&next.expressions[plan.source.id].versions[1].text===source.run.result.answer&&plan.source.version===1&&plan.source.anchor?.type==='text');
+  if(partial)check('actual writeback cites exactly the selected original range, not the whole answer or edited body',plan.source.anchor.start===partial.offset+partial.start&&plan.source.anchor.end===partial.offset+partial.end&&next.expressions[plan.source.id].versions[1].text.slice(plan.source.anchor.start,plan.source.anchor.end)===partial.body.slice(partial.start,partial.end));
+  if(source.identity){fs.writeFileSync(path.join(out,'identity-observation.json'),JSON.stringify({selected:source.identity.targetExpressionId,actual:ref.id,prefixUnchanged:JSON.stringify(next.expressions[source.identity.prefixExpressionId])===JSON.stringify(baseline.expressions[source.identity.prefixExpressionId]),targetVersion:next.expressions[source.identity.targetExpressionId].version},null,2));check('stable content identity is preserved end-to-end instead of writing into a matching prefix',ref.id===source.identity.targetExpressionId&&JSON.stringify(next.expressions[source.identity.prefixExpressionId])===JSON.stringify(baseline.expressions[source.identity.prefixExpressionId]));}
   if(destination==='relation'){
    const relation=next.relations[ref.id];check('a reviewed relationship preserves both exact ends and distinct evidence/difference/uncertainty/source',relation.status==='accepted'&&relation.from.id===material.id&&relation.to.id===expression.id&&relation.sources[0].id===plan.source.id&&relation.difference==='来源与语境不同，不能直接等同。'&&relation.uncertainty==='仍需实际观察，尚未验证。');
    await b(item,'查看这条关系的起点').click();await page.getByRole('tab',{name:'关联',exact:true}).click();const panel=page.locator('[aria-label="关系 '+ref.id+'"]');await b(panel,'编辑关系说明').click();await panel.getByRole('textbox',{name:'关系理由',exact:true}).fill('RevisedRelationNeedle：只在明确边界内参考。');await b(panel,'保存关系修订').click();await page.waitForFunction(()=>document.body.textContent.includes('关系修订已保存'));
@@ -69,5 +82,5 @@ exports.run=async({page,state,saved,check,capture,out,desktop,source})=>{
  const db=new DatabaseSync(path.join(out,'executions/agent.sqlite'),{readOnly:true}),attempts=db.prepare('SELECT id,input_hash,result_hash,status FROM attempts ORDER BY created').all();db.close();
  const finalHost=await host();check('all original user messages remain exact and no new provider attempt is started',Object.entries(baseline.sessions).every(([id,s])=>JSON.stringify(finalHost.sessions[id])===JSON.stringify(s))&&attempts.length===source.originalAttemptCount&&attempts.find(r=>r.id===source.run.id).input_hash===source.run.inputHash&&attempts.find(r=>r.id===source.run.id).result_hash===source.run.resultHash);
  original.verifyOriginal(source);
- fs.writeFileSync(path.join(out,'writeback-scope.json'),JSON.stringify({destination,source:'existing verified real-model fixture, never a new model or simulated provider',rawFirstCreation:'not exercised here: the retained genuine baseline already has an immutable AI original',originalUnchanged:true},null,2));
+ fs.writeFileSync(path.join(out,'writeback-scope.json'),JSON.stringify({destination,partialSelection:partial,source:'existing verified real-model fixture, never a new model or simulated provider',rawFirstCreation:'not exercised here: the retained genuine baseline already has an immutable AI original',originalUnchanged:true},null,2));
 };
