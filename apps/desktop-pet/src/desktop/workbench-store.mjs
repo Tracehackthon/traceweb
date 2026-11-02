@@ -1,4 +1,5 @@
 import {Readable} from 'node:stream'
+import {createHash} from 'node:crypto'
 import {createProductWorkspace} from '@trace/product-workspace/node'
 import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences,prepareContentWriteback,activationInput,taskInput} from '@trace/product-workspace'
 
@@ -96,10 +97,19 @@ export function createDesktopWorkbench({file}) {
     configureTaskDispatchResolver(resolver){workspace().configureTaskDispatchResolver(resolver)},
     reserveNativeDispatch(input){return workspace().reserveNativeDispatch(input)},
     cancelNativeDispatch(input){return workspace().cancelNativeDispatch(input)},
-    taskDispatchIsCurrent(id,runId,inputHash){
+    taskDispatch(id){return structuredClone(workspace().read().host?.tasks?.[id]?.dispatch||null)},
+    taskDispatchIsCurrent(id,runId,inputHash,{forUse=true}={}){
       const host=workspace().read().host,task=host?.tasks?.[id],claim=task?.dispatch;
       if(task?.status!=='prepared'||task.execution||claim?.source!=='native'||claim.runId!==runId||claim.inputHash!==inputHash||claim.cancelledAt)return false;
-      try{taskInput(host,id);return true}catch{return false}
+      // A historical return belongs to the locked input, not a reconstruction
+      // from today's source titles/statuses. Eligibility is a separate gate.
+      if(!forUse)return true;
+      try{return createHash('sha256').update(JSON.stringify(taskInput(host,id))).digest('hex')===inputHash}catch{return false}
+    },
+    taskResultIsUsable(id,runId,inputHash){
+      const host=workspace().read().host,claim=host?.tasks?.[id]?.dispatch;
+      if(claim&&(claim.source!=='native'||claim.runId!==runId||claim.inputHash!==inputHash||claim.cancelledAt))return false;
+      try{return createHash('sha256').update(JSON.stringify(taskInput(host,id))).digest('hex')===inputHash}catch{return false}
     },
     taskSnapshot(id) {return taskInput(workspace().read().host,id)},
     async request(request) {

@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "@radix-ui/colors": "3.0.0",
-    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.3.0-frontend.15.tgz",
+    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.3.0-frontend.16.tgz",
     "lucide-react": "1.65.0",
     "pdfjs-dist": "6.4.299",
     "radix-ui": "1.8.1",

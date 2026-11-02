@@ -7,6 +7,7 @@ import {resultItems} from '../../../../shared/workbench-result-items.mjs'
 import {parseActivationOutput,stableWorkbenchJson} from '@trace/product-workspace'
 
 const activeStates=['queued','running','waiting_approval','waiting_input','cancelling']
+const retryStates=['failed','interrupted','cancelled','timed_out']
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const identity=x=>typeof x==='string'&&/^[a-zA-Z0-9_-]{1,180}$/.test(x)
 const now=()=>new Date().toISOString()
@@ -38,7 +39,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   };
   const presentation=r=>{if(!r.result&&r.status!=='succeeded')return {result:null,sourceRefs:null,sourceError:''};try{const {payload,result}=storedReturn(r);return {result,sourceRefs:payload.fragments.filter(f=>f.ref).map(f=>f.ref),sourceError:''};}catch{return {result:null,sourceRefs:null,sourceError:'原始输入或返回不可用或完整性不一致；已存状态/回执仍保留，不将损坏正文当作已核验来源。'};}};
   const publicRow=r=>{if(!r)return r;const checked=presentation(r);return ({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',activationId:JSON.parse(r.payload).activationId,sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='activation'?'仅本次探索':JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
-    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceRefs:checked.sourceRefs,sourceError:checked.sourceError,resultHash:r.result_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
+    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceRefs:checked.sourceRefs,sourceError:checked.sourceError,resultHash:r.result_hash,rawAvailable:typeof r.raw_output==='string'&&/^[a-f0-9]{64}$/.test(r.raw_hash),rawHash:r.raw_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
   // Re-read the exact immutable source, both when recording and when viewing.
   // A matching metadata hash alone cannot validate a damaged stored result.
   const feedbackSource=context=>{
@@ -64,6 +65,12 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   });
   const notify=()=>{try{onChange()}catch{}}
   const update=(id,patch)=>{if(closed)return;const previous=row(id);if(patch.status&&patch.status!==previous.status){const events=JSON.parse(patch.events||previous.events);events.push({sequence:(events.at(-1)?.sequence||0)+1,type:'run.'+patch.status,at:now()});patch.events=JSON.stringify(events);if(!activeStates.includes(patch.status)){const runtime=JSON.parse(patch.runtime||previous.runtime);delete runtime.interaction;patch.runtime=JSON.stringify(runtime)}}const fields=Object.keys(patch);db.prepare(`UPDATE attempts SET ${fields.map(k=>k+'=?').join(',')} WHERE id=?`).run(...Object.values(patch),id);notify()}
+  const archiveRaw=(id,raw)=>{
+    guard(typeof raw==='string'&&Buffer.byteLength(raw)<=1024*1024,'原始返回不是文本或超过1 MiB，未解析或采用。');
+    const saved=row(id),rawHash=hash(raw);
+    if(saved.raw_output!==null||saved.raw_hash!==null){guard(saved.raw_output===raw&&saved.raw_hash===rawHash,'已有原始返回与本次字节不一致，未覆盖。');return;}
+    update(id,{raw_output:raw,raw_hash:rawHash});
+  };
   const latest=task=>db.prepare('SELECT * FROM attempts WHERE task_id=? ORDER BY number DESC LIMIT 1').get(task)
   store.configureTaskDispatchResolver?.(({phase,taskId,runId,previousRunId})=>{
     const rows=db.prepare('SELECT id,status FROM attempts WHERE task_id=? ORDER BY number').all(taskId),last=rows.at(-1);
@@ -83,10 +90,13 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   }
   store.configureActivationCloseHandler?.(stopActivation);
   const activationCurrent=payload=>payload.kind!=='activation'||store.activationIsPrepared(payload.activationId);
-  const executionCurrent=(payload,r)=>activationCurrent(payload)&&(payload.kind==='activation'||payload.kind==='thinking'||store.taskDispatchIsCurrent?.(r.task_id,r.id,r.input_hash)===true);
+  const executionCurrent=(payload,r,options)=>activationCurrent(payload)&&(payload.kind==='activation'||payload.kind==='thinking'||store.taskDispatchIsCurrent?.(r.task_id,r.id,r.input_hash,options)===true);
+  const adoptionUsable=(payload,r)=>{
+    if(!['activation','thinking'].includes(payload.kind))guard(store.taskResultIsUsable?.(r.task_id,r.id,r.input_hash)===true,'本次任务的来源资格或派发归属已变化；原始返回仍可保留，未将其写成当前理解。');
+  };
   async function modules(){return loading ||= Promise.all(['apps/agent/codex.mjs','apps/agent/protocol.mjs','native/qualify-codex-app-server.mjs'].map(p=>import(pathToFileURL(path.join(runtimeRoot,p)).href)))}
   const env=()=>({...process.env,TEMP:path.join(directory,'tmp'),TMP:path.join(directory,'tmp'),TRACE_CODEX_QUALIFICATION_RECORD:path.join(directory,'codex-qualification.json')})
-  function project(){const value=getProject();guard(typeof value==='string'&&path.isAbsolute(value)&&fs.statSync(value).isDirectory(),'请先选择一个存在的执行项目。');return fs.realpathSync(value)}
+  function project(value=getProject()){guard(typeof value==='string'&&path.isAbsolute(value)&&fs.statSync(value).isDirectory(),'请先选择一个存在的执行项目。');return fs.realpathSync(value)}
   function adapter(module,cwd,mode){const executable=getExecutable();guard(executable,'未找到本机Codex，请先安装并登录Codex。');return module.createCodexAdapter({executable,mode:'native',runtimeRoot:path.join(directory,'bounded'),projectCwd:cwd,env:env(),providerConfig:{...(mode==='thinking'?module.BOUNDED_CONFIG:{}),sandbox_mode:'read-only',...(mode==='workspace-write'?{sandbox_mode:mode}:{}),'sandbox_workspace_write.network_access':false,'features.multi_agent':false,'agents.enabled':false}})}
   async function qualify(cwd,signal){
     const [codex,,qualifier]=await modules();fs.mkdirSync(path.join(directory,'tmp'),{recursive:true})
@@ -109,6 +119,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     const controller=new AbortController();active={id:r.id,controller,adapter:null,promise:null}
     const work=async()=>{let timer;try{
       const payload=JSON.parse(r.payload),task=payload.task;
+      guard(hash(payload)===r.input_hash,'原冻结输入的完整性不一致，未启动执行。');
       guard(executionCurrent(payload,r),'原探索已结束或任务派发已失效，未启动执行。');
       update(r.id,{status:'running'});const checked=await qualify(r.project,controller.signal);guard(checked.authenticated,'Codex尚未登录。');event(r.id,'runtime.checked',{runtimeVersion:checked.version})
       const [codex,protocol]=await modules();guard(executionCurrent(payload,r),'原探索已结束或任务派发已失效，未提交模型。');
@@ -118,14 +129,17 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       const executor=adapter(codex,r.project,r.mode);active.adapter=executor
       timer=setTimeout(()=>controller.abort(),300000)
       const outcome=await executor.execute({runId:r.id,request,context,signal:controller.signal,isCurrent:()=>!closed&&!controller.signal.aborted&&active?.id===r.id&&activeStates.includes(row(r.id).status)&&executionCurrent(payload,r),onEvent:(type,data)=>event(r.id,type,data)})
-      if(payload.kind==='activation'&&!closed){guard(typeof outcome.raw==='string'&&Buffer.byteLength(outcome.raw)<=1024*1024,'原激活返回过大，未解析成候选。');update(r.id,{raw_output:outcome.raw,raw_hash:hash(outcome.raw)});}
+      // Preserve the original before parsing or checking adoption eligibility.
+      // A late/cancelled/invalid response is evidence, not an adopted result.
+      if(!closed)archiveRaw(r.id,outcome.raw);
       const result=protocol.validateOutput(outcome.raw,{...context,fragments:outcome.providedFragments||context.fragments},request)
       if(payload.kind==='activation'){
         guard(Array.isArray(outcome.providedFragments),'缺少本次实际读取证明，未将返回当成有效激活。');
         result.activationEvidence=structuredClone(outcome.providedFragments);result.activation=parseActivationOutput(payload,result,result.activationEvidence);
       }
-      if(controller.signal.aborted||row(r.id).status==='cancelling'||!executionCurrent(payload,r))throw Error('执行已停止、原探索结束或任务派发已失效，迟到结果未采用。')
-      if(!closed&&row(r.id).status!=='interrupted')update(r.id,{status:'succeeded',result:JSON.stringify(result),result_hash:hash(result),finished:now(),error:null,runtime:JSON.stringify({...JSON.parse(row(r.id).runtime),threadId:outcome.threadId,turnId:outcome.turnId,version:outcome.runtimeVersion})})
+      if(controller.signal.aborted||closed||row(r.id).status==='cancelling'||!executionCurrent(payload,r,{forUse:false}))throw Error('执行已停止、原探索结束或任务派发已失效，迟到结果未采用。')
+      const inputUseRestricted=!executionCurrent(payload,r);
+      if(!closed&&row(r.id).status!=='interrupted')update(r.id,{status:'succeeded',result:JSON.stringify(result),result_hash:hash(result),finished:now(),error:null,runtime:JSON.stringify({...JSON.parse(row(r.id).runtime),threadId:outcome.threadId,turnId:outcome.turnId,version:outcome.runtimeVersion,inputUseRestricted})})
     }catch(error){if(!closed&&row(r.id).status!=='interrupted')update(r.id,{status:row(r.id).status==='cancelling'?'cancelled':controller.signal.aborted?'timed_out':'failed',finished:now(),error:String(error.message||'执行未完成。').replace(/[A-Za-z]:[\\/][^\s，。]+/g,'[本机路径]').slice(0,800)})}finally{clearTimeout(timer);if(active?.id===r.id)active=null}}
     const promise=work();if(active)active.promise=promise;await promise
   }
@@ -141,18 +155,25 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     guard(identity(request.taskId)&&identity(request.requestId),'任务或请求身份不正确。')
     const previous=latest(request.taskId),known=db.prepare('SELECT * FROM attempts WHERE request_key=?').get(request.requestId)
     if(known){guard(known.task_id===request.taskId,'请求身份已用于另一任务。');return publicRow(known)}
-    if(!retry&&previous)return publicRow(previous)
-    if(retry)guard(previous&&previous.id===request.previousId&&['failed','interrupted','cancelled','timed_out'].includes(previous.status),'只能重试该任务最近一次未完成运行。')
+    if(retry)guard(previous&&previous.id===request.previousId&&retryStates.includes(previous.status),'只能重试该任务最近一次未完成运行。')
     const thinking=retry?['thinking','activation'].includes(JSON.parse(previous.payload).kind):['workbench.agent.think','workbench.agent.activate'].includes(request.operation)
+    const claim=thinking?null:store.taskDispatch?.(request.taskId),resume=claim?.requestId===request.requestId;
+    if(!retry&&previous&&!resume)return publicRow(previous)
+    if(resume){
+      guard(claim.source==='native'&&!claim.cancelledAt&&Object.hasOwn(claim,'previousRunId'),'原派发缺少可核对的上次运行身份；不会猜测并重新执行。');
+      guard(!row(claim.runId)&&!db.prepare(`SELECT id FROM attempts WHERE task_id=? AND status IN (${activeStates.map(()=>'?').join(',')}) LIMIT 1`).get(request.taskId,...activeStates),'原派发已有运行或停止尚未确认，请核对原记录。');
+      guard(claim.previousRunId===null?!previous:previous?.id===claim.previousRunId&&retryStates.includes(previous.status),'原派发的上次运行记录缺失或不一致，未恢复排队。');
+      guard(request.mode===undefined||request.mode===claim.mode,'原派发的执行权限已固定，未静默改变。');
+    }
     const original=retry?JSON.parse(previous.payload):null
     const payload=inputFor(request,original)
     if(request.expectedInputHash!==undefined)guard(request.expectedInputHash===hash(payload),'刚才核对的发送范围已变化，请重新读取实际输入；没有开始执行。')
-    const cwd=retry?previous.project:thinking?path.join(directory,'thinking-project'):project(),mode=thinking?'thinking':retry?previous.mode:request.mode||'read-only'
+    const cwd=resume?claim.projectDir:retry?previous.project:thinking?path.join(directory,'thinking-project'):project(),mode=thinking?'thinking':resume?claim.mode:retry?previous.mode:request.mode||'read-only'
     if(thinking)fs.mkdirSync(path.join(cwd,'.git'),{recursive:true})
     guard(['thinking','read-only','workspace-write'].includes(mode),'不支持这个执行权限。')
     if(retry)guard(hash(payload)===previous.input_hash,'任务或引用状态已变化。请核对后另存新的任务准备。')
     let id='run-'+randomUUID();const number=(previous?.number||0)+1;
-    if(!thinking){guard(typeof store.reserveNativeDispatch==='function','当前宿主尚未支持权威派发归属，未建立运行。');const reserved=store.reserveNativeDispatch({taskId:request.taskId,requestId:request.requestId,runId:id,payload,projectDir:cwd,mode,previousRunId:retry?previous.id:null});id=reserved.dispatch.runId;}
+    if(!thinking){guard(typeof store.reserveNativeDispatch==='function','当前宿主尚未支持权威派发归属，未建立运行。');const reserved=store.reserveNativeDispatch({taskId:request.taskId,requestId:request.requestId,runId:id,payload,projectDir:cwd,mode,previousRunId:resume?claim.previousRunId:retry?previous.id:null});id=reserved.dispatch.runId;}
     db.prepare('INSERT INTO attempts(id,task_id,number,request_key,input_hash,payload,project,mode,status,created,events) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,request.taskId,number,request.requestId,hash(payload),JSON.stringify(payload),cwd,mode,'queued',now(),JSON.stringify([{sequence:1,type:'run.queued',at:now()}]));notify();setImmediate(()=>void pump());return publicRow(row(id))
   }
   const adoptionWrites=new Map();
@@ -171,6 +192,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
           if(!committed){
             const run=row(current.run_id);guard(run?.status==='succeeded'&&JSON.parse(run.review||'null')?.decision==='accepted','这份返回尚未明确认可，未重试写入；原请求和草稿仍保留。');
             const {payload,result}=storedReturn(run);
+             adoptionUsable(payload,run);
             if(plan.evidence)guard(plan.evidence.runId===run.id&&plan.evidence.inputHash===run.input_hash&&plan.evidence.resultHash===run.result_hash,'原请求冻结的输入或返回版本不一致，未重试写入。');
             store.verifyAdoptionSource({runId:run.id,answer:result.answer,refs:payload.fragments.filter(f=>f.ref).map(f=>f.ref),plan});
           }
@@ -192,6 +214,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     guard(!prior||prior.status!=='committed','本项已采纳，不重复写入。')
     const id='adopt-'+randomUUID();let plan=null
     if(req.decision==='adopt'){
+      adoptionUsable(JSON.parse(r.payload),r);
       guard(typeof req.text==='string'&&req.text.trim()&&req.text.length<=64000&&typeof req.title==='string'&&req.title.trim()&&req.title.length<=200&&Number.isSafeInteger(req.expectedVersion)&&req.expectedVersion>=0,'请核对要采纳的正文、标题和目标版本。')
       let start=0,end=item.text.length;
       if(req.selection){({start,end}=req.selection);const split=n=>n>0&&n<item.text.length&&/[\uD800-\uDBFF]/.test(item.text[n-1])&&/[\uDC00-\uDFFF]/.test(item.text[n]);guard(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>=0&&end>start&&end<=item.text.length&&!split(start)&&!split(end),'原稿选段超出范围或切断完整字符；没有写回。');}
@@ -208,7 +231,13 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     async request(req){
       guard(!closed,'执行记录已关闭。')
       if(req.operation==='workbench.agent.status'){let cwd;try{cwd=project()}catch{}return {available:Boolean(getExecutable()),projectName:cwd?path.basename(cwd):null,projectSelected:Boolean(cwd)}}
-      if(req.operation==='workbench.agent.check'){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),65000);try{return {ready:true,...await qualify(project(),controller.signal)}}finally{clearTimeout(timer)}}
+      if(req.operation==='workbench.agent.check'){
+        const claim=req.taskId?store.taskDispatch?.(req.taskId):null;
+        if(req.taskId)guard(identity(req.taskId)&&claim?.source==='native'&&!claim.cancelledAt,'没有可核对的原派发项目。');
+        const cwd=claim?project(claim.projectDir):project();
+        if(claim)guard((process.platform==='win32'?path.normalize(cwd).toLocaleLowerCase('en-US'):path.normalize(cwd))===claim.projectIdentity,'原派发项目的位置已变化，未改用其它项目检查。');
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),65000);try{return {ready:true,...await qualify(cwd,controller.signal)}}finally{clearTimeout(timer)}
+      }
       if(req.operation==='workbench.agent.input.preview'){const payload=inputFor(req);return {payload,inputHash:hash(payload),executionStarted:false};}
       if(req.operation==='workbench.agent.dispatch.prepare'){
         guard(!latest(req.taskId),'任务已有实际运行记录，请从原运行继续，不把预留冒充未执行。');
@@ -227,6 +256,10 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       if(req.operation==='workbench.agent.activate'){guard(identity(req.activationId),'激活身份不正确。');return submit({...req,taskId:'activation-'+req.activationId,mode:'thinking'})}
       if(req.operation==='workbench.agent.retry')return submit(req,true)
       const r=row(req.runId);guard(r,'没有这个运行记录。')
+      if(req.operation==='workbench.agent.result.original'){
+        guard(req.rawHash===r.raw_hash&&typeof r.raw_output==='string'&&hash(r.raw_output)===r.raw_hash&&hash(JSON.parse(r.payload))===r.input_hash,'原始输出或输入身份暂不可核验，没有改用另一结果。');
+        return{runId:r.id,status:r.status,raw:r.raw_output,parsed:Boolean(r.result),hash:r.raw_hash};
+      }
       if(req.operation==='workbench.agent.activation.original'){
         guard(JSON.parse(r.payload).kind==='activation'&&typeof r.raw_output==='string'&&hash(r.raw_output)===r.raw_hash,'原激活返回暂不可核验，没有改用另一结果。');return{runId:r.id,status:r.status,raw:r.raw_output,parsed:Boolean(r.result),hash:r.raw_hash};
       }

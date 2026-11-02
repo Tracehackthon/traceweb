@@ -12,7 +12,7 @@ import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
 import {HaloDisclosure} from './halo-disclosure';
 import './task-execution.css';
 
-export type Run={kind?:string;activationId?:string;sessionId?:string;messageId?:string;adoptions:any[];id:string;taskId:string;number:number;status:string;mode:string;projectName:string;inputHash:string;scope:Task;runtime:any;events:any[];result:any;resultHash:string;sourceRefs?:ContentRef[]|null;sourceError?:string;adoption?:any;error:string;review?:{decision:string;note:string};created:string;finished:string};
+export type Run={kind?:string;activationId?:string;sessionId?:string;messageId?:string;adoptions:any[];id:string;taskId:string;number:number;status:string;mode:string;projectName:string;inputHash:string;scope:Task;runtime:any;events:any[];result:any;resultHash:string;rawAvailable?:boolean;rawHash?:string;sourceRefs?:ContentRef[]|null;sourceError?:string;adoption?:any;error:string;review?:{decision:string;note:string};created:string;finished:string};
 const labels:Record<string,string>={queued:'等待执行',running:'正在执行',waiting_approval:'等待你的审批',waiting_input:'等待你的回答',cancelling:'正在停止',cancelled:'执行已停止',interrupted:'执行已中断',timed_out:'执行超时',failed:'执行失败',succeeded:'结果已返回，待复核'};
 const active=['queued','running','waiting_approval','waiting_input','cancelling'];
 const bridge=()=> (window as any).traceNative;
@@ -40,8 +40,20 @@ function agentBadgeAppearance(run:Run|undefined,ready:boolean,error='',preparati
   return{tone:active.includes(run.status)?'accent':'neutral',icon:active.includes(run.status)?'pending':'idle'};
 }
 export function AgentTaskBadge({task,runs,ready,error=''}:{task:Task;runs:Run[];ready:boolean;error?:string}){
-  const run=runs.filter(r=>r.taskId===task.id).at(-1);
+  const run=currentTaskRun(task,runs);
   return <HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-task-state={task.status} data-run-state={run?.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
+}
+
+function NativeRawReturn({run}:{run:Run}){
+  const [raw,setRaw]=useState<string|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),sequence=useRef(0);
+  useEffect(()=>()=>{sequence.current++;},[]);
+  if(!run.rawAvailable||!run.rawHash)return null;
+  const read=async()=>{const n=++sequence.current;setBusy(true);setError('');try{
+    const result=await call('result.original',{runId:run.id,rawHash:run.rawHash});
+    if(result?.runId!==run.id||result.hash!==run.rawHash||typeof result.raw!=='string')throw Error('原始输出身份不一致，没有换成其它返回。');
+    if(n===sequence.current)setRaw(result.raw);
+  }catch(e){if(n===sequence.current)setError(e.message||'原始输出暂不可核对，已有记录未覆盖。');}finally{if(n===sequence.current)setBusy(false);}};
+  return <HaloDisclosure title="本次原始输出（只读，不代表成功或采用）"><p>按本次运行与原始输出指纹核对。解析失败、停止或来源资格变化都不把这份记录变成已采用内容。</p><button type="button" className="wb-button" disabled={busy} aria-busy={busy} onClick={()=>void read()}>{busy?'正在核对原始输出…':raw===null?'核对并读取本次原始输出':'重新核对原始输出'}</button>{error&&<HaloNotice tone="warning" title="原始输出暂不可核验" description={error}/>} {raw!==null&&<CodeBlock code={raw} title="执行器原始输出（未自动采用）"/>}</HaloDisclosure>;
 }
 
 function NativeInputPreview({taskId,thinking,client,onVerified}:{taskId:string;thinking?:{sessionId:string;messageId:string};client:WorkbenchClient;onVerified:(hash:string|null)=>void}){
@@ -64,19 +76,21 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
     <header><h3>{thinking?'Trace 内 AI 思考':'本机 Codex 执行'}</h3>{(run||thinking||task.dispatch||error||!ready)&&<HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-execution-status={error?'unknown':run?.status||task.status}>{error?'读取中断，当前状态未知':run?run.sourceError?'原始返回暂不可核验':adopted?'部分结果已采纳':run.review?'结果已复核':labels[run.status]:ready?task.status==='cancelled'?'准备已取消':task.dispatch?'派发归属已保存，运行回执待核对':'尚未提交':'正在核对执行记录'}</HaloBadge>}</header>
     {!run&&<>
       {!thinking&&task.dispatch&&task.status==='prepared'&&<HaloNotice tone="warning" title="已保留本机派发，尚无运行回执" description="这不是已经执行。刷新不会自动建立运行；可核对原派发后继续，或确认从未排队再取消。" actions={<><p className="wb-preserve">原项目：{task.dispatch.projectDir} · {task.dispatch.mode==='workspace-write'?'允许项目内写入':'只读'} · 输入版本 {task.dispatch.inputVersion}</p><button className="wb-button" disabled={busy} onClick={()=>action(async()=>{await client.refreshContent();})}>核对原派发与运行记录</button><button className="wb-button" disabled={busy||!ready||Boolean(error)} onClick={()=>action(()=>call('dispatch.cancel',{taskId:task.id,dispatchId:task.dispatch!.id}))}>核验未开始后取消这份准备</button></>}/>}
-      <p>{thinking?'仅使用这段原话、明确选择的引用和历史原话，不读取项目文件或自动补AI回复。':'执行项目：'+(setup?.projectName||'尚未选择')+'。'}提交后才会运行，并可能使用你的 Codex 额度。</p>
+      <p>{thinking?'仅使用这段原话、明确选择的引用和历史原话，不读取项目文件或自动补AI回复。':'执行项目：'+(task.dispatch?.projectDir||setup?.projectName||'尚未选择')+'。'}提交后才会运行，并可能使用你的 Codex 额度。</p>
       {setup&&!setup.available&&<HaloNotice tone="warning" title="未连接可用的Codex执行器" description="可以继续手工思考、准备任务和只读核对发送范围；这里没有开始模型运行，也不将预览当作执行成功。"/>}
-      {!thinking&&<div className="wb-actions"><button className="wb-button" disabled={busy} onClick={()=>action(async()=>setSetup(await call('project.select')))}>选择执行项目</button><button className="wb-button" disabled={busy||!setup?.projectSelected} onClick={()=>action(async()=>{await call('check');setNotice('Codex已登录并通过连接检查；尚未执行任务。');})}>检查 Codex 连接</button></div>}
+      {!thinking&&<div className="wb-actions">{!task.dispatch&&<button className="wb-button" disabled={busy} onClick={()=>action(async()=>setSetup(await call('project.select')))}>选择执行项目</button>}<button className="wb-button" disabled={busy||(!task.dispatch&&!setup?.projectSelected)} onClick={()=>action(async()=>{await call('check',task.dispatch?{taskId:task.id}:{});setNotice('Codex已登录并通过连接检查；尚未执行任务。');})}>检查 Codex 连接</button></div>}
       <NativeInputPreview taskId={task.id} thinking={thinking} client={client} onVerified={setInputHash}/>
       {!thinking&&<label className="wb-check"><input type="checkbox" disabled={Boolean(task.dispatch)} checked={task.dispatch?task.dispatch.mode==='workspace-write':write} onChange={e=>setWrite(e.target.checked)}/>允许本次任务修改所选项目文件（默认只读）</label>}
       {!thinking&&!task.dispatch&&task.status==='prepared'&&client.getSnapshot().features.includes('task-dispatch-v1')&&<button type="button" className="wb-button" disabled={busy||!inputHash||!ready||Boolean(error)||!setup?.projectSelected||Boolean(client.getSnapshot().pending)} onClick={()=>action(async()=>{await call('dispatch.prepare',{taskId:task.id,requestId:'submit-'+task.id,expectedInputHash:inputHash,mode:write?'workspace-write':'read-only'});setNotice('本机派发归属已保存，没有排队或启动执行。');})}>预留给本机，稍后执行（不启动）</button>}
-      <div className="wb-actions"><LiquidButton className="wb-button wb-primary" disabled={busy||legacyScope||!inputHash||!ready||Boolean(error)||!setup?.available||(!thinking&&!setup?.projectSelected)||task.status!=='prepared'||Boolean(client.getSnapshot().pending)} onClick={()=>action(()=>thinking?call('think',{...thinking,requestId:'submit-'+task.id,expectedInputHash:inputHash}):call('submit',{taskId:task.id,requestId:task.dispatch?.requestId||'submit-'+task.id,expectedInputHash:inputHash,mode:task.dispatch?.mode||(write?'workspace-write':'read-only')}))}><TraceIcon name="work"/>{thinking?'请 AI 回应这段思考':task.dispatch?'提交原派发并执行':'提交并执行'}</LiquidButton>{!thinking&&!task.dispatch&&task.status==='prepared'&&<button className="wb-button" disabled={busy} onClick={onCancelPreparation}>取消尚未交接的准备</button>}</div>
+      <div className="wb-actions"><LiquidButton className="wb-button wb-primary" disabled={busy||legacyScope||!inputHash||!ready||Boolean(error)||!setup?.available||(!thinking&&!task.dispatch&&!setup?.projectSelected)||task.status!=='prepared'||Boolean(client.getSnapshot().pending)} onClick={()=>action(()=>thinking?call('think',{...thinking,requestId:'submit-'+task.id,expectedInputHash:inputHash}):call('submit',{taskId:task.id,requestId:task.dispatch?.requestId||'submit-'+task.id,expectedInputHash:inputHash,mode:task.dispatch?.mode||(write?'workspace-write':'read-only')}))}><TraceIcon name="work"/>{thinking?'请 AI 回应这段思考':task.dispatch?'提交原派发并执行':'提交并执行'}</LiquidButton>{!thinking&&!task.dispatch&&task.status==='prepared'&&<button className="wb-button" disabled={busy} onClick={onCancelPreparation}>取消尚未交接的准备</button>}</div>
     </>}
     {run&&<>
       <p>第 {run.number} 次运行 · 项目 {run.projectName} · {run.mode==='thinking'?'限本讨论的只读思考':run.mode==='read-only'?'只读':'可修改项目内文件'}。{run.sourceError?'原始记录当前无法核验，不将保存元信息当作可用来源。':'输入与引用已冻结，结果只回到这个任务。'}</p>
       {!error&&active.includes(run.status)&&<HaloProgress label={labels[run.status]||'正在执行'}/>}
       {run.runtime.threadId&&<p className="wb-execution-receipt">Codex thread：{run.runtime.threadId}{run.runtime.turnId&&<> / turn：{run.runtime.turnId}</>}</p>}
       {run.sourceError&&<HaloNotice tone="warning" title="原始返回暂不可核验" description={run.sourceError}/>}
+      {run.runtime.inputUseRestricted&&<HaloNotice tone="warning" title="返回已保留，来源资格已变化" description="这是原派发的历史返回，不代表停用的能力重新生效。继续调用和写回会重新检查当前资格；可以只保留或不采用。"/>}
+      <NativeRawReturn key={run.id+':'+run.rawHash} run={run}/>
       {run.error&&!error&&!noticeError&&<HaloNotice tone="error" title={run.error} description="输入、原引用和已有回执仍保留。先前执行可能已产生项目改动；重试前请核对，不会自动回滚文件。"/>}
       {['failed','interrupted','cancelled','timed_out'].includes(run.status)&&<button className="wb-button" disabled={busy} onClick={()=>action(()=>call('retry',{taskId:task.id,previousId:run.id,requestId:'retry-'+run.id}))}>核对后重试此任务</button>}
       {active.includes(run.status)&&<button className="wb-button wb-danger" disabled={busy||run.status==='cancelling'} onClick={()=>action(()=>call('cancel',{runId:run.id}))}>停止本次执行</button>}
@@ -94,9 +108,9 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
         {!adopted&&run.review&&<HaloNotice title="复核已保存" description={`${({accepted:'确认保留',needs_work:'需要继续核对',rejected:'不采用'}as any)[run.review.decision]}。复核本身不改写内容；逐项采纳记录见下方。`}/>} </section>}
       {!error&&run.review?.decision==='accepted'&&run.result&&<ResultAdoption run={run} client={client} refresh={refresh} onOpen={onOpenWriteback} onPlace={onPlaceWriteback}/>}
       {!error&&(!run.result||run.review?.decision!=='accepted')&&<UnavailableWritebacks run={run} client={client} refresh={refresh} onOpen={onOpenWriteback}/>}
-      {previousRuns.length>0&&<HaloDisclosure title={<>此前运行与回执（{previousRuns.length}）</>}>{previousRuns.map(old=><section key={old.id}><strong>第 {old.number} 次：{labels[old.status]}</strong><p>{old.sourceError||old.error||old.result?.answer||'没有已确认结果'}</p><small>{old.runtime.threadId||old.id}</small></section>)}</HaloDisclosure>}
       <ExecutionLog events={run.events} title="已记录的执行事件"/>
     </>}
+    {previousRuns.length>0&&<HaloDisclosure title={<>此前运行与回执（{previousRuns.length}）</>}>{previousRuns.map(old=><section key={old.id}><strong>第 {old.number} 次：{labels[old.status]}</strong><p>{old.sourceError||old.error||old.result?.answer||'没有已确认结果'}</p><small>{old.runtime.threadId||old.id}</small><NativeRawReturn key={old.id+':'+old.rawHash} run={old}/></section>)}</HaloDisclosure>}
     {error&&<div className="wb-execution-recovery"><HaloNotice tone="error" title="当前执行状态未确认" description={error+' 上次记录仍保留，不代表当前执行状态。'}/><button className="wb-button" onClick={()=>void refresh()}>重新读取执行记录</button></div>}{!error&&(busy||notice)&&<HaloNotice pending={busy} tone={busy?'neutral':noticeError?'error':'success'} title={busy?'正在核对执行回执…':notice}/>}
   </section>;
 }

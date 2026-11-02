@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.15",
+  "version": "0.3.0-frontend.16",
   "recordedAt": "2026-11-03",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.15.tgz",
-    "sha256": "13218aaa48f52010e0e8c899eced3ce83dceb448fa5d7bf013f34c2ff73b756a",
-    "integrity": "sha512-2epdc45EZv8QXkmPxeUseR3ioR3rRtziiWcLzGtnYBOHeRHkvD4TB2C/VFtNpXQlXDhbQbQOyB/v6tqFwHKZsA=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.16.tgz",
+    "sha256": "b6f1b6847c3a44310d405273a1807a495f579be806c9abadaf0a7a5e1a82e01d",
+    "integrity": "sha512-9CzXEBTvGeivbP8RDHgKOeANdrqbphd95nDg17esx6akc4AxKWlZBoi/dXzeM4igPywd5zLxhgFuMALFqiAfJA=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "c8cb23d5cb0dad6f1e82fe535816fc7662bc41e2",
+    "head": "872a87f73c7d92f07d896490db102851c6f7d7c8",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "README.md",
-        "sha256": "10bcc6ec996e29001dcf39546716caaf34e55f00621bc554d17dccf9645a9b48"
+        "sha256": "a9d47247c217e240b9bab2f65f757911c77196183ed4925006201bc29fb50883"
       },
       {
         "path": "package.json",
-        "sha256": "b8fd211e53330c5e1f8008e3b20c08cf740ca9c84ddbe9033e945898751ece88"
+        "sha256": "db7adc7f1b15dcc92530501b7b965d5f77670d4298abb7a25e41f0368a286d88"
       },
       {
         "path": "src/activation-rules.mjs",
@@ -95,11 +95,11 @@
       },
       {
         "path": "src/task-dispatch-rules.mjs",
-        "sha256": "737f9cd41f6efd2a0fb7ec747d94e4a1b020e16f4c2ec4dcddd8ab1c7ad203ce"
+        "sha256": "9bf75a5f33e5c4e99881860c0794ef5e054c35d4c9b31298d13a88de8905cb92"
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "0b3ace6095898f80cd8b1763784aa4639fbdb0e08232f819a3b878353dd9851c"
+        "sha256": "e7adaf6384c681da83a692a22c650c2f591f96878de694aecb186079d6f0b5ae"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -107,7 +107,7 @@
       },
       {
         "path": "src/workspace.mjs",
-        "sha256": "10d50a29935b254a3f246d7808a49fd4e442e1d089eec8e0ea1e2ee17ca381a3"
+        "sha256": "3a62bb0483b24a318c664a68df89a4c97d1ef35478ab71bfbfb047453338fe57"
       },
       {
         "path": "src/writeback-plan.mjs",
