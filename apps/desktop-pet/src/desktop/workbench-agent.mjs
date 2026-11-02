@@ -4,6 +4,7 @@ import {pathToFileURL} from 'node:url'
 import {randomUUID,createHash} from 'node:crypto'
 import {DatabaseSync} from 'node:sqlite'
 import {resultItems} from '../../../../shared/workbench-result-items.mjs'
+import {parseActivationOutput,stableWorkbenchJson} from '@trace/product-workspace'
 
 const activeStates=['queued','running','waiting_approval','waiting_input','cancelling']
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -21,6 +22,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,task_id TEXT NOT NULL,number INTEGER NOT NULL,request_key TEXT UNIQUE NOT NULL,input_hash TEXT NOT NULL,payload TEXT NOT NULL,project TEXT NOT NULL,mode TEXT NOT NULL,status TEXT NOT NULL,runtime TEXT NOT NULL DEFAULT '{}',events TEXT NOT NULL DEFAULT '[]',result TEXT,result_hash TEXT,error TEXT,review TEXT,created TEXT NOT NULL,finished TEXT);
     CREATE UNIQUE INDEX IF NOT EXISTS attempt_number ON attempts(task_id,number);
     CREATE TABLE IF NOT EXISTS adoptions(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,item_id TEXT NOT NULL,request_key TEXT UNIQUE NOT NULL,fingerprint TEXT NOT NULL,decision TEXT NOT NULL,status TEXT NOT NULL,plan TEXT,receipt TEXT,error TEXT,created TEXT NOT NULL);`)
+  for(const column of ['raw_output','raw_hash'])if(!db.prepare('PRAGMA table_info(attempts)').all().some(c=>c.name===column))db.exec('ALTER TABLE attempts ADD COLUMN '+column+' TEXT');
   db.prepare(`UPDATE attempts SET status='interrupted',finished=?,error='上次进程已退出。请核对项目现状后再明确重试；不会自动重跑。' WHERE status IN (${activeStates.map(()=>'?').join(',')})`).run(now(),...activeStates)
   let closed=false,active=null,loading=null
   const row=id=>db.prepare('SELECT * FROM attempts WHERE id=?').get(id)
@@ -35,7 +37,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     return {payload,result};
   };
   const presentation=r=>{if(!r.result&&r.status!=='succeeded')return {result:null,sourceRefs:null,sourceError:''};try{const {payload,result}=storedReturn(r);return {result,sourceRefs:payload.fragments.filter(f=>f.ref).map(f=>f.ref),sourceError:''};}catch{return {result:null,sourceRefs:null,sourceError:'原始输入或返回不可用或完整性不一致；已存状态/回执仍保留，不将损坏正文当作已核验来源。'};}};
-  const publicRow=r=>{if(!r)return r;const checked=presentation(r);return ({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
+  const publicRow=r=>{if(!r)return r;const checked=presentation(r);return ({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',activationId:JSON.parse(r.payload).activationId,sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='activation'?'仅本次探索':JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
     runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceRefs:checked.sourceRefs,sourceError:checked.sourceError,resultHash:r.result_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
   // Re-read the exact immutable source, both when recording and when viewing.
   // A matching metadata hash alone cannot validate a damaged stored result.
@@ -49,9 +51,29 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     return {status:r.status,result,context:{kind:'native-result',runId:r.id,taskId:r.task_id,inputHash:r.input_hash,resultHash:r.result_hash,verifiedAt:now(),refs,...(payload.kind==='thinking'?{sessionId:payload.sessionId,messageId:payload.messageId}:{})}};
   };
   store.configureFeedbackEvidenceResolver?.(context=>feedbackSource(context).context);
+  store.configureActivationEvidenceResolver?.((activationId,source)=>{
+    if(source.kind==='manual'){
+      const latest=db.prepare('SELECT status FROM attempts WHERE task_id=? ORDER BY number DESC LIMIT 1').get('activation-'+activationId);
+      guard(!latest||!activeStates.includes(latest.status),'本次AI仍在运行或停止尚未确认；先核对并停止，再保存人工候选。草稿未覆盖。');return{kind:'manual'};
+    }
+    const r=row(source.runId);guard(r&&r.status==='succeeded'&&r.input_hash===source.inputHash&&r.result_hash===source.resultHash,'原激活运行、输入或返回身份不一致。');
+    const {payload,result}=storedReturn(r);guard(payload.kind==='activation'&&payload.activationId===activationId&&Array.isArray(result.activationEvidence),'原运行不是这次激活，或缺少实际读取证明。');
+    const parsed=parseActivationOutput(payload,result,result.activationEvidence);
+    guard(stableWorkbenchJson(parsed)===stableWorkbenchJson(result.activation),'原候选解析与不可变返回不一致。');
+    return{request:payload.activation,source:{kind:'native-result',runId:r.id,inputHash:r.input_hash,resultHash:r.result_hash},...parsed};
+  });
   const notify=()=>{try{onChange()}catch{}}
   const update=(id,patch)=>{if(closed)return;const previous=row(id);if(patch.status&&patch.status!==previous.status){const events=JSON.parse(patch.events||previous.events);events.push({sequence:(events.at(-1)?.sequence||0)+1,type:'run.'+patch.status,at:now()});patch.events=JSON.stringify(events);if(!activeStates.includes(patch.status)){const runtime=JSON.parse(patch.runtime||previous.runtime);delete runtime.interaction;patch.runtime=JSON.stringify(runtime)}}const fields=Object.keys(patch);db.prepare(`UPDATE attempts SET ${fields.map(k=>k+'=?').join(',')} WHERE id=?`).run(...Object.values(patch),id);notify()}
   const latest=task=>db.prepare('SELECT * FROM attempts WHERE task_id=? ORDER BY number DESC LIMIT 1').get(task)
+  function stopActivation(id){
+    guard(identity(id),'激活身份不正确。');
+    if(closed)return{items:[],closed:true};
+    const rows=db.prepare(`SELECT * FROM attempts WHERE task_id=? AND status IN (${activeStates.map(()=>'?').join(',')})`).all('activation-'+id,...activeStates);
+    for(const r of rows){if(r.status==='queued')update(r.id,{status:'cancelled',finished:now(),error:'原探索已结束，未启动执行。'});else{update(r.id,{status:'cancelling'});if(active?.id===r.id)active.controller.abort();}}
+    return{items:rows.map(r=>publicRow(row(r.id)))};
+  }
+  store.configureActivationCloseHandler?.(stopActivation);
+  const activationCurrent=payload=>payload.kind!=='activation'||store.activationIsPrepared(payload.activationId);
   async function modules(){return loading ||= Promise.all(['apps/agent/codex.mjs','apps/agent/protocol.mjs','native/qualify-codex-app-server.mjs'].map(p=>import(pathToFileURL(path.join(runtimeRoot,p)).href)))}
   const env=()=>({...process.env,TEMP:path.join(directory,'tmp'),TMP:path.join(directory,'tmp'),TRACE_CODEX_QUALIFICATION_RECORD:path.join(directory,'codex-qualification.json')})
   function project(){const value=getProject();guard(typeof value==='string'&&path.isAbsolute(value)&&fs.statSync(value).isDirectory(),'请先选择一个存在的执行项目。');return fs.realpathSync(value)}
@@ -76,21 +98,30 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   async function run(r){
     const controller=new AbortController();active={id:r.id,controller,adapter:null,promise:null}
     const work=async()=>{let timer;try{
+      const payload=JSON.parse(r.payload),task=payload.task;
+      guard(activationCurrent(payload),'原探索已结束，未启动执行。');
       update(r.id,{status:'running'});const checked=await qualify(r.project,controller.signal);guard(checked.authenticated,'Codex尚未登录。');event(r.id,'runtime.checked',{runtimeVersion:checked.version})
-      const [codex,protocol]=await modules(),payload=JSON.parse(r.payload),task=payload.task
+      const [codex,protocol]=await modules();guard(activationCurrent(payload),'原探索已结束，未提交模型。');
       const context={protocolVersion:1,matterId:task.id,baseRevision:0,contextMode:'fresh',contextEpoch:0,target:{},fragments:payload.fragments,omitted:task.excluded,externalRetrieval:'disabled',contextHash:r.input_hash}
-      const request={purpose:'discuss',matterId:task.id,contextEpoch:0,input:task.goal+'\n\n结果协议：citations只能引用通过trace_context_read实际读取过的Trace片段，并且quote必须逐字来自该片段。项目文件依据写在answer中，不得为项目文件虚构contextId；未引用Trace片段时citations必须为空。非修订任务replacement必须为null。\n本次执行步骤：'+JSON.stringify(task.plan||[])+'\n本次明确选择的AI指令：'+payload.fragments.filter(f=>f.role==='instruction').map(f=>f.text).join('\n')}
+      const activationProtocol=payload.kind==='activation'?'\n激活专用协议：不要读取项目文件或其它来源。仅从明确的seed与candidate角色形成少量有依据候选。answer必须是严格JSON字符串，结构为 {"formatVersion":1,"summary":"结果或无候选的原因","candidates":[{"id":"c1","from":"实际读取的seed contextId","to":"实际读取的candidate contextId","kind":"direct 或 potential","commonality":"共通点/理由","difference":"条件和差异","uncertainty":"尚未验证之处","relationKind":"unknown / support / supplement / limit / challenge / alternative / branch","question":"可留下的新问题，或空字符串","evidence":[0,1]}]}。evidence是外层citations的下标，两端均须逐字引用实际读取的内容；不可引用instruction当作材料依据。最多'+payload.activation.limit+'项，不够就少给；没有合适联系candidates=[]，不得凑数、提供百分比、输出markdown或自认已采纳。replacement=null。':'';
+      const request={purpose:'discuss',matterId:task.id,contextEpoch:0,input:task.goal+'\n\n结果协议：citations只能引用通过trace_context_read实际读取过的Trace片段，并且quote必须逐字来自该片段。项目文件依据写在answer中，不得为项目文件虚构contextId；未引用Trace片段时citations必须为空。非修订任务replacement必须为null。\n本次执行步骤：'+JSON.stringify(task.plan||[])+'\n本次明确选择的AI指令：'+payload.fragments.filter(f=>f.role==='instruction').map(f=>f.text).join('\n')+activationProtocol}
       const executor=adapter(codex,r.project,r.mode);active.adapter=executor
       timer=setTimeout(()=>controller.abort(),300000)
-      const outcome=await executor.execute({runId:r.id,request,context,signal:controller.signal,isCurrent:()=>!closed&&!controller.signal.aborted&&active?.id===r.id&&activeStates.includes(row(r.id).status),onEvent:(type,data)=>event(r.id,type,data)})
+      const outcome=await executor.execute({runId:r.id,request,context,signal:controller.signal,isCurrent:()=>!closed&&!controller.signal.aborted&&active?.id===r.id&&activeStates.includes(row(r.id).status)&&activationCurrent(payload),onEvent:(type,data)=>event(r.id,type,data)})
+      if(payload.kind==='activation'&&!closed){guard(typeof outcome.raw==='string'&&Buffer.byteLength(outcome.raw)<=1024*1024,'原激活返回过大，未解析成候选。');update(r.id,{raw_output:outcome.raw,raw_hash:hash(outcome.raw)});}
       const result=protocol.validateOutput(outcome.raw,{...context,fragments:outcome.providedFragments||context.fragments},request)
-      if(controller.signal.aborted||row(r.id).status==='cancelling')throw Error('执行已停止，迟到结果未采用。')
+      if(payload.kind==='activation'){
+        guard(Array.isArray(outcome.providedFragments),'缺少本次实际读取证明，未将返回当成有效激活。');
+        result.activationEvidence=structuredClone(outcome.providedFragments);result.activation=parseActivationOutput(payload,result,result.activationEvidence);
+      }
+      if(controller.signal.aborted||row(r.id).status==='cancelling'||!activationCurrent(payload))throw Error('执行已停止或原探索已结束，迟到结果未采用。')
       if(!closed&&row(r.id).status!=='interrupted')update(r.id,{status:'succeeded',result:JSON.stringify(result),result_hash:hash(result),finished:now(),error:null,runtime:JSON.stringify({...JSON.parse(row(r.id).runtime),threadId:outcome.threadId,turnId:outcome.turnId,version:outcome.runtimeVersion})})
     }catch(error){if(!closed&&row(r.id).status!=='interrupted')update(r.id,{status:row(r.id).status==='cancelling'?'cancelled':controller.signal.aborted?'timed_out':'failed',finished:now(),error:String(error.message||'执行未完成。').replace(/[A-Za-z]:[\\/][^\s，。]+/g,'[本机路径]').slice(0,800)})}finally{clearTimeout(timer);if(active?.id===r.id)active=null}}
     const promise=work();if(active)active.promise=promise;await promise
   }
   async function pump(){if(active||closed)return;const r=db.prepare("SELECT * FROM attempts WHERE status='queued' ORDER BY created LIMIT 1").get();if(!r)return;await run(r);if(!closed)void pump()}
   function inputFor(request,original=null) {
+    if(original?.kind==='activation'||!original&&Boolean(request.activationId))return store.activationSnapshot(original?.activationId||request.activationId);
     const thinking=original?original.kind==='thinking':request.operation==='workbench.agent.think'||Boolean(request.sessionId);
     const payload=thinking?store.thinkingSnapshot(original?.sessionId||request.sessionId,original?.messageId||request.messageId,{legacy:Boolean(original&&!original.messageScope)}):store.taskSnapshot(request.taskId);
     if(thinking){payload.previous=original?.previous||[];payload.fragments.push(...payload.previous);guard(Buffer.byteLength(JSON.stringify(payload))<=256*1024,'讨论上下文超过256 KiB，请缩小范围。')}
@@ -102,7 +133,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     if(known){guard(known.task_id===request.taskId,'请求身份已用于另一任务。');return publicRow(known)}
     if(!retry&&previous)return publicRow(previous)
     if(retry)guard(previous&&previous.id===request.previousId&&['failed','interrupted','cancelled','timed_out'].includes(previous.status),'只能重试该任务最近一次未完成运行。')
-    const thinking=retry?JSON.parse(previous.payload).kind==='thinking':request.operation==='workbench.agent.think'
+    const thinking=retry?['thinking','activation'].includes(JSON.parse(previous.payload).kind):['workbench.agent.think','workbench.agent.activate'].includes(request.operation)
     const original=retry?JSON.parse(previous.payload):null
     const payload=inputFor(request,original)
     if(request.expectedInputHash!==undefined)guard(request.expectedInputHash===hash(payload),'刚才核对的发送范围已变化，请重新读取实际输入；没有开始执行。')
@@ -168,12 +199,17 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       if(req.operation==='workbench.agent.status'){let cwd;try{cwd=project()}catch{}return {available:Boolean(getExecutable()),projectName:cwd?path.basename(cwd):null,projectSelected:Boolean(cwd)}}
       if(req.operation==='workbench.agent.check'){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),65000);try{return {ready:true,...await qualify(project(),controller.signal)}}finally{clearTimeout(timer)}}
       if(req.operation==='workbench.agent.input.preview'){const payload=inputFor(req);return {payload,inputHash:hash(payload),executionStarted:false};}
+      if(req.operation==='workbench.agent.activation.stop')return stopActivation(req.activationId)
       if(req.operation==='workbench.agent.feedback.source')return feedbackSource(req)
       if(req.operation==='workbench.agent.list')return {items:db.prepare('SELECT * FROM attempts ORDER BY created').all().map(publicRow)}
       if(req.operation==='workbench.agent.submit')return submit(req)
       if(req.operation==='workbench.agent.think'){guard(identity(req.sessionId)&&identity(req.messageId),'讨论身份不正确。');return submit({...req,taskId:'thinking-'+req.sessionId+'-'+req.messageId,mode:'thinking'})}
+      if(req.operation==='workbench.agent.activate'){guard(identity(req.activationId),'激活身份不正确。');return submit({...req,taskId:'activation-'+req.activationId,mode:'thinking'})}
       if(req.operation==='workbench.agent.retry')return submit(req,true)
       const r=row(req.runId);guard(r,'没有这个运行记录。')
+      if(req.operation==='workbench.agent.activation.original'){
+        guard(JSON.parse(r.payload).kind==='activation'&&typeof r.raw_output==='string'&&hash(r.raw_output)===r.raw_hash,'原激活返回暂不可核验，没有改用另一结果。');return{runId:r.id,status:r.status,raw:r.raw_output,parsed:Boolean(r.result),hash:r.raw_hash};
+      }
       if(req.operation==='workbench.agent.adopt')return adopt(req,r)
       if(req.operation==='workbench.agent.archive'){
         guard(r.status==='succeeded'&&r.result_hash===req.resultHash,'请先核对这份准确版本的真实返回。');

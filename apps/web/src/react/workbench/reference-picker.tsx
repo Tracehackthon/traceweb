@@ -28,7 +28,7 @@ export function projectReference(value:ContentValue,ref:ContentRef):ContentValue
 
 // Controlled local draft only. The global search projection is reused; no
 // mutation/recovery owner, model, placement action, or second content store.
-export function ReferencePicker({client,value,onChange,onAttach,onClose,attached,purpose='feedback',intent='include'}:{client:WorkbenchClient;value:ReferencePickerState;onChange:(v:ReferencePickerState)=>void;onAttach:(ref:ContentRef)=>void;onClose:()=>void;attached:ContentRef[];purpose?:'feedback'|'thinking'|'task'|'writeback';intent?:'include'|'exclude'}){
+export function ReferencePicker({client,value,onChange,onAttach,onClose,attached,purpose='feedback',intent='include'}:{client:WorkbenchClient;value:ReferencePickerState;onChange:(v:ReferencePickerState)=>void;onAttach:(ref:ContentRef)=>void;onClose:()=>void;attached:ContentRef[];purpose?:'feedback'|'thinking'|'task'|'writeback'|'activation';intent?:'include'|'exclude'}){
  const s=useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot),host=s.host!,index=useMemo(()=>indexWorkspace(host),[host]),matches=useMemo(()=>filterWorkspaceIndex(index,value.query,{group:value.group,history:value.history},true),[index,value.query,value.group,value.history]),[notice,setNotice]=useState(''),[original,setOriginal]=useState(false),text=useRef<HTMLTextAreaElement>(null);
  const selected=value.selected,collection=selected&&host[{material:'materials',expression:'expressions',capability:'capabilities'}[selected.kind]],entry=selected&&collection?.[selected.id],body=selected&&entry?.versions[selected.version];
  let reference:ContentRef|null=null,error='';
@@ -42,7 +42,7 @@ export function ReferencePicker({client,value,onChange,onAttach,onClose,attached
  const duplicate=Boolean(reference&&attached.some(r=>same(r,reference))),unchanged=Boolean(reference&&value.replacing&&same(reference,value.replacing));
  const update=(patch:Partial<ReferencePickerState>)=>{onChange({...value,...patch});setNotice('');};
  const originalRef=reference||selected;
- const target=purpose==='feedback'?'反馈':purpose==='thinking'?'共同思考':purpose==='writeback'?'写回':'任务准备',context=purpose==='feedback'?'':(intent==='exclude'?'明确排除 · ':'本次引用 · ')+target+'草稿';
+ const target=purpose==='feedback'?'反馈':purpose==='thinking'?'共同思考':purpose==='writeback'?'写回':purpose==='activation'?'激活探索':'任务准备',context=purpose==='feedback'?'':(intent==='exclude'?'明确排除 · ':'本次引用 · ')+target+'草稿';
  return createPortal(<WorkbenchModal title={value.replacing?'替换准确引用':'添加准确引用'} className="wb-reference-dialog wb-review-dialog" context={context||undefined} onClose={onClose}><div className="wb-reference-picker">
   <p className="wb-halo-hint">只选择已保存对象及准确版本，不自动附整个画布、发送原件或启动Agent。添加只改本地{target}草稿，仍需单独保存{purpose==='thinking'?'这段原话':target}。</p>
   {s.readError&&<HaloNotice tone="warning" title="显示上次成功读取的内容" description={s.readError}/>}

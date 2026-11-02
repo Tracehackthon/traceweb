@@ -1,6 +1,6 @@
 import {Readable} from 'node:stream'
 import {createProductWorkspace} from '@trace/product-workspace/node'
-import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences,prepareContentWriteback} from '@trace/product-workspace'
+import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences,prepareContentWriteback,activationInput} from '@trace/product-workspace'
 
 const RESPONSE_KIND = 'trace.native-product-response@1'
 const jsonLimit = 8 * 1024 * 1024
@@ -21,8 +21,12 @@ function originalOperations(host,runId,answer,refs) {
 // One canonical SQLite owner for the new workspace. The legacy Runtime keeps
 // its original web.sqlite; no implicit conversion, dual writer or fallback.
 export function createDesktopWorkbench({file}) {
-  let owner
+  let owner,activationCloseHandler
   const workspace = () => owner ||= createProductWorkspace({file})
+  function afterCommit(command,result){
+    if(result?.receipt?.status!=='committed'||result.receipt.commandId!==command?.commandId)return;
+    for(const op of command.operations||[])if(op.type==='activation.close')activationCloseHandler?.(op.id);
+  }
   async function dispatch(pathname, method, body, type='application/json') {
     const req=Readable.from(body?.length ? [body] : [])
     req.url=pathname;req.method=method;req.socket={encrypted:false}
@@ -33,12 +37,16 @@ export function createDesktopWorkbench({file}) {
     if(status>=400){const value=JSON.parse(bytes.toString('utf8'));return {kind:RESPONSE_KIND,ok:false,status,error:value.error}}
     if(type==='application/json' || method==='POST'){
       const value=JSON.parse(bytes.toString('utf8'))
+      if(method==='POST'&&pathname==='/api/product/commands')afterCommit(JSON.parse(body.toString('utf8')),value)
       if(value.storage)value.storage={kind:'sqlite',label:'Trace 桌面新工作区（旧内容独立保留）',features:value.storage.features||[]}
       return value
     }
     return {bytes:new Uint8Array(bytes),mime:headers['content-type']||'application/octet-stream'}
   }
   return {
+    activationSnapshot(id){return activationInput(workspace().read().host,id)},
+    activationIsPrepared(id){return workspace().read().host?.activations?.[id]?.status==='prepared'},
+    configureActivationCloseHandler(handler){if(typeof handler!=='function')throw Error('需要受控的执行停止处理器。');activationCloseHandler=handler},
     thinkingSnapshot(id,messageId,{legacy=false}={}) {
       const host=workspace().read().host,session=host?.sessions?.[id],index=session?.messages.findIndex(m=>m.id===messageId);
       if(!session||index<0)throw Error('讨论或本次消息不可用。');
@@ -82,8 +90,9 @@ export function createDesktopWorkbench({file}) {
       operations.push(...destination);
       return {command:{protocolVersion:1,commandId:id,expectedRevision:snapshot.revision,operations},source,...planned};
     },
-    execute(command){return workspace().execute(command)},
+    execute(command){const result=workspace().execute(command);afterCommit(command,result);return result},
     configureFeedbackEvidenceResolver(resolver){workspace().configureFeedbackEvidenceResolver(resolver)},
+    configureActivationEvidenceResolver(resolver){workspace().configureActivationEvidenceResolver(resolver)},
     taskSnapshot(id) {
       const host=workspace().read().host,task=host?.tasks?.[id]
       if(!task||task.status!=='prepared')throw Error('任务准备不可用或已取消。')

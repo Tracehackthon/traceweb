@@ -10,7 +10,7 @@ import './workspace-search.css';
 export type {SearchOptions,SearchHit,SearchTarget} from './workspace-index';
 import {indexWorkspace,filterWorkspaceIndex,previewSearchHit,selectSearchPart,searchGroups,type SearchOptions,type SearchHit,type SearchTarget,type SearchGroup} from './workspace-index';
 
-export function WorkspaceSearch({client,host,query,onQuery,options,onOptions,onOpen,onPlace,onReturnCanvas,activation=false,returnKey,scrollState,loading=false,readError=null}:{client:WorkbenchClient;host:ContentHost;query:string;onQuery:(value:string)=>void;options:SearchOptions;onOptions:(value:SearchOptions)=>void;onOpen:(hit:SearchHit)=>void;onPlace:(hit:SearchHit,owner:string,isCurrent:()=>boolean)=>Promise<unknown>;onReturnCanvas:()=>void;activation?:boolean;returnKey:string|null;scrollState:React.MutableRefObject<number>;loading?:boolean;readError?:string|null}){
+export function WorkspaceSearch({client,host,query,onQuery,options,onOptions,onOpen,onPlace,onReturnCanvas,returnKey,scrollState,loading=false,readError=null}:{client:WorkbenchClient;host:ContentHost;query:string;onQuery:(value:string)=>void;options:SearchOptions;onOptions:(value:SearchOptions)=>void;onOpen:(hit:SearchHit)=>void;onPlace:(hit:SearchHit,owner:string,isCurrent:()=>boolean)=>Promise<unknown>;onReturnCanvas:()=>void;returnKey:string|null;scrollState:React.MutableRefObject<number>;loading?:boolean;readError?:string|null}){
   const index=useMemo(()=>indexWorkspace(host),[host]),container=useRef<HTMLDivElement>(null),interacted=useRef(false),live=useRef({query,options}),[placeBusy,setPlaceBusy]=React.useState<string|null>(null),[error,setError]=React.useState('');
   live.current={query,options};
   const state=React.useSyncExternalStore(client.subscribe,client.getSnapshot,client.getSnapshot),feedbackOwner='search:placement';
@@ -39,7 +39,6 @@ export function WorkspaceSearch({client,host,query,onQuery,options,onOptions,onO
     <div className="wb-search-options"><label>查找范围<HaloSelect aria-label="查找范围" value={options.group} onValueChange={value=>onOptions({...options,group:value as SearchGroup})}>{searchGroups.map(group=><option key={group.value} value={group.value}>{group.label}</option>)}</HaloSelect></label><label className="wb-check"><input type="checkbox" checked={options.history} onChange={event=>onOptions({...options,history:event.target.checked})}/>包括历史正文版本</label></div>
     {readError&&<HaloNotice tone="warning" title="显示上次成功读取的内容" description={readError+' 检索结果不代表已经同步最新版本；关闭面板后可重试读取。'}/>}
     {loading&&<p role="status">正在重新读取；目前检索的是上次成功读取的内容。</p>}
-    {activation&&<p className="wb-muted">当前为已保存内容的文字检索，不是 AI 关联建议；不会自动认定关系。</p>}
     <p className="wb-halo-hint">查找当前空间已保存的正文、来源名称与地址、能力方法、版本反馈、用户讨论和任务准备。不读取原件全文、未提交草稿或独立运行账本中的 AI 结果。</p>
     <p className="wb-halo-hint" role="status">找到 {matches.length} 条{matches.length>100?'，先显示前 100 条，请缩小检索范围':''}。打开结果不修改内容或启动 Agent。</p>
     <FormFeedback client={client} owner={feedbackOwner} busy={Boolean(placeBusy)} pendingLabel="正在放到画布…" message={error} error={Boolean(error)}/>

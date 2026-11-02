@@ -1,29 +1,33 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.12",
-  "recordedAt": "2026-11-01",
+  "version": "0.3.0-frontend.14",
+  "recordedAt": "2026-11-02",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.12.tgz",
-    "sha256": "f836939a909cc1cc8e7b37dc81f17b0543756c139677086366a6e91bc48147bd",
-    "integrity": "sha512-gvn8oRxxZgH2mPdh0mJmmQoAe4AJdMo4PCSBEebKogLGKiLQ9Gi6VZvZjtJUDK3rff8c57h90pYcLk+2gqNW8A=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.14.tgz",
+    "sha256": "9a78cd2a9d05dc4884c21350a3b4547c55e7033bbdc9e790f29dbe203bc83d74",
+    "integrity": "sha512-PBYOKL6HHHUfAF7Zaa2ZteVZR539JC9v2JPUN0B1PRBKGN8OlElm6N5oyoYMWipRSLQeU8nJNe2TvIyaupkhPg=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "ecdc9ee56c56327924a40286ee9459179e1692e5",
+    "head": "867192c2a8ab6f84b03aa6faec9942a058d3d67d",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "README.md",
-        "sha256": "238ac679554f4058771cf6377f925a7f0e45400ba2d92ef73742191af1d99730"
+        "sha256": "c94840fbfc41b93795920b0621fe386e7bdeefc529d53c16f5a15b014aeb2661"
       },
       {
         "path": "package.json",
-        "sha256": "3e8ba89301fbb05a3cb92de3b7b54af43101e704764d184b177e2fc4a73743f7"
+        "sha256": "21df6a25482fd6eda28f582320f26726160024f7cdef7cf84ddbe1447c08c647"
+      },
+      {
+        "path": "src/activation-rules.mjs",
+        "sha256": "a54c32127dd9c9b197442c54fc1a8ca854ec1ca52f30f0f7219b642a6e7d611d"
       },
       {
         "path": "src/bridge.mjs",
@@ -31,11 +35,11 @@
       },
       {
         "path": "src/canvas-model.mjs",
-        "sha256": "06f7557bf840460bad0d8ce5b6c7d12045673b030dd6a6279f630933c85b7943"
+        "sha256": "b19b6aadafc19e758fb8fc2d03c011b78d2c19b43f07fe111cdf0d95dffddb32"
       },
       {
         "path": "src/canvas-store.mjs",
-        "sha256": "e875722755170be904e8700b258a83ebe7267d5d0907d911e7f8f1b8d77ac43d"
+        "sha256": "67733866bfa6fad6653bf514152930447dcc0baad546ca99bb83091e4fa09943"
       },
       {
         "path": "src/capability-feedback-rules.mjs",
@@ -91,7 +95,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "b401fb475ae2b2fd5af7b72312497f4e8909ce3aaadfb3928a02dd348d2b1538"
+        "sha256": "3984b6d9c145f18514b51c5f405b27579cc88a347069dfc93dc4ffccc853ba97"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -99,7 +103,7 @@
       },
       {
         "path": "src/workspace.mjs",
-        "sha256": "59f6bb8da1b38e868b73b53bdbc1e31b59fbf46d882417f3e17e82f905be52ba"
+        "sha256": "2597549685d411574ec0c33c42848bf7450cce18f58d89cd3cfbee841ab1398c"
       },
       {
         "path": "src/writeback-plan.mjs",
@@ -108,6 +112,10 @@
       {
         "path": "tsconfig.types.json",
         "sha256": "d1e01e41c11f04c2a28e89a695ea6a7a483160aec10ca4971d2a8ac6d75bfc2e"
+      },
+      {
+        "path": "types/activation-rules.d.mts",
+        "sha256": "ce8a1ec796bdef8e85e45b21377621956eec2d75b3e86b50b62eac575baae73c"
       },
       {
         "path": "types/bridge.d.mts",
@@ -155,7 +163,7 @@
       },
       {
         "path": "types/workbench-model.d.mts",
-        "sha256": "86433fb3203bad192cba6e311c8ab81729f3415012bcc8e0e60c15292f4bb168"
+        "sha256": "077cc02028e6c2c3a4036bb80fc34d7a0e35608e342e7ca308a034f0655c7e9e"
       },
       {
         "path": "types/worksite-model.d.mts",
@@ -169,10 +177,10 @@
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
   "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
-  "revisionReason": "frontend.11 adds typed attempt expressions, exact source refs and preserved relation revisions for explicit result writeback; no consumed archive is overwritten.",
+  "revisionReason": "frontend.14 fixes independently reproduced empty save/reject decisions without auto-filling or overwriting original candidates; accepted interpretations remain complete. No consumed archive overwritten.",
   "supersedes": {
-    "version": "0.3.0-frontend.10",
-    "reason": "Additive content schema2 extension; old records stay readable, old strict readers are not rollback writers for new expression/relationship fields."
+    "version": "0.3.0-frontend.13",
+    "reason": "SDK13 real-UI non-adoption first failure preserved. Additive schema2; old strict readers cannot downgrade-write the new catalog or layout context."
   },
   "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates."
 }
