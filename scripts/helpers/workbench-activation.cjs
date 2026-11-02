@@ -2,7 +2,7 @@
 // no provider output is fabricated and no semantic-model acceptance is claimed.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {selectValue}=require('./select-control.cjs');
-module.exports=async({page,state,saved,check,capture,out,desktop})=>{
+module.exports=async({page,state,saved,check,capture,out,desktop,app})=>{
   page.setDefaultTimeout(desktop?30000:12000);
   const btn=(name,scope=page)=>scope.getByRole('button',{name,exact:true});
   const box=(name,scope=page)=>scope.getByRole('textbox',{name,exact:true});
@@ -21,7 +21,10 @@ module.exports=async({page,state,saved,check,capture,out,desktop})=>{
   const before=await state(),materials=JSON.stringify(before.product.host.materials),seed=Object.values(before.product.host.expressions).find(e=>e.title==='激活起点：观察与判断');
   const seedValue=seed.versions[seed.version].text;
   check('activation starts from real user-created content and five local material originals',Object.keys(before.product.host.materials).length===5&&seedValue===original);
+  const readingGate=desktop&&process.argv.includes('--activation-reading');
+  if(readingGate)await app.evaluate(()=>{globalThis.__readingSetupGate={enabled:true,seen:false,release:null};});
   await open();check('activation is a local work surface, not a renamed search modal',await panel().count()===1&&await page.getByRole('dialog',{name:'激活旧线索',exact:true}).count()===0&&await page.locator('.wb-inspector').count()===0);
+  if(readingGate){for(let i=0;i<100&&!await app.evaluate(()=>Boolean(globalThis.__readingSetupGate?.seen));i++)await page.waitForTimeout(50);assert.ok(await app.evaluate(()=>Boolean(globalThis.__readingSetupGate?.seen)),'Hold the actual readonly native status response');assert.equal(await panel().getAttribute('data-reading-restored'),'pending');const text='恢复尚在等待时直接输入：这份新问题不得被清空。';await box('本次问题',panel()).fill(text);await page.waitForFunction(()=>document.querySelector('.wb-activation-panel')?.getAttribute('data-reading-restored')==='cancelled');check('typing during actual pending native recovery preserves the controlled value and independent draft',await box('本次问题',panel()).inputValue()===text&&await page.evaluate(text=>JSON.parse(localStorage.getItem('trace-workbench:personal:activation:canvas-main')||'null')?.question===text,text));await app.evaluate(()=>{globalThis.__readingSetupGate.enabled=false;globalThis.__readingSetupGate.release();});await page.waitForFunction(()=>document.querySelector('.wb-activation-panel')?.getAttribute('data-reading-restored')==='cancelled');check('late actual native setup cannot restore over the new question',await box('本次问题',panel()).inputValue()===text);}
   await btn('移除起点第1项',panel()).click();
   const pick=async(role,title)=>{
     await btn('选择'+role,panel()).click();const picker=page.getByRole('dialog',{name:'添加准确引用',exact:true});
@@ -70,7 +73,8 @@ module.exports=async({page,state,saved,check,capture,out,desktop})=>{
   for(const label of ['共通点与关系理由','差异与适用条件','不确定与待验证','可留下的新问题'])await box(label,card(3)).fill('');
   await btn('暂存，先不采用',card(3)).click();await saved();await btn('拒绝这次关联',card(3)).click();await saved();r=await current();
   check('save and reject have separate persisted history and do not create content or delete endpoints',r.decisions[candidates[3].id].map(d=>d.decision).join(',')==='saved,rejected'&&r.decisions[candidates[3].id].every(d=>['commonality','difference','uncertainty','question'].every(k=>d.interpretation[k]===''))&&Object.keys((await host()).expressions).length===contentCount&&Object.keys((await host()).relations).length===relationCount&&JSON.stringify((await host()).materials)===materials);
-  await btn('仅放在同一空间组',card(4)).click();await saved();r=await current();const plan=r.placements[candidates[4].id],scene=(await state()).canvases.find(d=>d.id===r.canvasId);
+  await btn('仅放在同一空间组',card(4)).click();await card(4).getByText(/^同框布局已核验 · r\d+$/).waitFor();await saved();r=await current();const plan=r.placements[candidates[4].id],scene=(await state()).canvases.find(d=>d.id===r.canvasId);
+  fs.writeFileSync(path.join(out,'coframe-after-global-idle.json'),JSON.stringify({record:r,scene,plan},null,2));
   check('coframe uses a real independent layout receipt with exact pinned endpoints',plan.status==='confirmed'&&plan.revision===scene.revision&&scene.nodes.some(n=>n.id===plan.fromNodeId&&n.groupId===plan.groupId&&JSON.stringify(n.ref)===JSON.stringify(candidates[4].from))&&scene.nodes.some(n=>n.id===plan.toNodeId&&n.groupId===plan.groupId));
   check('coframe alone is not an accepted semantic relation',r.decisions[candidates[4].id].at(-1).decision==='coframe'&&Object.keys((await host()).relations).length===relationCount);
   await accept(4);r=await current();check('later explicit acceptance keeps prior placement history and creates its own relation',r.placements[candidates[4].id].status==='confirmed'&&r.decisions[candidates[4].id].map(d=>d.decision).join(',')==='coframe,accepted'&&Object.keys((await host()).relations).length===relationCount+1);
@@ -85,5 +89,6 @@ module.exports=async({page,state,saved,check,capture,out,desktop})=>{
   await btn('沿此范围再探索',panel()).click();await btn('保存这次探索范围',panel()).click();await saved();const cancelledId=(await current()).id;await btn('取消本次探索',panel()).click();await saved();
   check('cancellation keeps frozen inputs and does not manufacture an empty successful result',(await current()).id===cancelledId&&(await current()).status==='cancelled'&&(await current()).result===null&&Object.keys((await host()).activations).length===3);
   check('all original materials and the user source body remain unchanged after the complete manual journey',JSON.stringify((await host()).materials)===materials&&(await host()).expressions[seed.id].versions[seed.version].text===original);
-  await capture('manual-activation-cancelled');fs.writeFileSync(path.join(out,'activation-state.json'),JSON.stringify(await state(),null,2));
+  if(process.argv.includes('--activation-reading'))await require('./workbench-activation-reading.cjs')({page,state,saved,check,capture,out,desktop,id,candidates,questionId,app});
+  await capture(process.argv.includes('--activation-reading')?'activation-reading-restored':'manual-activation-cancelled');fs.writeFileSync(path.join(out,'activation-state.json'),JSON.stringify(await state(),null,2));
 };
