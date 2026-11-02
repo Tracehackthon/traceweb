@@ -5,7 +5,7 @@ const namespace=location.pathname.startsWith('/app/demo')?'demo':'personal';
 const key='trace-workbench:'+namespace+':appearance';
 const valid=(value:unknown):value is ThemePreference=>value==='system'||value==='light'||value==='dark';
 export function useWorkbenchTheme(){
-  const [preference,setPreference]=useState<ThemePreference>(()=>{try{const value=JSON.parse(localStorage.getItem(key)||'null');return valid(value)?value:'system';}catch{return 'system';}});
+  const [preference,setPreference]=useState<ThemePreference>(()=>{try{const value=JSON.parse(localStorage.getItem(key)||'null');return valid(value)?value:'light';}catch{return 'light';}});
   useEffect(()=>{
     const root=document.documentElement,query=matchMedia('(prefers-color-scheme: dark)');
     const apply=()=>{const dark=preference==='dark'||(preference==='system'&&query.matches);root.dataset.traceAppearance=dark?'dark':'light';root.classList.toggle('dark',dark);root.classList.toggle('light',!dark);root.style.colorScheme=dark?'dark':'light';};
