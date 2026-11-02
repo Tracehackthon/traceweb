@@ -108,7 +108,7 @@ async function stop(){
 async function main(){fs.mkdirSync(directory,{recursive:true});const command=process.argv[2];
   if(command==='start')console.log(JSON.stringify(await start()));
   else if(command==='status')console.log(JSON.stringify(await owned()));
-  else if(command==='detach'){await harnessStop();console.log(JSON.stringify({detached:true}));}
+  else if(command==='detach'){const release=takeLane('detach');try{await harnessStop();console.log(JSON.stringify({detached:true}));}finally{release();}}
   else if(command==='browser-use')process.exitCode=await useHarness(process.argv.slice(3));
   else if(command==='mcp')process.exitCode=await useMcp();
   else if(command==='stop')console.log(JSON.stringify(await stop()));
