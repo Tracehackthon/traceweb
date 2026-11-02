@@ -12,7 +12,7 @@ import {HaloField,HaloInput,HaloTextarea,HaloSelect} from './halo-controls';
 import {HaloDisclosure} from './halo-disclosure';
 import './task-execution.css';
 
-export type Run={kind?:string;activationId?:string;sessionId?:string;messageId?:string;adoptions:any[];id:string;taskId:string;number:number;status:string;mode:string;projectName:string;inputHash:string;scope:Task;runtime:any;events:any[];result:any;resultHash:string;rawAvailable?:boolean;rawHash?:string;sourceRefs?:ContentRef[]|null;sourceError?:string;adoption?:any;error:string;review?:{decision:string;note:string};created:string;finished:string};
+export type Run={kind?:string;activationId?:string;sessionId?:string;messageId?:string;adoptions:any[];id:string;taskId:string;number:number;status:string;mode:string;projectName:string;inputHash:string;scope:Task;runtime:any;events:any[];result:any;resultHash:string;rawAvailable?:boolean;rawHash?:string;rawComplete?:boolean|null;sourceRefs?:ContentRef[]|null;sourceError?:string;adoption?:any;error:string;review?:{decision:string;note:string};created:string;finished:string};
 const labels:Record<string,string>={queued:'等待执行',running:'正在执行',waiting_approval:'等待你的审批',waiting_input:'等待你的回答',cancelling:'正在停止',cancelled:'执行已停止',interrupted:'执行已中断',timed_out:'执行超时',failed:'执行失败',succeeded:'结果已返回，待复核'};
 const active=['queued','running','waiting_approval','waiting_input','cancelling'];
 const bridge=()=> (window as any).traceNative;
@@ -53,7 +53,7 @@ function NativeRawReturn({run}:{run:Run}){
     if(result?.runId!==run.id||result.hash!==run.rawHash||typeof result.raw!=='string')throw Error('原始输出身份不一致，没有换成其它返回。');
     if(n===sequence.current)setRaw(result.raw);
   }catch(e){if(n===sequence.current)setError(e.message||'原始输出暂不可核对，已有记录未覆盖。');}finally{if(n===sequence.current)setBusy(false);}};
-  return <HaloDisclosure title="本次原始输出（只读，不代表成功或采用）"><p>按本次运行与原始输出指纹核对。解析失败、停止或来源资格变化都不把这份记录变成已采用内容。</p><button type="button" className="wb-button" disabled={busy} aria-busy={busy} onClick={()=>void read()}>{busy?'正在核对原始输出…':raw===null?'核对并读取本次原始输出':'重新核对原始输出'}</button>{error&&<HaloNotice tone="warning" title="原始输出暂不可核验" description={error}/>} {raw!==null&&<CodeBlock code={raw} title="执行器原始输出（未自动采用）"/>}</HaloDisclosure>;
+  return <HaloDisclosure title="本次原始输出（只读，不代表成功或采用）"><p>按本次运行与原始输出指纹核对。解析失败、停止或来源资格变化都不把这份记录变成已采用内容。{run.rawComplete===false?'这次只捕获到中断前的部分输出，不能当作完整返回。':run.rawComplete==null?'这份旧记录没有完整输出标记，不据此推断生成已完成。':''}</p><button type="button" className="wb-button" disabled={busy} aria-busy={busy} onClick={()=>void read()}>{busy?'正在核对原始输出…':raw===null?'核对并读取本次原始输出':'重新核对原始输出'}</button>{error&&<HaloNotice tone="warning" title="原始输出暂不可核验" description={error}/>} {raw!==null&&<CodeBlock code={raw} title="执行器原始输出（未自动采用）"/>}</HaloDisclosure>;
 }
 
 function NativeInputPreview({taskId,thinking,client,onVerified}:{taskId:string;thinking?:{sessionId:string;messageId:string};client:WorkbenchClient;onVerified:(hash:string|null)=>void}){

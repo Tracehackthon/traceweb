@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.16",
+  "version": "0.3.0-frontend.17",
   "recordedAt": "2026-11-03",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.16.tgz",
-    "sha256": "b6f1b6847c3a44310d405273a1807a495f579be806c9abadaf0a7a5e1a82e01d",
-    "integrity": "sha512-9CzXEBTvGeivbP8RDHgKOeANdrqbphd95nDg17esx6akc4AxKWlZBoi/dXzeM4igPywd5zLxhgFuMALFqiAfJA=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.17.tgz",
+    "sha256": "4b6f72f9464d7960afdf436d8c05228bbf13da9bd330d707c1ebef12572ace35",
+    "integrity": "sha512-ZWFJmEuwne4IHjFnpy39abmHlE/VGqjvKATXKEIuB2+Qmz9Ayhkl7k9ORbidtTL0qk05WlzASpDRTPLOjsuZdg=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "872a87f73c7d92f07d896490db102851c6f7d7c8",
+    "head": "ab440ecc690cddd18b6b6772ddd5eb930bb0a1ba",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "README.md",
-        "sha256": "a9d47247c217e240b9bab2f65f757911c77196183ed4925006201bc29fb50883"
+        "sha256": "e0cc9a76c605edb80927cc45891c052a0c2ff7e92296ca04ab7d83b6667e22ce"
       },
       {
         "path": "package.json",
-        "sha256": "db7adc7f1b15dcc92530501b7b965d5f77670d4298abb7a25e41f0368a286d88"
+        "sha256": "7a1adca968335272bf2ea75cadd83d46f2437eab9b19af4a03f4e59c3097d2ee"
       },
       {
         "path": "src/activation-rules.mjs",
@@ -99,7 +99,7 @@
       },
       {
         "path": "src/workbench-model.mjs",
-        "sha256": "e7adaf6384c681da83a692a22c650c2f591f96878de694aecb186079d6f0b5ae"
+        "sha256": "10890ed7b83e004db54f9dba964debe640f33791727fdf65be25c1092155a6cb"
       },
       {
         "path": "src/worksite-model.mjs",
@@ -107,7 +107,7 @@
       },
       {
         "path": "src/workspace.mjs",
-        "sha256": "3a62bb0483b24a318c664a68df89a4c97d1ef35478ab71bfbfb047453338fe57"
+        "sha256": "2c2d9eecec801af043661494b51701e56133d0c9b99eb8353d607a04d617b99e"
       },
       {
         "path": "src/writeback-plan.mjs",
@@ -171,7 +171,7 @@
       },
       {
         "path": "types/workbench-model.d.mts",
-        "sha256": "817aefa1f92243de6f16166236a39de4efd4c435a2f8440fdf21b39cb7568a75"
+        "sha256": "b1d287d7f46ce35699dadda9d8d56175d850f4859ead44f78ffd2f4ebf09751d"
       },
       {
         "path": "types/worksite-model.d.mts",
@@ -185,10 +185,15 @@
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
   "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
-  "revisionReason": "frontend.16 persists exact retry parent identity and rechecks non-excluded task templates; native Web resume uses the locked reservation, preserves bounded raw historical returns before parsing, and revalidates future adoption. Product15 static Review failures are retained; no E2E acceptance is implied.",
+  "revisionReason": "frontend.17 restores exact locked input from the existing dispatch command snapshot while revalidating current source eligibility independently of display titles. Native stream ownership and future context-use gates are separated by an explicit adapter contract; partial raw output is captured on executor failure.",
   "supersedes": {
-    "version": "0.3.0-frontend.15",
-    "reason": "Three independently reviewed static P2 findings (reservation retry recovery, template eligibility, historical return retention). Product15 archive remains immutable. Product16 is an implementation candidate pending independent review and end-to-end gates."
+    "version": "0.3.0-frontend.16",
+    "reason": "Two independently reviewed static P2 findings retained: forUse in stream callbacks could suppress outcome.raw; current source title drift incorrectly invalidated exact old versions. Product16 archive stays immutable; no E2E acceptance implied."
   },
-  "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates."
+  "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates.",
+  "nativeRuntimeRequirement": {
+    "contract": "TASK_EXECUTION_GATES_VERSION=1",
+    "sourceCommit": "ab440ecc690cddd18b6b6772ddd5eb930bb0a1ba",
+    "packagedRuntime": "not staged or verified; old Runtime fails new Task execution before model submission; no installed app change"
+  }
 }

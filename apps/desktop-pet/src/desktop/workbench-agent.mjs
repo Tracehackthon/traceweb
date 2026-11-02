@@ -23,7 +23,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,task_id TEXT NOT NULL,number INTEGER NOT NULL,request_key TEXT UNIQUE NOT NULL,input_hash TEXT NOT NULL,payload TEXT NOT NULL,project TEXT NOT NULL,mode TEXT NOT NULL,status TEXT NOT NULL,runtime TEXT NOT NULL DEFAULT '{}',events TEXT NOT NULL DEFAULT '[]',result TEXT,result_hash TEXT,error TEXT,review TEXT,created TEXT NOT NULL,finished TEXT);
     CREATE UNIQUE INDEX IF NOT EXISTS attempt_number ON attempts(task_id,number);
     CREATE TABLE IF NOT EXISTS adoptions(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,item_id TEXT NOT NULL,request_key TEXT UNIQUE NOT NULL,fingerprint TEXT NOT NULL,decision TEXT NOT NULL,status TEXT NOT NULL,plan TEXT,receipt TEXT,error TEXT,created TEXT NOT NULL);`)
-  for(const column of ['raw_output','raw_hash'])if(!db.prepare('PRAGMA table_info(attempts)').all().some(c=>c.name===column))db.exec('ALTER TABLE attempts ADD COLUMN '+column+' TEXT');
+  for(const [column,type]of [['raw_output','TEXT'],['raw_hash','TEXT'],['raw_complete','INTEGER']])if(!db.prepare('PRAGMA table_info(attempts)').all().some(c=>c.name===column))db.exec('ALTER TABLE attempts ADD COLUMN '+column+' '+type);
   db.prepare(`UPDATE attempts SET status='interrupted',finished=?,error='上次进程已退出。请核对项目现状后再明确重试；不会自动重跑。' WHERE status IN (${activeStates.map(()=>'?').join(',')})`).run(now(),...activeStates)
   let closed=false,active=null,loading=null
   const row=id=>db.prepare('SELECT * FROM attempts WHERE id=?').get(id)
@@ -39,7 +39,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   };
   const presentation=r=>{if(!r.result&&r.status!=='succeeded')return {result:null,sourceRefs:null,sourceError:''};try{const {payload,result}=storedReturn(r);return {result,sourceRefs:payload.fragments.filter(f=>f.ref).map(f=>f.ref),sourceError:''};}catch{return {result:null,sourceRefs:null,sourceError:'原始输入或返回不可用或完整性不一致；已存状态/回执仍保留，不将损坏正文当作已核验来源。'};}};
   const publicRow=r=>{if(!r)return r;const checked=presentation(r);return ({id:r.id,taskId:r.task_id,kind:JSON.parse(r.payload).kind||'task',activationId:JSON.parse(r.payload).activationId,sessionId:JSON.parse(r.payload).sessionId,messageId:JSON.parse(r.payload).messageId,number:r.number,status:r.status,mode:r.mode,projectName:JSON.parse(r.payload).kind==='activation'?'仅本次探索':JSON.parse(r.payload).kind==='thinking'?'仅本讨论':path.basename(r.project),inputHash:r.input_hash,scope:JSON.parse(r.payload).task,adoptions:db.prepare('SELECT * FROM adoptions WHERE run_id=? ORDER BY rowid').all(r.id).map(publicAdoption),
-    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceRefs:checked.sourceRefs,sourceError:checked.sourceError,resultHash:r.result_hash,rawAvailable:typeof r.raw_output==='string'&&/^[a-f0-9]{64}$/.test(r.raw_hash),rawHash:r.raw_hash,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
+    runtime:JSON.parse(r.runtime),events:JSON.parse(r.events),result:checked.result,sourceRefs:checked.sourceRefs,sourceError:checked.sourceError,resultHash:r.result_hash,rawAvailable:typeof r.raw_output==='string'&&/^[a-f0-9]{64}$/.test(r.raw_hash),rawHash:r.raw_hash,rawComplete:r.raw_complete===null?null:r.raw_complete===1,error:r.error,review:r.review?JSON.parse(r.review):null,created:r.created,finished:r.finished});}
   // Re-read the exact immutable source, both when recording and when viewing.
   // A matching metadata hash alone cannot validate a damaged stored result.
   const feedbackSource=context=>{
@@ -65,11 +65,11 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   });
   const notify=()=>{try{onChange()}catch{}}
   const update=(id,patch)=>{if(closed)return;const previous=row(id);if(patch.status&&patch.status!==previous.status){const events=JSON.parse(patch.events||previous.events);events.push({sequence:(events.at(-1)?.sequence||0)+1,type:'run.'+patch.status,at:now()});patch.events=JSON.stringify(events);if(!activeStates.includes(patch.status)){const runtime=JSON.parse(patch.runtime||previous.runtime);delete runtime.interaction;patch.runtime=JSON.stringify(runtime)}}const fields=Object.keys(patch);db.prepare(`UPDATE attempts SET ${fields.map(k=>k+'=?').join(',')} WHERE id=?`).run(...Object.values(patch),id);notify()}
-  const archiveRaw=(id,raw)=>{
+  const archiveRaw=(id,raw,{complete=true}={})=>{
     guard(typeof raw==='string'&&Buffer.byteLength(raw)<=1024*1024,'原始返回不是文本或超过1 MiB，未解析或采用。');
     const saved=row(id),rawHash=hash(raw);
     if(saved.raw_output!==null||saved.raw_hash!==null){guard(saved.raw_output===raw&&saved.raw_hash===rawHash,'已有原始返回与本次字节不一致，未覆盖。');return;}
-    update(id,{raw_output:raw,raw_hash:rawHash});
+    update(id,{raw_output:raw,raw_hash:rawHash,raw_complete:complete?1:0});
   };
   const latest=task=>db.prepare('SELECT * FROM attempts WHERE task_id=? ORDER BY number DESC LIMIT 1').get(task)
   store.configureTaskDispatchResolver?.(({phase,taskId,runId,previousRunId})=>{
@@ -92,7 +92,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   const activationCurrent=payload=>payload.kind!=='activation'||store.activationIsPrepared(payload.activationId);
   const executionCurrent=(payload,r,options)=>activationCurrent(payload)&&(payload.kind==='activation'||payload.kind==='thinking'||store.taskDispatchIsCurrent?.(r.task_id,r.id,r.input_hash,options)===true);
   const adoptionUsable=(payload,r)=>{
-    if(!['activation','thinking'].includes(payload.kind))guard(store.taskResultIsUsable?.(r.task_id,r.id,r.input_hash)===true,'本次任务的来源资格或派发归属已变化；原始返回仍可保留，未将其写成当前理解。');
+    if(!['activation','thinking'].includes(payload.kind))guard(store.taskResultIsUsable?.(r.task_id,r.id,r.input_hash,payload)===true,'本次任务的来源资格或派发归属已变化；原始返回仍可保留，未将其写成当前理解。');
   };
   async function modules(){return loading ||= Promise.all(['apps/agent/codex.mjs','apps/agent/protocol.mjs','native/qualify-codex-app-server.mjs'].map(p=>import(pathToFileURL(path.join(runtimeRoot,p)).href)))}
   const env=()=>({...process.env,TEMP:path.join(directory,'tmp'),TMP:path.join(directory,'tmp'),TRACE_CODEX_QUALIFICATION_RECORD:path.join(directory,'codex-qualification.json')})
@@ -121,14 +121,17 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       const payload=JSON.parse(r.payload),task=payload.task;
       guard(hash(payload)===r.input_hash,'原冻结输入的完整性不一致，未启动执行。');
       guard(executionCurrent(payload,r),'原探索已结束或任务派发已失效，未启动执行。');
+      const [codex,protocol]=await modules();
+      if(!['activation','thinking'].includes(payload.kind))guard(codex.TASK_EXECUTION_GATES_VERSION===1,'当前Runtime尚未提供分离的读取资格与原稿接回协议，未提交模型；原准备与派发仍保留。');
       update(r.id,{status:'running'});const checked=await qualify(r.project,controller.signal);guard(checked.authenticated,'Codex尚未登录。');event(r.id,'runtime.checked',{runtimeVersion:checked.version})
-      const [codex,protocol]=await modules();guard(executionCurrent(payload,r),'原探索已结束或任务派发已失效，未提交模型。');
+      guard(executionCurrent(payload,r),'原探索已结束或任务派发已失效，未提交模型。');
       const context={protocolVersion:1,matterId:task.id,baseRevision:0,contextMode:'fresh',contextEpoch:0,target:{},fragments:payload.fragments,omitted:task.excluded,externalRetrieval:'disabled',contextHash:r.input_hash}
       const activationProtocol=payload.kind==='activation'?'\n激活专用协议：不要读取项目文件或其它来源。仅从明确的seed与candidate角色形成少量有依据候选。answer必须是严格JSON字符串，结构为 {"formatVersion":1,"summary":"结果或无候选的原因","candidates":[{"id":"c1","from":"实际读取的seed contextId","to":"实际读取的candidate contextId","kind":"direct 或 potential","commonality":"共通点/理由","difference":"条件和差异","uncertainty":"尚未验证之处","relationKind":"unknown / support / supplement / limit / challenge / alternative / branch","question":"可留下的新问题，或空字符串","evidence":[0,1]}]}。evidence是外层citations的下标，两端均须逐字引用实际读取的内容；不可引用instruction当作材料依据。最多'+payload.activation.limit+'项，不够就少给；没有合适联系candidates=[]，不得凑数、提供百分比、输出markdown或自认已采纳。replacement=null。':'';
       const request={purpose:'discuss',matterId:task.id,contextEpoch:0,input:task.goal+'\n\n结果协议：citations只能引用通过trace_context_read实际读取过的Trace片段，并且quote必须逐字来自该片段。项目文件依据写在answer中，不得为项目文件虚构contextId；未引用Trace片段时citations必须为空。非修订任务replacement必须为null。\n本次执行步骤：'+JSON.stringify(task.plan||[])+'\n本次明确选择的AI指令：'+payload.fragments.filter(f=>f.role==='instruction').map(f=>f.text).join('\n')+activationProtocol}
       const executor=adapter(codex,r.project,r.mode);active.adapter=executor
       timer=setTimeout(()=>controller.abort(),300000)
-      const outcome=await executor.execute({runId:r.id,request,context,signal:controller.signal,isCurrent:()=>!closed&&!controller.signal.aborted&&active?.id===r.id&&activeStates.includes(row(r.id).status)&&executionCurrent(payload,r),onEvent:(type,data)=>event(r.id,type,data)})
+      const ownsRun=()=>!closed&&!controller.signal.aborted&&active?.id===r.id&&activeStates.includes(row(r.id).status)&&executionCurrent(payload,r,{forUse:false});
+      const outcome=await executor.execute({runId:r.id,request,context,signal:controller.signal,isCurrent:ownsRun,canUseContext:()=>ownsRun()&&executionCurrent(payload,r),onRawOutput:({raw,complete})=>{if(!closed)archiveRaw(r.id,raw,{complete});},onEvent:(type,data)=>event(r.id,type,data)})
       // Preserve the original before parsing or checking adoption eligibility.
       // A late/cancelled/invalid response is evidence, not an adopted result.
       if(!closed)archiveRaw(r.id,outcome.raw);
@@ -258,7 +261,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       const r=row(req.runId);guard(r,'没有这个运行记录。')
       if(req.operation==='workbench.agent.result.original'){
         guard(req.rawHash===r.raw_hash&&typeof r.raw_output==='string'&&hash(r.raw_output)===r.raw_hash&&hash(JSON.parse(r.payload))===r.input_hash,'原始输出或输入身份暂不可核验，没有改用另一结果。');
-        return{runId:r.id,status:r.status,raw:r.raw_output,parsed:Boolean(r.result),hash:r.raw_hash};
+        return{runId:r.id,status:r.status,raw:r.raw_output,parsed:Boolean(r.result),hash:r.raw_hash,complete:r.raw_complete===null?null:r.raw_complete===1};
       }
       if(req.operation==='workbench.agent.activation.original'){
         guard(JSON.parse(r.payload).kind==='activation'&&typeof r.raw_output==='string'&&hash(r.raw_output)===r.raw_hash,'原激活返回暂不可核验，没有改用另一结果。');return{runId:r.id,status:r.status,raw:r.raw_output,parsed:Boolean(r.result),hash:r.raw_hash};

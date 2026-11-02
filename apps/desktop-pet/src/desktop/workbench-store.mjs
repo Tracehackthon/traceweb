@@ -1,7 +1,7 @@
 import {Readable} from 'node:stream'
 import {createHash} from 'node:crypto'
 import {createProductWorkspace} from '@trace/product-workspace/node'
-import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences,prepareContentWriteback,activationInput,taskInput} from '@trace/product-workspace'
+import {resolveContentRef,stableWorkbenchJson,effectiveContentReferences,prepareContentWriteback,activationInput,assertTaskInputUsable} from '@trace/product-workspace'
 
 const RESPONSE_KIND = 'trace.native-product-response@1'
 const jsonLimit = 8 * 1024 * 1024
@@ -104,14 +104,17 @@ export function createDesktopWorkbench({file}) {
       // A historical return belongs to the locked input, not a reconstruction
       // from today's source titles/statuses. Eligibility is a separate gate.
       if(!forUse)return true;
-      try{return createHash('sha256').update(JSON.stringify(taskInput(host,id))).digest('hex')===inputHash}catch{return false}
+      try{return createHash('sha256').update(JSON.stringify(workspace().readTaskInput(id))).digest('hex')===inputHash}catch{return false}
     },
-    taskResultIsUsable(id,runId,inputHash){
+    taskResultIsUsable(id,runId,inputHash,payload){
       const host=workspace().read().host,claim=host?.tasks?.[id]?.dispatch;
       if(claim&&(claim.source!=='native'||claim.runId!==runId||claim.inputHash!==inputHash||claim.cancelledAt))return false;
-      try{return createHash('sha256').update(JSON.stringify(taskInput(host,id))).digest('hex')===inputHash}catch{return false}
+      try{
+        if(createHash('sha256').update(JSON.stringify(payload)).digest('hex')!==inputHash)return false;
+        return assertTaskInputUsable(host,id,payload);
+      }catch{return false}
     },
-    taskSnapshot(id) {return taskInput(workspace().read().host,id)},
+    taskSnapshot(id) {return workspace().readTaskInput(id)},
     async request(request) {
       if(request?.operation==='workbench.request'){
         const p=request.pathname,m=request.method||'GET'
