@@ -1,5 +1,5 @@
 // Development verification of the same formal application, not another UI.
-// A verification target stays immutable while in use, with its own Product15.
+// A verification target stays immutable while in use, with its own fixed Product.
 // Superseded programs, builds and test profiles are reclaimed after evidence
 // and actual dependencies are checked; Git, the input baseline and user data stay.
 import fs from 'node:fs';
