@@ -185,10 +185,10 @@
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
   "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
-  "revisionReason": "frontend.14 fixes independently reproduced empty save/reject decisions without auto-filling or overwriting original candidates; accepted interpretations remain complete. No consumed archive overwritten.",
+  "revisionReason": "frontend.16 persists exact retry parent identity and rechecks non-excluded task templates; native Web resume uses the locked reservation, preserves bounded raw historical returns before parsing, and revalidates future adoption. Product15 static Review failures are retained; no E2E acceptance is implied.",
   "supersedes": {
-    "version": "0.3.0-frontend.13",
-    "reason": "SDK13 real-UI non-adoption first failure preserved. Additive schema2; old strict readers cannot downgrade-write the new catalog or layout context."
+    "version": "0.3.0-frontend.15",
+    "reason": "Three independently reviewed static P2 findings (reservation retry recovery, template eligibility, historical return retention). Product15 archive remains immutable. Product16 is an implementation candidate pending independent review and end-to-end gates."
   },
   "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates."
 }
