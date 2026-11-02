@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
   "name": "@trace/product-workspace",
-  "version": "0.3.0-frontend.17",
+  "version": "0.3.0-frontend.18",
   "recordedAt": "2026-11-03",
   "license": "UNLICENSED",
   "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
   "archive": {
-    "path": "vendor/trace-product-workspace-0.3.0-frontend.17.tgz",
-    "sha256": "4b6f72f9464d7960afdf436d8c05228bbf13da9bd330d707c1ebef12572ace35",
-    "integrity": "sha512-ZWFJmEuwne4IHjFnpy39abmHlE/VGqjvKATXKEIuB2+Qmz9Ayhkl7k9ORbidtTL0qk05WlzASpDRTPLOjsuZdg=="
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.18.tgz",
+    "sha256": "f06d527b1cfa69647340bc1c72dc9f72217fa4d8ca3454c4eebdaeaabdf5a3a0",
+    "integrity": "sha512-3utxiNfDGqpmKicYlJGJhcsLilthATB25yefZnFjgFGEkz3UB7u6Yl3PFuyLOQvpSaru8mr0Or5A4QuWp+cFNg=="
   },
   "source": {
     "repository": "trace-runtime",
     "relativePackage": "packages/product/workspace",
-    "head": "ab440ecc690cddd18b6b6772ddd5eb930bb0a1ba",
+    "head": "b2f8400842f29aa900417e35c39e14f9bff686a7",
     "dirty": false,
     "dirtyStatus": "",
     "files": [
       {
         "path": "README.md",
-        "sha256": "e0cc9a76c605edb80927cc45891c052a0c2ff7e92296ca04ab7d83b6667e22ce"
+        "sha256": "f1187cf1b4311d09c30fa7e25c7fffb2cda3f42ee4d6c30c9ddd7131460fbced"
       },
       {
         "path": "package.json",
-        "sha256": "7a1adca968335272bf2ea75cadd83d46f2437eab9b19af4a03f4e59c3097d2ee"
+        "sha256": "4a2516ac73789808aa4b64a667089ef3f2b34b9f940ac921671503515ec88fe1"
       },
       {
         "path": "src/activation-rules.mjs",
@@ -95,7 +95,7 @@
       },
       {
         "path": "src/task-dispatch-rules.mjs",
-        "sha256": "9bf75a5f33e5c4e99881860c0794ef5e054c35d4c9b31298d13a88de8905cb92"
+        "sha256": "88df11c31508809324c21178be385aeae45756b6069664b9810cb7eeef90ccb0"
       },
       {
         "path": "src/workbench-model.mjs",
@@ -107,7 +107,7 @@
       },
       {
         "path": "src/workspace.mjs",
-        "sha256": "2c2d9eecec801af043661494b51701e56133d0c9b99eb8353d607a04d617b99e"
+        "sha256": "0025362ac11245080758c786aba4cd2b3d4c94848bc8a824000aed106410406f"
       },
       {
         "path": "src/writeback-plan.mjs",
@@ -167,7 +167,7 @@
       },
       {
         "path": "types/task-dispatch-rules.d.mts",
-        "sha256": "1dc2bf8be997c69a094a246d17013ebd66e5b28f18e0088d00000ef5f06931f5"
+        "sha256": "6ccb027c90c03ca8b9694cd68c286b978fe3504cbfbe498dd3b5385c7d67ce5c"
       },
       {
         "path": "types/workbench-model.d.mts",
@@ -185,10 +185,10 @@
   },
   "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
   "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
-  "revisionReason": "frontend.17 restores exact locked input from the existing dispatch command snapshot while revalidating current source eligibility independently of display titles. Native stream ownership and future context-use gates are separated by an explicit adapter contract; partial raw output is captured on executor failure.",
+  "revisionReason": "frontend.18 separates the original inputCommandId from each later dispatch receipt; retries preserve the original self-bound input snapshot while current source eligibility is revalidated without display-title drift. Source-only independent review does not imply business or transport acceptance.",
   "supersedes": {
-    "version": "0.3.0-frontend.16",
-    "reason": "Two independently reviewed static P2 findings retained: forUse in stream callbacks could suppress outcome.raw; current source title drift incorrectly invalidated exact old versions. Product16 archive stays immutable; no E2E acceptance implied."
+    "version": "0.3.0-frontend.17",
+    "reason": "R17-F1 static P2: retry receipt snapshot could rebuild a newer display title against the original input hash.17 failure remains;18 source changes statically reviewed, no new business E2E/Runtime stage/installation."
   },
   "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates.",
   "nativeRuntimeRequirement": {
