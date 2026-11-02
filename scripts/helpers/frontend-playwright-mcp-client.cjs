@@ -21,7 +21,7 @@ async function main(){
     const input=readline.createInterface({input:process.stdin,crlfDelay:Infinity});
     for await(const line of input){
       if(!line.trim())continue;
-      let request;try{request=JSON.parse(line);if(request.close){await close();console.log(JSON.stringify({id:request.id,closed:true}));break;}
+      let request;try{request=JSON.parse(line);if(request.close){await close();input.close();process.stdin.pause();console.log(JSON.stringify({id:request.id,closed:true}));break;}
         const result=await client.callTool({name:request.name,arguments:request.arguments||{}},undefined,{timeout:120000});
         const content=(result.content||[]).map(item=>item.type==='image'?{type:'image',mimeType:item.mimeType,base64Bytes:item.data.length}:item);
         const response={id:request.id,isError:result.isError||false,content};
