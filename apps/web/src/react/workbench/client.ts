@@ -16,7 +16,8 @@ export interface ActivationPlacement {canvasId:string;groupId:string;fromNodeId:
 export interface ActivationDecision {candidateId:string;version:number;decision:'accepted'|'saved'|'rejected'|'coframe';interpretation:ActivationExplanation;note:string;output?:{kind:'relation'|'question'|'branch';id:string;relationId?:string};at:string}
 export interface Activation {id:string;createdAt:string;question:string;seeds:ContentRef[];pool:ContentRef[];excluded:ContentRef[];instructions:ContentRef[];limit:number;canvasId:string|null;version:number;status:'prepared'|'returned'|'closed'|'cancelled';result:null|{source:{kind:'manual'}|{kind:'native-result';runId:string;inputHash:string;resultHash:string};summary:string;candidates:ActivationCandidate[];coverage:null|{read:ContentRef[];partial:ContentRef[];unread:ContentRef[]};at:string};decisions:Record<string,ActivationDecision[]>;placements:Record<string,ActivationPlacement>;ended:null|{reason:string;at:string}}
 export interface Thinking { id: string; title: string; refs: ContentRef[]; excluded: ContentRef[]; instructions?:ContentRef[]; messages: { id: string; text: string; author: string; instructions?:ContentRef[]; template?:ContentRef; scope?:MessageScope }[]; status: string }
-export interface Task { execution?:{source:'trace-agent-runtime';runId:string;requestId:string;contextHash:string}; instructions?:ContentRef[]; plan?:StepItem[]; template?:ContentRef; id: string; title: string; goal: string; destination: string; refs: ContentRef[]; excluded: ContentRef[]; status: string; results: unknown[] }
+export interface TaskDispatch {id:string;commandId:string;source:'native';requestId:string;runId:string;inputVersion:1;inputHash:string;preparedInputHash:string;projectDir:string;projectIdentity:string;mode:'read-only'|'workspace-write';at:string;cancelledAt?:string}
+export interface Task { preparedInputVersion?:1;dispatch?:TaskDispatch;dispatchHistory?:TaskDispatch[];execution?:{source:'trace-agent-runtime';runId:string;requestId:string;contextHash:string}; instructions?:ContentRef[]; plan?:StepItem[]; template?:ContentRef; id: string; title: string; goal: string; destination: string; refs: ContentRef[]; excluded: ContentRef[]; status: string; results: unknown[] }
 export interface Resource { id: string; sha256: string; mime: string; bytes: number }
 export type FeedbackContext={kind:'manual';note:string}|{kind:'thinking';id:string;messageId:string}|{kind:'task';id:string}|{kind:'native-result';runId:string;taskId:string;inputHash:string;resultHash:string;verifiedAt?:string;refs?:ContentRef[];sessionId?:string;messageId?:string};
 export interface CapabilityFeedbackInput {title:string;facts:string;interpretation:string;scope:string;assessment:'support'|'limit'|'counterexample'|'undecided';target:ContentRef|null;context:FeedbackContext;refs:ContentRef[];observedAt:string}
@@ -124,6 +125,14 @@ export class WorkbenchClient {
       // last verified document; do not acknowledge or clear a pending write.
       if(sequence===this.loadSequence)this.set({ loading: false, readError: error instanceof Error ? error.message : '读取失败；没有创建空画布。' });return false;
     }
+  }
+  // Native permission/result receipts may change content without a canvas
+  // command. Refresh monotonically without creating a new navigation intent.
+  async refreshContent() {
+    const result=await jsonRequest('/api/product/workspace');
+    if(result.host?.schemaVersion!==2)throw new Error('当前内容协议暂不可读取；未替换工作面。');
+    if(result.revision<this.state.revision)return false;
+    this.set({host:result.host,legacy:null,revision:result.revision,features:Array.isArray(result.storage?.features)?result.storage.features:this.state.features});return true;
   }
   private enqueue<T>(action: () => Promise<T>):Promise<T> {
     const result = this.queue.then(action); this.queue = result.catch(() => {}); return result;

@@ -65,6 +65,15 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   const notify=()=>{try{onChange()}catch{}}
   const update=(id,patch)=>{if(closed)return;const previous=row(id);if(patch.status&&patch.status!==previous.status){const events=JSON.parse(patch.events||previous.events);events.push({sequence:(events.at(-1)?.sequence||0)+1,type:'run.'+patch.status,at:now()});patch.events=JSON.stringify(events);if(!activeStates.includes(patch.status)){const runtime=JSON.parse(patch.runtime||previous.runtime);delete runtime.interaction;patch.runtime=JSON.stringify(runtime)}}const fields=Object.keys(patch);db.prepare(`UPDATE attempts SET ${fields.map(k=>k+'=?').join(',')} WHERE id=?`).run(...Object.values(patch),id);notify()}
   const latest=task=>db.prepare('SELECT * FROM attempts WHERE task_id=? ORDER BY number DESC LIMIT 1').get(task)
+  store.configureTaskDispatchResolver?.(({phase,taskId,runId,previousRunId})=>{
+    const rows=db.prepare('SELECT id,status FROM attempts WHERE task_id=? ORDER BY number').all(taskId),last=rows.at(-1);
+    if(phase==='cancel-preparation'){guard(!rows.length,'任务已有运行记录，准备取消不能冒充停止或撤回原运行。');return{allowed:true};}
+    guard(!rows.some(r=>activeStates.includes(r.status)),'该任务已有执行或停止尚未确认，未创建第二份派发。');
+    if(phase==='cancel'){guard(!rows.some(r=>r.id===runId),'原派发已经建立运行，请从真实运行记录继续，不取消成未执行。');return{allowed:true,missingRun:true};}
+    guard(!last||last.id===previousRunId&&['failed','interrupted','cancelled','timed_out'].includes(last.status),'请先核对最近一次未完成运行，不能跳过原回执另开派发。');
+    return{allowed:true,previousTerminal:Boolean(last)};
+  });
+
   function stopActivation(id){
     guard(identity(id),'激活身份不正确。');
     if(closed)return{items:[],closed:true};
@@ -74,6 +83,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   }
   store.configureActivationCloseHandler?.(stopActivation);
   const activationCurrent=payload=>payload.kind!=='activation'||store.activationIsPrepared(payload.activationId);
+  const executionCurrent=(payload,r)=>activationCurrent(payload)&&(payload.kind==='activation'||payload.kind==='thinking'||store.taskDispatchIsCurrent?.(r.task_id,r.id,r.input_hash)===true);
   async function modules(){return loading ||= Promise.all(['apps/agent/codex.mjs','apps/agent/protocol.mjs','native/qualify-codex-app-server.mjs'].map(p=>import(pathToFileURL(path.join(runtimeRoot,p)).href)))}
   const env=()=>({...process.env,TEMP:path.join(directory,'tmp'),TMP:path.join(directory,'tmp'),TRACE_CODEX_QUALIFICATION_RECORD:path.join(directory,'codex-qualification.json')})
   function project(){const value=getProject();guard(typeof value==='string'&&path.isAbsolute(value)&&fs.statSync(value).isDirectory(),'请先选择一个存在的执行项目。');return fs.realpathSync(value)}
@@ -99,22 +109,22 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     const controller=new AbortController();active={id:r.id,controller,adapter:null,promise:null}
     const work=async()=>{let timer;try{
       const payload=JSON.parse(r.payload),task=payload.task;
-      guard(activationCurrent(payload),'原探索已结束，未启动执行。');
+      guard(executionCurrent(payload,r),'原探索已结束或任务派发已失效，未启动执行。');
       update(r.id,{status:'running'});const checked=await qualify(r.project,controller.signal);guard(checked.authenticated,'Codex尚未登录。');event(r.id,'runtime.checked',{runtimeVersion:checked.version})
-      const [codex,protocol]=await modules();guard(activationCurrent(payload),'原探索已结束，未提交模型。');
+      const [codex,protocol]=await modules();guard(executionCurrent(payload,r),'原探索已结束或任务派发已失效，未提交模型。');
       const context={protocolVersion:1,matterId:task.id,baseRevision:0,contextMode:'fresh',contextEpoch:0,target:{},fragments:payload.fragments,omitted:task.excluded,externalRetrieval:'disabled',contextHash:r.input_hash}
       const activationProtocol=payload.kind==='activation'?'\n激活专用协议：不要读取项目文件或其它来源。仅从明确的seed与candidate角色形成少量有依据候选。answer必须是严格JSON字符串，结构为 {"formatVersion":1,"summary":"结果或无候选的原因","candidates":[{"id":"c1","from":"实际读取的seed contextId","to":"实际读取的candidate contextId","kind":"direct 或 potential","commonality":"共通点/理由","difference":"条件和差异","uncertainty":"尚未验证之处","relationKind":"unknown / support / supplement / limit / challenge / alternative / branch","question":"可留下的新问题，或空字符串","evidence":[0,1]}]}。evidence是外层citations的下标，两端均须逐字引用实际读取的内容；不可引用instruction当作材料依据。最多'+payload.activation.limit+'项，不够就少给；没有合适联系candidates=[]，不得凑数、提供百分比、输出markdown或自认已采纳。replacement=null。':'';
       const request={purpose:'discuss',matterId:task.id,contextEpoch:0,input:task.goal+'\n\n结果协议：citations只能引用通过trace_context_read实际读取过的Trace片段，并且quote必须逐字来自该片段。项目文件依据写在answer中，不得为项目文件虚构contextId；未引用Trace片段时citations必须为空。非修订任务replacement必须为null。\n本次执行步骤：'+JSON.stringify(task.plan||[])+'\n本次明确选择的AI指令：'+payload.fragments.filter(f=>f.role==='instruction').map(f=>f.text).join('\n')+activationProtocol}
       const executor=adapter(codex,r.project,r.mode);active.adapter=executor
       timer=setTimeout(()=>controller.abort(),300000)
-      const outcome=await executor.execute({runId:r.id,request,context,signal:controller.signal,isCurrent:()=>!closed&&!controller.signal.aborted&&active?.id===r.id&&activeStates.includes(row(r.id).status)&&activationCurrent(payload),onEvent:(type,data)=>event(r.id,type,data)})
+      const outcome=await executor.execute({runId:r.id,request,context,signal:controller.signal,isCurrent:()=>!closed&&!controller.signal.aborted&&active?.id===r.id&&activeStates.includes(row(r.id).status)&&executionCurrent(payload,r),onEvent:(type,data)=>event(r.id,type,data)})
       if(payload.kind==='activation'&&!closed){guard(typeof outcome.raw==='string'&&Buffer.byteLength(outcome.raw)<=1024*1024,'原激活返回过大，未解析成候选。');update(r.id,{raw_output:outcome.raw,raw_hash:hash(outcome.raw)});}
       const result=protocol.validateOutput(outcome.raw,{...context,fragments:outcome.providedFragments||context.fragments},request)
       if(payload.kind==='activation'){
         guard(Array.isArray(outcome.providedFragments),'缺少本次实际读取证明，未将返回当成有效激活。');
         result.activationEvidence=structuredClone(outcome.providedFragments);result.activation=parseActivationOutput(payload,result,result.activationEvidence);
       }
-      if(controller.signal.aborted||row(r.id).status==='cancelling'||!activationCurrent(payload))throw Error('执行已停止或原探索已结束，迟到结果未采用。')
+      if(controller.signal.aborted||row(r.id).status==='cancelling'||!executionCurrent(payload,r))throw Error('执行已停止、原探索结束或任务派发已失效，迟到结果未采用。')
       if(!closed&&row(r.id).status!=='interrupted')update(r.id,{status:'succeeded',result:JSON.stringify(result),result_hash:hash(result),finished:now(),error:null,runtime:JSON.stringify({...JSON.parse(row(r.id).runtime),threadId:outcome.threadId,turnId:outcome.turnId,version:outcome.runtimeVersion})})
     }catch(error){if(!closed&&row(r.id).status!=='interrupted')update(r.id,{status:row(r.id).status==='cancelling'?'cancelled':controller.signal.aborted?'timed_out':'failed',finished:now(),error:String(error.message||'执行未完成。').replace(/[A-Za-z]:[\\/][^\s，。]+/g,'[本机路径]').slice(0,800)})}finally{clearTimeout(timer);if(active?.id===r.id)active=null}}
     const promise=work();if(active)active.promise=promise;await promise
@@ -141,7 +151,8 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
     if(thinking)fs.mkdirSync(path.join(cwd,'.git'),{recursive:true})
     guard(['thinking','read-only','workspace-write'].includes(mode),'不支持这个执行权限。')
     if(retry)guard(hash(payload)===previous.input_hash,'任务或引用状态已变化。请核对后另存新的任务准备。')
-    const id='run-'+randomUUID(),number=(previous?.number||0)+1
+    let id='run-'+randomUUID();const number=(previous?.number||0)+1;
+    if(!thinking){guard(typeof store.reserveNativeDispatch==='function','当前宿主尚未支持权威派发归属，未建立运行。');const reserved=store.reserveNativeDispatch({taskId:request.taskId,requestId:request.requestId,runId:id,payload,projectDir:cwd,mode,previousRunId:retry?previous.id:null});id=reserved.dispatch.runId;}
     db.prepare('INSERT INTO attempts(id,task_id,number,request_key,input_hash,payload,project,mode,status,created,events) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,request.taskId,number,request.requestId,hash(payload),JSON.stringify(payload),cwd,mode,'queued',now(),JSON.stringify([{sequence:1,type:'run.queued',at:now()}]));notify();setImmediate(()=>void pump());return publicRow(row(id))
   }
   const adoptionWrites=new Map();
@@ -199,6 +210,15 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
       if(req.operation==='workbench.agent.status'){let cwd;try{cwd=project()}catch{}return {available:Boolean(getExecutable()),projectName:cwd?path.basename(cwd):null,projectSelected:Boolean(cwd)}}
       if(req.operation==='workbench.agent.check'){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),65000);try{return {ready:true,...await qualify(project(),controller.signal)}}finally{clearTimeout(timer)}}
       if(req.operation==='workbench.agent.input.preview'){const payload=inputFor(req);return {payload,inputHash:hash(payload),executionStarted:false};}
+      if(req.operation==='workbench.agent.dispatch.prepare'){
+        guard(!latest(req.taskId),'任务已有实际运行记录，请从原运行继续，不把预留冒充未执行。');
+        guard(identity(req.taskId)&&identity(req.requestId),'任务或派发身份不正确。');const payload=inputFor(req);guard(req.expectedInputHash===hash(payload),'刚核对的输入已变化，未预留派发。');
+        guard(['read-only','workspace-write'].includes(req.mode||'read-only'),'不支持这个执行权限。');guard(typeof store.reserveNativeDispatch==='function','当前宿主尚未支持权威派发归属。');
+        const value=store.reserveNativeDispatch({taskId:req.taskId,requestId:req.requestId,runId:'run-'+randomUUID(),payload,projectDir:project(),mode:req.mode||'read-only',previousRunId:null});notify();return{...value,executionStarted:false};
+      }
+      if(req.operation==='workbench.agent.dispatch.cancel'){
+        guard(identity(req.taskId)&&identity(req.dispatchId),'原派发身份不正确。');guard(typeof store.cancelNativeDispatch==='function','当前宿主尚未支持原派发核对。');const value=store.cancelNativeDispatch({taskId:req.taskId,dispatchId:req.dispatchId});notify();return value;
+      }
       if(req.operation==='workbench.agent.activation.stop')return stopActivation(req.activationId)
       if(req.operation==='workbench.agent.feedback.source')return feedbackSource(req)
       if(req.operation==='workbench.agent.list')return {items:db.prepare('SELECT * FROM attempts ORDER BY created').all().map(publicRow)}
