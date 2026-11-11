@@ -75,6 +75,7 @@ export function createWorkbenchAgent({directory,runtimeRoot,store,getExecutable,
   store.configureTaskDispatchResolver?.(({phase,taskId,runId,previousRunId})=>{
     const rows=db.prepare('SELECT id,status FROM attempts WHERE task_id=? ORDER BY number').all(taskId),last=rows.at(-1);
     if(phase==='cancel-preparation'){guard(!rows.length,'任务已有运行记录，准备取消不能冒充停止或撤回原运行。');return{allowed:true};}
+    if(phase==='external-reserve'){guard(!rows.length,'该任务已有本机运行记录；不能以外部接续抢占原派发，请明确另起任务。');return{allowed:true};}
     guard(!rows.some(r=>activeStates.includes(r.status)),'该任务已有执行或停止尚未确认，未创建第二份派发。');
     if(phase==='cancel'){guard(!rows.some(r=>r.id===runId),'原派发已经建立运行，请从真实运行记录继续，不取消成未执行。');return{allowed:true,missingRun:true};}
     guard(!last||last.id===previousRunId&&['failed','interrupted','cancelled','timed_out'].includes(last.status),'请先核对最近一次未完成运行，不能跳过原回执另开派发。');

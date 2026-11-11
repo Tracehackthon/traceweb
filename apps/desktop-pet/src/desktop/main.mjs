@@ -39,6 +39,7 @@ let quitting = false
 let capabilityClient
 let desktopWorkbench
 let workbenchAgent
+let taskHandoffRuntimeConnected=false
 let bundledRuntime
 const discussionWindows = new Set()
 let zhihuAuthWindow
@@ -398,6 +399,12 @@ async function startBundledRuntime({ agentEnabled, cacheBust = false, port, targ
   let loaded
   try {
     loaded = await withIpcTimeout(import(specifier), RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
+    taskHandoffRuntimeConnected=false
+    if(typeof loaded.bindTaskHandoffOwner==='function'&&desktopWorkbench){
+      desktopWorkbench.enableTaskHandoff()
+      loaded.bindTaskHandoffOwner((request,response)=>desktopWorkbench.handleTaskHandoff(request,response))
+      taskHandoffRuntimeConnected=true
+    }
     const binding = await withIpcTimeout(loaded.ready, RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
     bundledRuntime = loaded
     if (!binding || !Number.isInteger(Number(binding.port)) || Number(binding.port) < 1 || Number(binding.port) > 65_535) throw new Error('Trace 本机内容服务没有返回有效连接')
@@ -415,6 +422,7 @@ async function startBundledRuntime({ agentEnabled, cacheBust = false, port, targ
     capabilityClient?.setRuntimeOrigin?.(backendOrigin)
     return binding
   } catch (error) {
+    taskHandoffRuntimeConnected=false
     try { await loaded?.close?.() } catch { /* startup cleanup is best effort */ }
     if (bundledRuntime === loaded) bundledRuntime = undefined
     throw error
@@ -1024,6 +1032,12 @@ ipcMain.handle('trace-native:capability', async (event, request) => {
     if(!discussionWindows.has(senderWindow)||!desktopWorkbench)throw Error('Trace 本机工作区尚未就绪')
     if(request.operation==='workbench.request'&&request.method==='POST'&&request.body?.operations?.some(op=>op.type==='task.result.adopt'))throw Error('采用运行结果必须先经过原生结果预览与核验。')
     if(request.operation==='workbench.request'&&request.method==='POST'&&request.body?.operations?.some(op=>['task.cancel','task.execution'].includes(op.type)&&workbenchAgent?.hasAttempt(op.id)))throw Error('任务已有本机执行记录，请在执行面板处理，不能取消准备或改绑另一份回执。')
+    if(request.operation==='workbench.request'&&String(request.pathname).startsWith('/api/product/task-handoffs/')){
+      if(!taskHandoffRuntimeConnected)throw Error('当前Runtime尚未连接同一任务桥接；手动准备仍可继续，没有向旧服务发送。')
+      const value=await desktopWorkbench.request(request)
+      if(request.pathname==='/api/product/task-handoffs/configuration'&&value.ok!==false)return {...value,baseUrl:backendOrigin,mcpEntry:join(app.isPackaged?join(process.resourcesPath,'trace-runtime'):resolve(root,'../../runtime-dist'),'dist','apps','mcp','src','main.js')}
+      return value
+    }
     return desktopWorkbench.request(request)
   }
   if (typeof request?.operation === 'string' && request.operation.startsWith('project.lifecycle.')) {

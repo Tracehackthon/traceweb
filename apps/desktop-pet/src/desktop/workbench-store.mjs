@@ -22,7 +22,7 @@ function originalOperations(host,runId,answer,refs) {
 // One canonical SQLite owner for the new workspace. The legacy Runtime keeps
 // its original web.sqlite; no implicit conversion, dual writer or fallback.
 export function createDesktopWorkbench({file}) {
-  let owner,activationCloseHandler
+  let owner,activationCloseHandler,externalEnabled=false
   const workspace = () => owner ||= createProductWorkspace({file})
   function afterCommit(command,result){
     if(result?.receipt?.status!=='committed'||result.receipt.commandId!==command?.commandId)return;
@@ -45,6 +45,11 @@ export function createDesktopWorkbench({file}) {
     return {bytes:new Uint8Array(bytes),mime:headers['content-type']||'application/octet-stream'}
   }
   return {
+    enableTaskHandoff(){if(!externalEnabled){workspace().configureTaskHandoff({keyFile:file+'.task-mcp-key.json'});externalEnabled=true;}},
+    async handleTaskHandoff(req,res){
+      if(!String(req.url||'').split('?')[0].startsWith('/api/product/task-handoffs/'))throw Error('Only the bound task handoff routes are delegated.');
+      await workspace().handle(req,res);
+    },
     activationSnapshot(id){return activationInput(workspace().read().host,id)},
     activationIsPrepared(id){return workspace().read().host?.activations?.[id]?.status==='prepared'},
     configureActivationCloseHandler(handler){if(typeof handler!=='function')throw Error('需要受控的执行停止处理器。');activationCloseHandler=handler},
@@ -120,7 +125,8 @@ export function createDesktopWorkbench({file}) {
         const p=request.pathname,m=request.method||'GET'
         const read=p==='/api/product/workspace'||p==='/api/product/canvases'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}$/.test(p)||/^\/api\/product\/commands\/[a-zA-Z0-9_-]{1,200}$/.test(p)
         const write=p==='/api/product/commands'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}\/commands$/.test(p)
-        if(!(m==='GET'&&read||m==='POST'&&write))throw Error('不支持这个工作台操作')
+        const handoffRead=p==='/api/product/task-handoffs/configuration'||/^\/api\/product\/task-handoffs\/receipts\/[a-zA-Z0-9_.:-]{1,200}$/.test(p),handoffWrite=/^\/api\/product\/task-handoffs\/(preview|approve|reject|revoke|review)$/.test(p)
+        if(!(m==='GET'&&(read||handoffRead)||m==='POST'&&(write||handoffWrite)))throw Error('不支持这个工作台操作')
         const body=m==='POST'?Buffer.from(JSON.stringify(request.body)):undefined
         if(body&&body.length>jsonLimit)throw Error('工作台命令超过8 MiB')
         return dispatch(p,m,body)

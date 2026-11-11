@@ -1,6 +1,7 @@
 import React from 'react'
 import { TraceOverlay } from './TraceOverlay'
 import styles from './style.css'
+import geometry from '../../../../shared/ui-geometry.css'
 
 export const inject = ['slots']
 
@@ -12,7 +13,7 @@ export function apply(ctx: any) {
     const styleId = 'dsh-trace-ui-v1'
     const style = document.createElement('style')
     style.dataset.pluginCss = styleId
-    style.textContent = styles
+    style.textContent = `${geometry}\n${styles}`
     document.head.appendChild(style)
     return () => style.remove()
   }, 'trace-ui-v1 styles')

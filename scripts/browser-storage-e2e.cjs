@@ -5,9 +5,9 @@ const path = require('node:path');
 const http = require('node:http');
 const root = path.resolve(__dirname, '..');
 const dist = path.join(root, 'apps/web/dist-vercel');
-const out = path.join(root, '.test-results/browser-storage/run-' + Date.now());
+const out = process.env.TRACE_E2E_OUTPUT_DIR ? path.resolve(process.env.TRACE_E2E_OUTPUT_DIR) : path.join(root, '.test-results/browser-storage/run-' + Date.now());
 fs.mkdirSync(out, { recursive: true });
-const checks = [], errors = [], requests = [];
+const checks = [], errors = [], requests = [], network = [], httpFailures = [], consoleErrors = [];
 const check = (name, condition = true) => { assert.ok(condition, name); checks.push({ name, passed: true }); console.log('PASS ' + name); };
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.woff2': 'font/woff2' };
 // Static-only fixture: no workspace API, SQLite, or write endpoint exists.
@@ -28,11 +28,22 @@ const server = http.createServer((req, res) => {
     browser = await chromium.launch({ headless: true, executablePath: process.env.TRACE_CHROMIUM_EXECUTABLE || undefined });
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     page = await context.newPage();
-    context.on('page', p => p.on('pageerror', error => errors.push(error.message)));
+    context.on('page', p => {
+      p.on('pageerror', error => errors.push(error.message));
+      p.on('console', event => { if (event.type() === 'error') consoleErrors.push(event.text()); });
+    });
     page.on('pageerror', error => errors.push(error.message));
-    context.on('request', req => { if (new URL(req.url()).pathname.startsWith('/api/web/')) requests.push(req.url()); });
+    page.on('console', event => { if (event.type() === 'error') consoleErrors.push(event.text()); });
+    context.on('request', req => {
+      network.push({ url: req.url(), method: req.method(), resourceType: req.resourceType() });
+      if (new URL(req.url()).pathname.startsWith('/api/web/')) requests.push(req.url());
+    });
+    context.on('response', response => { if (response.status() >= 400) httpFailures.push({ url: response.url(), status: response.status() }); });
     const state = p => p.evaluate(async () => (await import('/__test/browser-workspace.mjs')).readBrowserWorkspace());
-    const saved = async p => { await p.waitForTimeout(550); await p.locator('.web-status[data-state=saved]').waitFor(); };
+    // Some current routes deliberately hide a saved-status decoration. Wait
+    // for the acknowledged state, not visibility of that decoration; each
+    // business assertion below separately reads the committed IndexedDB data.
+    const saved = async p => { await p.waitForTimeout(550); await p.locator('.web-status[data-state=saved]').waitFor({ state: 'attached' }); };
     await page.goto(base + '/app');
     await page.locator('#capture-input').waitFor();
     check('static empty workspace loads without an API', (await state(page)).host === null);
@@ -52,8 +63,9 @@ const server = http.createServer((req, res) => {
     await saved(page);
     check('explicit understanding persisted', (await state(page)).host.chain.matters[0].understandingVersion === 1);
     await page.locator('[data-action=handoff]').click();
-    await page.locator('[data-field=agent]').fill('手工验证');
-    await page.locator('[data-field=project]').fill('上线');
+    // Current handoff UI derives Agent/project from the environment and exposes
+    // the task, scope and text. Saving preparation is not external execution.
+    check('unconnected handoff truthfully remains preparation', (await page.locator('.chain-destination-summary').innerText()).includes('Agent 暂不可用'));
     await page.locator('[data-field=task]').fill('确认保存边界');
     await page.locator('[data-action=confirm-handoff]').click();
     await page.locator('.worksite-viewport').waitFor();
@@ -66,7 +78,8 @@ const server = http.createServer((req, res) => {
     check('work result persisted without changing understanding', workState.host.worksite.sessions[workId].results.length === 1 && workState.host.chain.matters[0].understandingVersion === 1);
     await page.goto(base + '/app?view=home'); await page.locator('#capture-input').waitFor();
     await page.getByRole('button', { name: '个人与设置', exact: true }).click();
-    check('settings disclose browser scope and data deletion', (await page.locator('.web-dialog').innerText()).includes('清除网站数据会丢失内容'));
+    const settingsCopy = await page.locator('.web-dialog').innerText();
+    check('settings disclose browser scope and export-before-clearing warning', settingsCopy.includes('只保存在当前浏览器') && settingsCopy.includes('不会跨设备同步') && settingsCopy.includes('清除浏览器数据前请先导出'));
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: '导出全部内容', exact: true }).click();
     const download = await downloadPromise;
@@ -117,9 +130,25 @@ const server = http.createServer((req, res) => {
       let reused; try { await m.putBrowserWorkspace(changed); } catch (error) { reused = error.status; }
       const next = await m.readBrowserWorkspace();
       const outcomes = await Promise.allSettled(['a', 'b'].map(id => m.putBrowserWorkspace({ expectedRevision: next.revision, commandId: 'concurrent-' + id, host: next.host })));
-      return { first, replay, reused, winners: outcomes.filter(item => item.status === 'fulfilled').length, conflicts: outcomes.filter(item => item.status === 'rejected' && item.reason.status === 409).length };
+      const historical = await m.putBrowserWorkspace(command);
+      const current = await m.readBrowserWorkspace();
+      // Simulate a pre-W1 command row without a retained committed snapshot.
+      const db = await new Promise((resolve, reject) => { const r = indexedDB.open('trace-portal-workspace-v1', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('commands', 'readwrite'), store = tx.objectStore('commands');
+        const get = store.get(command.commandId);
+        get.onsuccess = () => { const legacy = get.result; delete legacy.host; store.put(legacy, command.commandId); };
+        tx.oncomplete = resolve; tx.onabort = () => reject(tx.error);
+      });
+      db.close();
+      let legacyReplayCode; try { await m.putBrowserWorkspace(command); } catch (error) { legacyReplayCode = error.code; }
+      const afterLegacyReplay = await m.readBrowserWorkspace();
+      return { first, replay, reused, historical, current, legacyReplayCode, afterLegacyReplay, winners: outcomes.filter(item => item.status === 'fulfilled').length, conflicts: outcomes.filter(item => item.status === 'rejected' && item.reason.status === 409).length };
     });
     check('command replay is idempotent', adapter.first.revision === adapter.replay.revision && adapter.replay.replayed);
+    check('committed browser acknowledgement returns actual host', adapter.first.host.chain.capture.text === '旧版未提交草稿' && adapter.first.headRevision === adapter.first.revision);
+    check('historical browser acknowledgement distinguishes original commit from newer head', adapter.historical.revision === adapter.first.revision && adapter.historical.headRevision === adapter.current.revision && adapter.historical.headRevision > adapter.historical.revision);
+    check('legacy historical acknowledgement cannot invent a snapshot or overwrite current head', adapter.legacyReplayCode === 'COMMITTED_SNAPSHOT_UNAVAILABLE' && JSON.stringify(adapter.afterLegacyReplay) === JSON.stringify(adapter.current));
     check('changed command replay rejected', adapter.reused === 409);
     check('concurrent writers have exactly one winner', adapter.winners === 1 && adapter.conflicts === 1);
     const isolated = await browser.newContext(); const isolatedPage = await isolated.newPage();
@@ -147,19 +176,21 @@ const server = http.createServer((req, res) => {
     check('corrupt record fails without an empty fallback', corrupt.status === 503 && corrupt.body.error.code === 'STORAGE_CORRUPT');
     await page.reload(); await page.locator('.web-status[data-state=error]').waitFor();
     check('corrupt storage blocks UI instead of resetting', await page.locator('#capture-input').count() === 0);
-    const failedFirstPaint = await page.evaluate(() => ({
-      loadingPosition: getComputedStyle(document.querySelector('.react-route-loading')).position,
-      loadingDisplay: getComputedStyle(document.querySelector('.react-route-loading')).display,
-      ornamentWidth: document.querySelector('.trace-ambient-orbit').getBoundingClientRect().width,
-    }));
-    check('failed first paint keeps the shell and ornaments styled', failedFirstPaint.loadingPosition === 'absolute' && failedFirstPaint.loadingDisplay === 'grid' && failedFirstPaint.ornamentWidth > 0 && failedFirstPaint.ornamentWidth < 500, failedFirstPaint);
+    const failedFirstPaint = await page.evaluate(() => {
+      const surface = document.querySelector('.workspace-load-surface');
+      return { position: getComputedStyle(surface).position, display: getComputedStyle(surface).display,
+        width: surface.getBoundingClientRect().width, loadingCount: document.querySelectorAll('.react-route-loading').length,
+        actions: surface.querySelectorAll('button').length };
+    });
+    check('failed first paint displays styled recovery actions instead of an endless loading surface', failedFirstPaint.position === 'absolute' && failedFirstPaint.display === 'grid' && failedFirstPaint.width > 500 && failedFirstPaint.loadingCount === 0 && failedFirstPaint.actions === 2);
     check('no workspace data requests leave browser', requests.length === 0);
+    check('no network requests leave the isolated localhost origin', network.every(request => new URL(request.url).origin === base));
     check('no page errors', errors.length === 0);
   } catch (error) {
     checks.push({ name: 'run error', passed: false, error: error.stack }); process.exitCode = 1; console.error(error.stack);
     if (page) { await page.screenshot({ path: path.join(out, 'failure.png') }).catch(() => {}); fs.writeFileSync(path.join(out, 'failure-dom.txt'), await page.locator('body').innerText()); }
   } finally {
-    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ checks, errors, requests }, null, 2));
+    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ checks, errors, requests, network, httpFailures, consoleErrors }, null, 2));
     await browser?.close(); await new Promise(resolve => server.close(resolve)); console.log('EVIDENCE ' + out);
   }
 })();

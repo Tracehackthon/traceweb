@@ -24,7 +24,7 @@ export function useAgentRuns(){
   return {runs,ready,error,refresh};
 }
 const currentTaskRun=(task:Task,runs:Run[])=>task.dispatch?runs.find(r=>r.taskId===task.id&&r.id===task.dispatch!.runId):runs.filter(r=>r.taskId===task.id).at(-1);
-export function agentTaskLabel(task:Task,runs:Run[],ready:boolean,error=''){const run=currentTaskRun(task,runs);return error?'读取中断，当前状态未知':run?.sourceError?'原始返回暂不可核验':run?(run.adoptions?.some(a=>a.status==='committed')?'部分结果已采纳':run.review?'结果已复核':labels[run.status]||run.status):!ready?'读取执行状态…':task.status!=='prepared'?'已取消准备':task.dispatch?'已预留派发，运行回执待核对':'准备已保存，尚未提交';}
+export function agentTaskLabel(task:Task,runs:Run[],ready:boolean,error=''){if(task.dispatch?.source==='codex')return task.dispatch.revokedAt?'后续外部许可已撤销':task.handoff?.returns.length?'外部结果已接回，待复核':task.dispatch.receivedAt?'已领取，执行状态未知':'已授权，等待外部领取';const run=currentTaskRun(task,runs);return error?'读取中断，当前状态未知':run?.sourceError?'原始返回暂不可核验':run?(run.adoptions?.some(a=>a.status==='committed')?'部分结果已采纳':run.review?'结果已复核':labels[run.status]||run.status):!ready?'读取执行状态…':task.status!=='prepared'?'已取消准备':task.dispatch?'已预留派发，运行回执待核对':'准备已保存，尚未提交';}
 
 // Presentation only: neither a provider terminal state nor a review is an adoption receipt.
 function agentBadgeAppearance(run:Run|undefined,ready:boolean,error='',preparationCancelled=false):{tone:HaloTone;icon:IconName}{
@@ -40,6 +40,7 @@ function agentBadgeAppearance(run:Run|undefined,ready:boolean,error='',preparati
   return{tone:active.includes(run.status)?'accent':'neutral',icon:active.includes(run.status)?'pending':'idle'};
 }
 export function AgentTaskBadge({task,runs,ready,error=''}:{task:Task;runs:Run[];ready:boolean;error?:string}){
+  if(task.dispatch?.source==='codex')return <HaloBadge tone="neutral" icon="work" data-task-state={task.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
   const run=currentTaskRun(task,runs);
   return <HaloBadge {...agentBadgeAppearance(run,ready,error,task.status==='cancelled')} data-task-state={task.status} data-run-state={run?.status}>{agentTaskLabel(task,runs,ready,error)}</HaloBadge>;
 }
@@ -69,6 +70,7 @@ export function TaskExecution({task,client,executions,onCancelPreparation,thinki
   useEffect(()=>{if(bridge())void call('status').then(setSetup).catch(e=>{setNoticeError(true);setNotice(e.message);});},[]);
   useEffect(()=>{setNote(run?.review?.note||'');setAnswers({});},[run?.id]);
   const action=async(fn:()=>Promise<any>)=>{if(busy)return;setBusy(true);setNotice('');setNoticeError(false);let failed=false;try{await fn();}catch(e){failed=true;setNoticeError(true);setNotice(e.message||'操作未完成，请保留当前内容后重试。');}finally{await refresh();if(!thinking)try{await client.refreshContent();}catch(e){if(!failed){setNoticeError(true);setNotice('操作后的内容尚未核对：'+e.message);}}setBusy(false);}};
+  if(!thinking&&task.dispatch?.source==='codex')return <p className="wb-muted">这份任务已有明确外部派发；从外部接续面板核对原交付，不再提交本机执行。</p>;
   if(!bridge())return <p className="wb-muted">真实执行需使用桌面版；本页只保存任务准备。</p>;
   if(task.execution)return <p className="wb-muted">本任务已有其他执行回执，请从既有回执面板继续核验；不会重复提交。</p>;
   const interaction=run?.runtime?.interaction,adopted=Boolean(run?.adoptions?.some(a=>a.status==='committed'));

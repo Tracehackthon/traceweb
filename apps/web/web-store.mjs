@@ -249,7 +249,9 @@ export function createWebStore({ file } = {}) {
       const known = db.prepare('SELECT request_sha256,committed_revision FROM web_commands WHERE command_id=?').get(body.commandId);
       if (known) {
         if (known.request_sha256 !== fingerprint) throw new WebStoreError(409, 'COMMAND_CONFLICT', '相同 commandId 不能提交不同内容。', revision);
-        return readSnapshot(known.committed_revision);
+        const committed = readSnapshot(known.committed_revision);
+        // A replay proves the original commit, not that its snapshot is still head.
+        return revision === known.committed_revision ? committed : { ...committed, headRevision: revision };
       }
       if (body.expectedRevision !== revision) throw new WebStoreError(409, 'REVISION_CONFLICT', '工作区已有更新，未覆盖；请重新读取并保留当前草稿。', revision);
       demand(revision < Number.MAX_SAFE_INTEGER, 'REVISION_EXHAUSTED', '工作区修订已达上限。', 503);

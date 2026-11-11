@@ -85,7 +85,6 @@ node scripts/expressive-controls-e2e.cjs
 - 首次失败：脚本在Radix异步聚焦后过早断言；改为等待选中态。首次重试在窄窗刷新后误点已被详情覆盖的卡片；改为使用已恢复的详情栏目，不强制点击。视觉复查删除旧tab伪元素underline。失败报告保留诊断，不当成当前验收。
 - 未运行：Electron/安装版、实体触屏、物理IME和读屏、Safari/Firefox。其余矩阵项为已分析/待适配或明确不采用，不算已实现。存在其他工作中的Halo输入/导入文件，本轮不覆盖、不代其验收。
 
-
 ### 组件颜色与焦点适配（2026-11-01）
 
 用户允许对素材颜色作局部适配，并拒绝突兀高亮。搜索反白黑改为低饱和蓝灰表面；讨论提交从绿改为墨蓝灰；玻璃表面、光标、文本选区、聚焦投影统一使用 `--trace-material-*` token。保留黏液/玻璃结构；搜索和讨论输入不再叠加亮绿外圈/5px光晕，用底色对比与有方向的色阴影反馈，按钮键盘焦点及强制颜色模式仍可辨。
@@ -110,13 +109,11 @@ node scripts/expressive-controls-e2e.cjs
 - 复放（工作目录`traceweb`）：`$env:VITE_TRACE_STORAGE='browser'; npm run build:web`，然后`$env:TRACE_HALO_REAL_RUN='fresh-run-name'; node scripts/halo-real-ui-e2e.cjs`。截图、报告与运行时存储快照都留项目`.test-results/halo-real-ui/`，不写C盘临时目录。
 - 未新增依赖/演示页面/存储schema，也没有触碰安装版用户库。Electron、实体触屏、物理IME、读屏及Safari/Firefox未运行。其余矩阵项仍未接入，不将本轮UI复用冒充15组功能完成。
 
-
 ### 全工作台无描边选中态（2026-11-01最新范围）
 
 用户将要求扩展为整个当前工作台，不再只适配素材输入区。唯一状态入口`workbench-states.css`覆盖导航/最近对象/列表/详情Tab/分段/画布节点/表单/设置/菜单及弹窗；装饰框线透明，靠表面与可自定义色阴影表达选中，强制颜色模式保留系统焦点。`--trace-selection-tint`可覆盖状态色，真实运行已验证阴影变化而几何不变。协作记录补充真实aria-current，保留原状态链路。
 
 最终当前构建：23项工作台状态E2E + 14项前轮配色回归通过；前者有重试（初次Radix自动激活等待、异步新建能力换节点及标题由textarea改input的脚本定位修正），最后按真实选中/字段条件等待，并核验两个能力修订实际存入IndexedDB。报告：`.test-results/workbench-shadow-states/browser-current/report.json`，配色回归：`.test-results/component-prompts/focus-palette/after-shadow-states/report.json`。不是完整15组功能验收，安装版/实体触屏/其他浏览器未运行。
-
 
 ### 常用动效接入（2026-11-01）
 
