@@ -26,4 +26,5 @@ video-source/
 .impeccable/
 .research/
 
-.cache/electron-builder/
+# 本机缓存不属于客户端源码；保留磁盘内容，清理另行确认。
+/.cache/
