@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
+    "dev:browser": "node scripts/dev-browser.mjs",
+    "dev:landing": "npm run dev:browser",
     "start": "npm --prefix apps/web start",
     "build": "npm run build:web",
     "build:web": "node scripts/verify-product-workspace.mjs && node scripts/verify-ui-resources.mjs && node scripts/verify-infinite-canvas.mjs && node scripts/verify-pdf-resources.mjs && npm --prefix apps/web run build",

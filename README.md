@@ -17,6 +17,29 @@ Vercel 备用地址：<https://traceweb-neutronm.vercel.app>
 
 > Web 正式构建使用浏览器本地存储；桌宠是 Electron 桌面程序，不能由 Vercel 在用户桌面直接运行。知乎 App Key、Access Secret 和 OAuth Token 只在服务端或加密 HttpOnly Cookie 中处理，不进入静态资源和安装包。
 
+## 唯一客户端开发入口
+
+本仓库统一维护桌面端、网页端和落地页。日常不再到相邻 `trace-portal` 或 `trace-introduction` 开新功能，也不引入另一套旧介绍页覆盖现用实现；旧仓库保留源码追溯，物理删除和远端退役尚未执行。
+
+| 修改对象 | 权威源码 |
+| --- | --- |
+| 产品落地页 | `apps/web/src/intro-main.tsx`、`intro.css`，由 `web-main.js` 的 `/` 路由加载 |
+| 网页产品与演示 | `apps/web/src/`，分别从 `/app`、`/app/demo` 进入 |
+| 演示视频入口 | `apps/web/src/video-main.tsx`，路由 `/video` |
+| Electron 桌面端与桌宠 | `apps/desktop-pet/` |
+| Runtime、领域包与后端 | 相邻独立仓库 `../trace-runtime/`；客户端仍按固定合约／包消费，不自动跟随其 HEAD |
+
+只改前端时，推荐在本仓库运行：
+
+```sh
+npm run dev:browser
+# npm run dev:landing 是同一个入口的别名，不是第二套应用
+```
+
+默认打开 `http://127.0.0.1:4327/`；Web 与 Demo 为同源的 `/app`、`/app/demo`。可通过 `TRACE_DESKTOP_PORT` 改端口，端口占用时明确失败，不自动切换。此入口复用现有 Vite 配置与依赖，但明确不启动 API、SQLite、Runtime 或 `/api` 代理；内容使用当前 origin 的浏览器存储，不读取原桌面个人库，也不承诺本机能力可用。Ctrl+C 停止。
+
+原 `npm run dev` 仍保留为带本机 API 的开发入口，不与上述纯浏览器入口混用。本轮没有改生产 Vercel 配置、桌面发行合约或当前安装。
+
 ## 仓库内容
 
 | 目录 | 交付物 | 运行方式 |
