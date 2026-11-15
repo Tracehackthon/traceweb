@@ -51,7 +51,7 @@ async function serve(t, file) {
     const text = await response.text(); let json; try { json = JSON.parse(text); } catch { /* outside route */ }
     return { response, status: response.status, text, json };
   };
-  const put = (host, expectedRevision = 0, commandId = 'command-1') => request('/api/web/workspace', { method: 'PUT', body: { expectedRevision, commandId, host } });
+  const put = (host, expectedRevision = 0, commandId = 'command-1', operations) => request('/api/web/workspace', { method: 'PUT', body: { expectedRevision, commandId, host, ...(operations === undefined ? {} : { operations }) } });
   return { store, server, origin, request, put, close };
 }
 
@@ -75,6 +75,23 @@ test('UTF-8 entities, preferences and session/home drafts persist across close/r
   assert.equal(exported.response.headers.get('cache-control'), 'no-store');
 });
 
+test('runtime operation batches are accepted, idempotent and survive refresh/reopen', async t => {
+  const file = temporary(t), first = await serve(t, file), host = sample('操作批次保存');
+  const operations = [{ type: 'capture.create', matterId: 'matter-中文', text: '操作批次中的原话', source: { id: 'source-1' } }];
+  const saved = await first.put(host, 0, 'operation-command', operations);
+  assert.equal(saved.status, 200, saved.text);
+  assert.equal(saved.json.revision, 1);
+  assert.deepEqual(saved.json.host, canonical(host));
+  assert.deepEqual((await first.request('/api/web/workspace')).json, saved.json);
+  const replay = await first.put({ ...host, route: { view: 'home' } }, 0, 'operation-command', structuredClone(operations));
+  assert.deepEqual(replay.json, saved.json);
+  const conflict = await first.put(host, 0, 'operation-command', [{ ...operations[0], text: '不同操作正文' }]);
+  assert.equal(conflict.status, 409);
+  await first.close();
+  const reopened = await serve(t, file);
+  assert.deepEqual((await reopened.request('/api/web/workspace')).json, saved.json);
+});
+
 test('CAS rejects stale writers and two database handles see one authoritative revision', async t => {
   const file = temporary(t), a = await serve(t, file), b = await serve(t, file);
   assert.equal((await a.put(sample('甲'))).status, 200);
@@ -91,11 +108,11 @@ test('idempotent replay is exact, survives reopen and does not overwrite later r
   const replay = await a.put({ ...firstHost, route: { view: 'home' }, error: null }, 0, 'unique-command');
   assert.deepEqual(replay.json, first.json);
   assert.equal((await a.put(sample('后来修改'), 1, 'later-command')).json.revision, 2);
-  assert.deepEqual((await a.put(firstHost, 0, 'unique-command')).json, first.json);
+  assert.deepEqual((await a.put(firstHost, 0, 'unique-command')).json, { ...first.json, headRevision: 2 });
   const collision = await a.put(sample('不同正文'), 0, 'unique-command');
   assert.equal(collision.status, 409); assert.equal(collision.json.error.code, 'COMMAND_CONFLICT');
   await a.close(); const b = await serve(t, file);
-  assert.deepEqual((await b.put(firstHost, 0, 'unique-command')).json, first.json);
+  assert.deepEqual((await b.put(firstHost, 0, 'unique-command')).json, { ...first.json, headRevision: 2 });
   assert.equal((await b.request('/api/web/workspace')).json.revision, 2);
 });
 

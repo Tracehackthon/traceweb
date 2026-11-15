@@ -2,13 +2,47 @@
 
 同一套 Trace 体验有两个本机入口：DeepSeek Harness Web profile 插件，以及独立运行的原生桌面悬浮插件。原生 Electron 入口通过受限 IPC 连接本机 `trace-runtime`，把最新 Trace Web 中准备好的工作真正交给 Codex，并把结果带回 Trace 复核区。
 
-## Windows 桌面端 0.2.0
+## Windows 桌面端
 
-始终从 [Trace Desktop 最新 Release](https://github.com/Tracehackthon/traceweb/releases/latest) 下载；不要保存或传播带固定旧版本号的安装包链接。
+### 0.2.15 输入、版本预览与失败反馈（2026-11-01）
+
+本机已更新到0.2.15，不是公开Release。0.2.14已跑通的真实内思考、外部任务和逐项采纳继续保留；本次统一Halo输入/原生选择器材质，版本预览改成Radix Tabs与HaloSurface/Badge的保留版/采纳后对照，已采纳内容用可复制的静态正文，失败用持久HaloNotice与原位置恢复入口。原生编辑、IME、选择和执行/采纳协议不重写。
+
+焦点阴影层120ms，原生details展开/收起200ms可反向中断；键盘、减少动态效果即时响应，关闭时内容退出焦点路径。不对打字、版本正文或假的进度做动画。
+
+1. 选定材料开始共同思考，或直接新建讨论，写下问题并“留下这段思考”。保存不自动调用模型；再点“请AI回应这段思考”才执行，使用本机Codex默认模型与额度。
+2. 内思考冻结本讨论截至所选消息的原话、明确版本引用、该消息的指令及此前本讨论AI回复；不带入其它讨论，不要求选择用户项目。使用应用自有空目录、真实native资格检查及Runtime的BOUNDED_CONFIG关闭shell/apps/plugins/网络等功能，不通过跳过版本检查开启执行。模型返回原稿和引用验证后才展示。
+3. 确认结果后，按原稿段落逐项核对、手动调整采纳正文和选择位置；预览保留正文与新版本，再明确“确认采纳本项”。也可仅保留或不采纳；不是AI自动拆卡或整段自动覆盖。
+4. 材料原文和原件不覆盖，采纳生成关联的用户摘记及后续版本；能力可新建草稿或追加方法生成新版本，保留旧版，不自动发布。AI全文另存不可覆盖原稿，实际采用引用指向它。
+5. 写入失败保留准确采纳请求、正文和Product命令；退出重启后“重试原采纳请求”继续确认，同命令幂等，不重复写入。目标版本冲突须重新读取/比较后明确采纳，不自动换版本覆盖。执行失败/中断同样保留冻结输入，重启不自动运行；重试建立新turn，不冒充续跑旧turn。
+
+Product `0.3.0-frontend.5`拥有材料/表达/能力内容与版本；`state/workbench/executions/agent.sqlite`拥有运行与逐项决定、采纳写入日志和Product回执。AI原稿留存和目标内容写入在同一个Product事务中；执行账本不充当第二份内容目录。旧`state/web.sqlite`、旧Agent库不转换、不双写，仍可从菜单打开。主进程不开放另一个整段采用入口，不允许renderer直接调用旧task.result.adopt；额外授权仍只能拒绝/停止。
+
+本轮固定候选与实际安装EXE的界面/动效21项分别通过（范围重叠）；实际安装程序另有真实内思考/采纳25项、保存19项、新能力草稿5项通过，计数不相加。界面21项使用先前已验证真实结果的隔离副本，不伪造provider返回；25项从新的隔离库调用实际Codex，验证失败/重试、原稿版本、冲突、退出中断与重启接续。后端/原生执行器/store及Product来源与0.2.14冻结字节一致，包内Runtime仍为固定0.8.0。首次界面断言误查wrapper阴影，实际焦点在::after层；修正观测后重试通过，未为测试改产品。
+
+重放实际安装程序（仓库根目录，新运行名；会真实调用模型）：
+
+```powershell
+$env:TRACE_DESKTOP_EXE='C:/Trace/Trace.exe'
+$env:TRACE_DESKTOP_AGENT_LIVE='1'
+$env:TRACE_THINKING_RUN='fresh-installed-run'
+node scripts/desktop-thinking-e2e.cjs
+
+# 在上一步真实成功结果的副本上验证界面和实际写锁恢复，不新增模型调用
+$env:TRACE_POLISH_SOURCE=Join-Path (Get-Location) '.test-results/desktop-thinking-release/fresh-installed-run/profile'
+$env:TRACE_POLISH_RUN='fresh-ui-run'
+node scripts/desktop-polish-e2e.cjs
+```
+
+本机安装器`release/0.2.15/Trace-Desktop-0.2.15-Setup.exe`。冻结来源、候选/已安装真实E2E、安装身份、数据保留和正常实例回执在项目忽略目录`.test-results/desktop-polish-release/`；测试只提交自产随机材料，未给个人库写测试任务。发行一致性使用本轮冻结快照内`scripts/release-smoke.mjs --unpacked C:/Trace --expected-version 0.2.15`，不能用后续变化的HEAD冒充安装来源。原0.2.14证据继续保留为历史，旧生成release移入回退备份。未签名、未上传；整产品15组、旧库迁移、分享/发布、其它平台和物理设备/读屏不由本轮代证。
+
+### 既有公开发行与旧版Codex入口
+
+已公开发布的安装包从 [Trace Desktop 最新 Release](https://github.com/Tracehackthon/traceweb/releases/latest) 下载；不要保存或传播带固定旧版本号的安装包链接。
 
 首版 Windows x64 安装包把 Trace Web、桌宠和本机 Runtime 一起打包。普通用户不需要先克隆 `trace_backend`、安装 Node.js 或手动启动服务：安装后打开 Trace，会同时出现桌宠与主界面。
 
-首次接入 Codex：
+在“打开旧版内容”后，首次接入旧版 Codex：
 
 1. 先安装并登录 Codex CLI。
 2. 打开 Trace，点顶部的「Codex 设置」。
@@ -18,6 +52,22 @@
 
 本机 Runtime 会把状态保存在应用数据目录。桌宠位置也保存在同一份 `desktop-settings.json` 的版本化 `placement` 节点中，按 `displayId` 和分辨率保留记录；换显示器或升级版本时优先恢复对应显示器，再回退到同分辨率记录并做工作区边界校正，不会因为窗口版本更新而清空位置。知乎公开搜索和个人账号授权连接 `https://trace.neutrom.store` 的同源服务，不会把 App Secret 打进安装包。点「授权连接知乎」后，Trace 会打开一个独立的知乎授权窗口；成功回到 Trace 后窗口自动关闭，Token 只保存在桌面应用的加密 HttpOnly Cookie 中。服务不可用时界面只显示清楚的用户提示，不暴露内部接口字段。
 
+维护者也可以显式使用本机 Runtime 的知乎 provider，而不把 Secret 放进安装包或 renderer。桌面主进程会在启动 Runtime 前读取 Electron `userData` 目录下的 `runtime-integrations.json`；也可以用 `TRACE_DESKTOP_INTEGRATIONS_FILE` 指向另一个绝对路径。环境变量优先于文件，文件内容只会转换为后端进程环境，不写进 `desktop-settings.json`、IPC 或页面响应：
+
+```json
+{
+  "zhihu": {
+    "enabled": true,
+    "accessSecret": "由本机 Secret 管理提供",
+    "oauthAppId": "669",
+    "oauthAppKey": "由本机 Secret 管理提供",
+    "oauthRedirectUri": "https://trace.neutrom.store/callback"
+  }
+}
+```
+
+该文件应只允许当前用户读取，不能提交、导出或放进前端资源。文件不存在或 `enabled` 不是 `true` 时，本机知乎后端保持关闭，Runtime identity 也不会宣告不可达的搜索和授权路由。默认桌面联网仍使用 `TRACE_CLOUD_ORIGIN`（默认 `https://trace.neutrom.store`）的同源服务代理；本机 provider 是明确配置的替代路径，不会静默接管云端授权 Cookie。
+
 构建安装包：
 
 ```powershell
@@ -25,7 +75,9 @@ npm ci
 npm run dist:win
 ```
 
-产物位于 `release/Trace-Desktop-<version>-Setup.exe`。0.2.0 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+产物位于 `release/Trace-Desktop-<version>-Setup.exe`。当前本机 0.2.15 尚未进行 Windows 代码签名，系统可能显示未知发布者提示。
+
+桌面 Runtime 不是任意 `trace-runtime` checkout：`runtime-contract.json` 固定了包含首启 Codex qualifier 的来源 commit `a088b8658d76d1f825366fa8060712592b6460db`（`codex/fix-packaged-codex-qualification-0.8.0`）。发布前将该 commit 放在干净 checkout 中，并通过 `TRACE_RUNTIME_SOURCE` 指向它；staging 会拒绝其他 commit，不会把缺少 qualifier 的 Runtime 伪装成 release-ready。首次准备 checkout 或依赖目录被清理后，先在 Runtime 根目录执行 `corepack pnpm install --frozen-lockfile`；脚本也会在检测到 MCP workspace junction 缺失时以同一锁文件策略恢复依赖，并在 build 后验证 `@modelcontextprotocol/sdk` server paths 与 `zod/v3` 已 materialize。
 
 发布前必须从干净的 `trace-runtime` checkout 重新 stage；脚本会把 Runtime 的版本、commit/tree、内容摘要、API surface 和 Codex host compatibility 写入 `runtime-dist/desktop-runtime-source.json`，并校验 `runtime.json` 与 `release-manifest.json` 的逐文件 SHA-256。正式 staging 默认拒绝 dirty/development Runtime；本地调试若确实需要，可显式使用 `TRACE_DESKTOP_RUNTIME_MODE=development`，该产物会保持 `development-dirty`，不能作为 Release 上传。
 
@@ -40,6 +92,13 @@ npm run release:checksum -- --artifact apps/desktop-pet/release/Trace-Desktop-0.
 
 # 工具自身的离线回归
 npm run test:release-tools
+
+# 仅经过 Mock 的桌面能力契约；不连接真实云端或真实 Agent
+npm run test:desktop-headless-contract
+
+# 使用当前本机 staged Runtime；报告默认写入操作系统临时目录
+npm run test:desktop-headless
+# 如需保留到指定位置，可设置 TRACE_HEADLESS_ARTIFACT_DIR
 ```
 
 `release:smoke` 只把 `--allow-development` 作为明确的本地调试例外；默认拒绝非 `release-ready` identity。上传前还应保留命令输出与安装包 SHA-256，避免把旧版本或未验证的解包目录当成当前 Release。
@@ -75,6 +134,19 @@ npm run desktop
 运行后，刘看山以透明、无边框、置顶的桌面 Overlay 出现在当前绑定显示器工作区。透明区域不阻挡其他应用；点刘看山后，卡片与面板在当前桌面展开。空闲时大部分区域保持 click-through，宠物、提醒、卡片和面板 hover/drag/open 时才交给原生窗口处理；隐藏窗口则完全穿透。系统托盘菜单可以显示、隐藏或退出插件。
 
 “继续讨论”会打开插件内置的 Trace Web，不要求另行启动 Web 开发服务器。Renderer 开启 `contextIsolation` 与 sandbox，不直接获得 Node 权限；只有 preload 暴露的白名单能力可以访问本机 Runtime。
+
+### 项目库与文件生命周期
+
+桌面端在个人与设置中进入「管理项目与文件生命周期」。页面仍由 `apps/web` 编译并在桌面宿主内运行，不另建一套管理 UI。桌面主进程只向页面返回项目名称、稳定项目 ID、状态和 `.trace/` 相对条目；绝对项目路径保存在本机 `desktop-settings.json`，由主进程按 ID 重新解析和校验。
+
+- 添加项目只注册目录，不改写项目文件；「设为当前项目」才更新当前 Codex 项目绑定。
+- 盘点范围限于明确选择项目下的 `.trace/`。数据库及其 WAL/SHM/owner、`project.json`、采用历史和无法证明归属的内容只读保留；不扫描数据库正文。
+- 仅普通文件可逐项移入 `.trace/.trace-lifecycle-quarantine/`。操作会重扫并校验源文件，生成恢复清单与 SHA-256；恢复会拒绝覆盖原位置的现有文件。
+- 永久清除只作用于隔离文件，先由 Web 界面确认，再由 Electron 原生对话框再次确认，并在删除前重新校验 SHA-256。目录、符号链接、数据库家族和当前 Runtime 不开放这项操作。
+- Web 版只使用用户授权的目录句柄盘点；浏览器无 File System Access API 时提示改用桌面版。
+- 当前发行版 Runtime 是安装包内的单一受管 Runtime，不存在由 Runtime 管理器登记的多版本目录；旧版本候选仍只读，不扫描开发 checkout、插件缓存或整个用户目录。
+
+每次桌面构建同时写入 `discussion/web-build-provenance.json`。发行 smoke test 对比当前 Web 源码指纹、桌面构建输出和 `app.asar` 中的 Web 资产哈希；不把“安装包打出来了”当作 Web 与 Desktop 同源的证明。
 
 ### 连接本机能力
 

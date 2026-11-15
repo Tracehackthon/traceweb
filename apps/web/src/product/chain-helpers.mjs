@@ -24,7 +24,6 @@ const paths = {
   external:'<path d="M9 5H5v14h14v-4M13 3h8v8M10 14 21 3"/>',
 };
 export const icon = name => `<svg class="chain-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.file}</svg>`;
-export const mark = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 11V7a3 3 0 1 0-3 3h16a3 3 0 1 0-3-3v18a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3V11Z"/></svg>';
 
 // Reconcile rather than replace: active textareas, IME composition and selection
 // keep their DOM identity during controlled reducer updates.

@@ -2,6 +2,8 @@
 
 <!-- impeccable:product-schema 1 -->
 
+当前正式工作台的完整功能与实现入口以 [Trace Web](apps/web/PRODUCT.md)、[设计入口](apps/web/DESIGN.md)和[唯一前端任务](../docs/tasks/trace-frontend-replacement.md)为准。下面的旧公开演示与品牌资产只说明历史来源，不能覆盖已确认三工作区和浅色中性工作台，也不作为本次截图参考。
+
 ## Platform
 
 web
@@ -28,7 +30,7 @@ Trace 不替代搜索、知乎、聊天工具或 Agent。它管理的是同一�
 
 ## Capabilities and Constraints
 
-- 六个核心动作：留下一点、从这里接着、找个对照、我的理解、带去用、结果回来。
+- 完整目标为思考画布、能力库、Agent 协作三工作区的15组功能及跨区要求。原六动作作为真实需要映射到三工作区，不再并列作为正式导航或需求上限。
 - 支持知乎公开搜索、全网搜索、知乎授权入口、Codex 原生、Codex Harness 与已配置的自定义 Agent。
 - 搜索结果默认只是候选来源；只有用户明确保留后才进入事项，不自动建立关系或改写理解。
 - Agent 返回先作为工作事实和待确认内容，不能自动冒充用户判断。
@@ -39,12 +41,12 @@ Trace 不替代搜索、知乎、聊天工具或 Agent。它管理的是同一�
 
 - 产品名为 Trace，中文主张为“把此刻的一点，带到以后”。
 - 品牌气质应安静、有思想但不故作玄虚；产品事实和真实界面优先于空泛科技装饰。
-- 现有识别资产包括 Trace 枝芽图标、刘看山桌宠、栖息鸟／起飞鸟素材，以及深墨绿、雾白和克制暖金的色彩关系。
+- 旧公开介绍使用枝芽、桌宠与鸟素材；新工作台采用用户确认的中性内容工作台、Bricolage Grotesque／MiSans、Lucide、Radix及共享几何令牌。旧深墨绿等品牌素材不约束正式工作台主题，素材仍须逐项核验许可。
 - 官网必须同时体现知乎内容参与判断、桌宠留在工作现场，以及对 Codex 为首的原生 Agent 的复用；不能把 Trace 表述为一套新的 Agent。
 
 ## Evidence on Hand
 
-- `apps/web/public/showcase/`：当前桌面端、桌宠、知乎搜索、Agent 交接和结果返回的真实产品截图。
+- `apps/web/public/showcase/`：历史演示截图，仅可说明其对应旧发行，不查看或据此恢复新工作台设计。
 - `apps/web/public/video/trace-demo.mp4`：41.7 秒真实桌面端、桌宠、知乎公开搜索与 Local Codex 结果回流演示。
 - `/app/demo`：与个人空间隔离的完整演示数据，覆盖六个核心动作并包含知乎公开摘要快照。
 - `README.md`：当前部署、数据边界、知乎授权与本机 Bridge 的权威公开说明。

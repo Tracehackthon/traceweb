@@ -3,6 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
+import { verifyRuntimeAsar } from './verify-desktop-runtime-imports.mjs'
+import { verifyWebBuildAssets, verifyWebBuildDirectory } from './web-build-provenance.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // electron-builder keeps `@electron/asar` in the desktop package's isolated
@@ -16,7 +18,8 @@ function value(flag, fallback) {
   return index >= 0 && args[index + 1] ? args[index + 1] : fallback
 }
 const unpacked = path.resolve(root, value('--unpacked', 'apps/desktop-pet/release/win-unpacked'))
-const expectedVersion = value('--expected-version', '0.2.0')
+const desktopSourcePackage = JSON.parse(fs.readFileSync(path.join(root, 'apps', 'desktop-pet', 'package.json'), 'utf8'))
+const expectedVersion = value('--expected-version', desktopSourcePackage.version)
 const allowDevelopment = args.includes('--allow-development')
 const requireFile = relative => {
   const absolute = path.join(unpacked, relative)
@@ -29,9 +32,43 @@ const runtimeManifest = readJson('resources/trace-runtime/release-manifest.json'
 const source = readJson('resources/trace-runtime/desktop-runtime-source.json')
 const appAsar = requireFile('resources/app.asar')
 const asarPaths = new Set(listPackage(appAsar).map(value => value.replaceAll('\\', '/').replace(/^\//, '')))
-for (const required of ['lib/desktop/main.mjs', 'lib/desktop/preload.cjs', 'lib/desktop/discussion/index.html']) {
+for (const required of [
+  'lib/desktop/main.mjs',
+  'lib/desktop/runtime-client.mjs',
+  'lib/desktop/runtime-port-selection.mjs',
+  'lib/desktop/runtime-installation-identity.mjs',
+  'lib/desktop/runtime-integrations.mjs',
+  'lib/desktop/runtime-project-binding.mjs',
+  'lib/desktop/artifact-lifecycle.mjs',
+  'lib/desktop/lifecycle.mjs',
+  'lib/desktop/storage-lifecycle.mjs',
+  'lib/desktop/preload.cjs',
+  'lib/desktop/discussion-preload.cjs',
+  'lib/desktop/discussion/index.html',
+  'lib/desktop/discussion/web-build-provenance.json',
+  'lib/desktop/workbench-store.mjs',
+  'lib/desktop/workbench-agent.mjs',
+  'lib/desktop/workbench-store-provenance.json',
+  'lib/desktop/discussion/workbench-appearance.js',
+  'lib/desktop/discussion/fonts/MiSans-Regular.woff2',
+]) {
   if (!asarPaths.has(required)) throw new Error(`app.asar is missing ${required}`)
 }
+const runtimeImportAudit = verifyRuntimeAsar(appAsar, asarPaths, extractFile)
+if(!extractFile(appAsar,path.join('lib','desktop','workbench-agent.mjs')).equals(Buffer.from(fs.readFileSync(path.join(root,'apps','desktop-pet','src','desktop','workbench-agent.mjs'),'utf8').replace("'../../../../shared/workbench-result-items.mjs'","'./workbench-result-items.mjs'"))))throw Error('Packaged native Agent controller differs from its source')
+if(!extractFile(appAsar,path.join('lib','desktop','workbench-result-items.mjs')).equals(fs.readFileSync(path.join(root,'shared','workbench-result-items.mjs'))))throw Error('Packaged result review units differ from source');
+const storeProvenance=JSON.parse(extractFile(appAsar,path.join('lib','desktop','workbench-store-provenance.json')).toString('utf8'))
+const expectedProductSource=JSON.parse(fs.readFileSync(path.join(root,'vendor/product-workspace-source.json'),'utf8'))
+if(storeProvenance.schema!=='trace.desktop-workbench-store@1'
+  ||createHash('sha256').update(extractFile(appAsar,path.join('lib','desktop','workbench-store.mjs'))).digest('hex')!==storeProvenance.bundleSha256
+  ||JSON.stringify(storeProvenance.product)!==JSON.stringify(expectedProductSource))throw Error('Packaged workbench store does not match its pinned Product provenance')
+const localWebOutput = path.join(root, 'apps', 'desktop-pet', 'lib', 'desktop', 'discussion')
+const currentWebBuild = await verifyWebBuildDirectory({ webRoot: path.join(root, 'apps', 'web'), outputDir: localWebOutput })
+const packagedWebBuild = JSON.parse(extractFile(appAsar, path.join('lib', 'desktop', 'discussion', 'web-build-provenance.json')).toString('utf8'))
+if (packagedWebBuild.buildId !== currentWebBuild.buildId || packagedWebBuild.sourceSha256 !== currentWebBuild.sourceSha256) {
+  throw new Error('Packaged Web assets do not match the current local Web build')
+}
+const packagedWebAudit = verifyWebBuildAssets(packagedWebBuild, (relative) => extractFile(appAsar, path.join('lib', 'desktop', 'discussion', relative)))
 const packageInfo = JSON.parse(extractFile(appAsar, 'package.json').toString('utf8'))
 if (packageInfo.version !== expectedVersion) throw new Error(`Desktop package version is ${packageInfo.version}, expected ${expectedVersion}`)
 if (runtime.runtime_version !== source.runtime_version || runtime.runtime_version !== runtimeManifest.runtime_version) throw new Error('Runtime version identity mismatch')
@@ -47,4 +84,4 @@ for (const entry of runtimeManifest.files) {
   const content = fs.readFileSync(absolute)
   if (createHash('sha256').update(content).digest('hex') !== entry.sha256 || content.length !== entry.bytes) throw new Error(`Runtime checksum mismatch: ${entry.path}`)
 }
-process.stdout.write(`${JSON.stringify({ status: 'desktop-release-smoke-passed', unpacked: path.relative(root, unpacked).replaceAll(path.sep, '/'), desktop_version: packageInfo.version, runtime_version: runtime.runtime_version, distribution_eligibility: runtime.distribution_eligibility, runtime_files: runtimeManifest.files.length }, null, 2)}\n`)
+process.stdout.write(`${JSON.stringify({ status: 'desktop-release-smoke-passed', unpacked: path.relative(root, unpacked).replaceAll(path.sep, '/'), desktop_version: packageInfo.version, web_build_id: currentWebBuild.buildId, web_source_sha256: currentWebBuild.sourceSha256, web_assets: packagedWebAudit.files, runtime_version: runtime.runtime_version, distribution_eligibility: runtime.distribution_eligibility, runtime_files: runtimeManifest.files.length, runtime_imports: runtimeImportAudit }, null, 2)}\n`)

@@ -1,6 +1,8 @@
 // Runtime derivative of artifacts/trace-compare-v1-20260915/ui; original layout retained.
 import {registerFont} from './resource-cache.mjs';
 import {createCanvasController} from './canvas-controller.mjs';
+import {createElasticNodeLayout} from './elastic-node-layout.mjs';
+import {mark} from '../home-icons.js';
 /** Trace compare UI. Native DOM; all business decisions belong to the supplied view/host. */
 const GLASS_PATH = 'M 91 14 C 280 -2 705 3 859 17 C 961 28 999 68 992 153 C 986 247 941 286 834 291 C 624 305 263 299 114 287 C 21 279 0 227 9 139 C 14 63 31 26 91 14 Z';
 // Reused and adapted from desktop/src/home-icons.js, local Trace-native icons.
@@ -21,14 +23,13 @@ const paths = {
   folder:'<path d="M3 7V4h7l3 3h8v14H3Z"/>',
 };
 const icon = name => `<svg class="compare-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.file}</svg>`;
-const mark = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 11V7a3 3 0 1 0-3 3h16a3 3 0 1 0-3-3v18a3 3 0 1 0 3-3H8a3 3 0 1 0 3 3V11Z"/></svg>';
 const button = (action,label,cls='',name='') => `<button type="button" class="compare-button ${cls}" data-action="${action}">${name?icon(name):''}<span>${label}</span></button>`;
 const templates = {
  search: `<section class="compare-heading"><h1 tabindex="-1">从这一处找</h1><p>不用重新交代背景，就从这句话开始。</p></section>
   <svg class="compare-threads compare-search-thread" viewBox="0 0 1672 941" aria-hidden="true"><path d="M539 443 C620 448 628 346 705 346"/><circle cx="539" cy="443" r="8"/><circle cx="705" cy="346" r="9"/></svg>
-  <section class="compare-anchor compare-glass-panel"><div class="compare-glass" data-glass></div><div class="compare-anchor-copy"><p class="compare-kicker">正在推敲的一句</p><blockquote data-text="focus"></blockquote></div></section>
+  <section class="compare-anchor compare-glass-panel"><div class="compare-glass" data-glass></div><div class="compare-anchor-copy"><p class="compare-kicker">正在推敲的一句</p><blockquote class="compare-anchor-preview" data-text="focus"></blockquote><details class="compare-anchor-full"><summary>展开完整原话</summary><blockquote data-text="originalText"></blockquote></details></div></section>
   <img class="compare-bird compare-search-bird" data-bird="fly" alt="" aria-hidden="true">
-  <form class="compare-search-form compare-paper" data-form="search"><h2>这次想弄清楚</h2>
+  <form class="compare-search-form compare-paper" data-form="search"><div class="compare-search-title"><h2>这次想弄清楚</h2><span data-search-context>已带入原事项</span></div>
    <div class="compare-question-row"><label class="compare-sr" for="compare-question">这次想弄清楚</label><input id="compare-question" data-field="question" autocomplete="off"><button type="button" data-action="focus-question" class="compare-button compare-quiet">${icon('edit')}修改这一处</button></div>
    <div class="compare-directions" role="group" aria-label="寻找方向"><button type="button" class="compare-button" data-direction="counterexample">${icon('search')}找个反例</button><button type="button" class="compare-button" data-direction="experience">${icon('users')}看看别人怎么做</button><button type="button" class="compare-button" data-direction="condition">${icon('switch')}换一种条件</button></div>
    <label class="compare-sr" for="compare-instructions">补充寻找条件</label><textarea id="compare-instructions" data-field="instructions" rows="3" placeholder="说说你想找的情况……"></textarea>
@@ -37,7 +38,7 @@ const templates = {
   </form>`,
   candidates:`<section class="compare-heading"><h1 tabindex="-1" data-text="candidatesHeading">找到三处值得看看</h1><p>先看看条件，再决定有没有关系。</p></section>
   <div class="compare-query-strip">${icon('search')}<strong data-text="shortQuestion"></strong>${button('adjust','调整寻找方向','compare-text-button','next')}</div>
-  <svg class="compare-threads compare-candidates-thread" viewBox="0 0 1672 941" aria-hidden="true"><path d="M541 453 C605 449 608 516 653 518"/><path d="M1054 524 C1100 523 1105 480 1165 480" class="compare-amber-thread"/><circle cx="541" cy="453" r="9"/><circle cx="653" cy="518" r="6"/><circle cx="1054" cy="524" r="6" class="compare-amber-node"/><circle cx="1165" cy="480" r="8" class="compare-amber-node"/></svg>
+  <svg class="compare-threads compare-candidates-thread" viewBox="0 0 1672 941" aria-hidden="true"><g data-elastic-links></g></svg>
   <img class="compare-bird compare-candidates-bird" data-bird="perch" alt="" aria-hidden="true"><section class="compare-candidate-list" aria-label="待确认候选"></section>
   <section class="compare-empty compare-paper" hidden><h2>没有找到贴切的候选</h2><p>调整条件，或带入一段你已有的材料。</p>${button('adjust','调整寻找方向','compare-primary')}</section>
   <div class="compare-candidates-footer"><div class="compare-adjust-strip">${icon('message')}<label class="compare-sr" for="compare-adjust">调整寻找条件</label><input id="compare-adjust" data-field="adjust" placeholder="这些都不贴切？说说条件差在哪里……">${button('adjust-with-text','调整后再找','compare-text-button','next')}</div>${button('import','带入自己的材料','compare-link-button','clip')}</div>
@@ -61,6 +62,13 @@ const templates = {
 const kindLabel = candidate => candidate?.kind === 'hypothetical' ? '假设情形' : candidate?.kind === 'user' ? '用户带入材料' : candidate?.kind === 'external' ? (candidate?.source === 'zhihu' ? '知乎公开内容' : '联网来源') : '演示材料';
 const relationLabels = {limit:'限制',limitation:'限制',supplement:'补充',support:'支持',challenge:'挑战',related:'有关',uncertain:'有关'};
 const asText = value => value == null ? '' : typeof value === 'string' ? value : Array.isArray(value) ? value.join('；') : String(value.text ?? value.label ?? '');
+export function canonicalOriginalText(matter={}) {
+  return asText(matter.originalText)
+    || (matter.basis?.field === 'originalText' ? asText(matter.basis.text) : '')
+    || asText(matter.basis?.text)
+    || asText(matter.focus?.text)
+    || asText(matter.understanding);
+}
 const sourceBadge = candidate => candidate?.kind === 'external' ? [kindLabel(candidate),asText(candidate.author)].filter(Boolean).join(' · ') : `${kindLabel(candidate)} · ${candidate?.sourceType||'自带摘录'}`;
 const safeSourceUrl = value => { try { const url=new URL(value); return url.protocol==='https:'&&!url.username&&!url.password?url.href:null; } catch { return null; } };
 
@@ -81,6 +89,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
   let candidateCamera = null;
   let canvas = null;
   let canvasScreen = '';
+  let elasticLayout = null;
   const composing = new WeakSet();
   root.classList.add('compare-root');
   root.innerHTML = `<div class="compare-scene"><header class="compare-header"><div class="compare-brand"><span class="brand-tile">${mark}</span><strong>Trace</strong></div><nav aria-label="当前位置"><span data-shell="first"></span><i>/</i><strong data-shell="last">找个对照</strong></nav><button type="button" class="compare-button compare-top-return" data-action="return">${icon('back')}<span>返回原来的事情</span></button><span class="compare-demo">完整演示</span></header><main class="compare-main"></main><button type="button" class="compare-profile" data-action="profile" aria-label="个人设置">${icon('user')}</button><div class="compare-notice" role="status" aria-live="polite" hidden><span></span><button class="compare-button" type="button" aria-label="关闭提示" data-action="clear-notice">${icon('close')}</button></div></div><dialog class="compare-dialog" aria-labelledby="compare-dialog-title"><div class="compare-dialog-heading"><h2 id="compare-dialog-title"></h2><button type="button" class="compare-button compare-icon-button" data-action="close-modal" aria-label="关闭">${icon('close')}</button></div><div class="compare-dialog-content"></div></dialog>`;
@@ -117,10 +126,14 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
   function resize() {
     const rect=root.getBoundingClientRect();
     const compact=rect.width<1000;
+    const compactChanged=root.classList.contains('compare-compact')!==compact;
     root.classList.toggle('compare-compact',compact);
     if(!compact)scene.style.setProperty('--compare-scale',String(Math.min(rect.width/1672,rect.height/941)));
     glass.forEach(g=>g.refresh?.());
     canvas?.refresh?.();
+    if(compact){elasticLayout?.destroy?.();elasticLayout=null;}
+    else if(compactChanged&&screen==='candidates')requestAnimationFrame(setupElasticCandidates);
+    else elasticLayout?.refresh?.();
   }
   const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
   observer?.observe(root);
@@ -130,6 +143,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     all('[data-glass]').forEach(host=>{try{glass.push(services.mountSceneGlass({host,scene:root,backgroundUrl:assets.background,path:GLASS_PATH,width:host.clientWidth,height:host.clientHeight,tone:'cool'}));}catch{host.dataset.material='fallback';}});
   }
   function disposeCanvas() {
+    elasticLayout?.destroy?.(); elasticLayout=null;
     canvas?.destroy?.(); canvas=null; canvasScreen=''; candidateCamera=null;
     root.querySelector('.compare-canvas-viewport')?.remove();
   }
@@ -149,6 +163,19 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     canvas=createCanvasController({viewport,world,controls,initial:{x:0,y:0,scale:1},onChange:({scale})=>{const percent=Math.round(scale*100);viewport.setAttribute('aria-valuenow',String(percent));viewport.setAttribute('aria-valuetext',`${percent}%`);}});
     viewport.setAttribute('aria-valuemin','55');viewport.setAttribute('aria-valuemax','180');viewport.setAttribute('aria-valuenow','100');
     canvasScreen=nextScreen;
+  }
+  function setupElasticCandidates() {
+    elasticLayout?.destroy?.(); elasticLayout=null;
+    if(!canvas || root.classList.contains('compare-compact'))return;
+    const world=$('[data-canvas-world]');
+    const list=$('.compare-candidate-list');
+    const connectorLayer=$('[data-elastic-links]');
+    if(!world||!list||!connectorLayer||!list.children.length)return;
+    const visualScale=()=>{
+      const worldRect=world.getBoundingClientRect();
+      return world.offsetWidth ? worldRect.width/world.offsetWidth : canvas.snapshot().scale;
+    };
+    elasticLayout=createElasticNodeLayout({world,list,connectorLayer,getScale:visualScale});
   }
   function restoreCandidateCamera() {
     if(canvas && candidateCamera) { const state=candidateCamera; candidateCamera=null; requestAnimationFrame(()=>canvas.set(state,{reason:'reader-close'})); }
@@ -216,6 +243,7 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     items.forEach((item,index)=>{
       const article=document.createElement('article');article.className=`compare-candidate compare-paper ${index===0?'compare-candidate-emphasis':''}`;
       article.dataset.canvasInteractive='true'; article.dataset.canvasIndex=String(index);
+      article.dataset.candidateId=item.id;
       article.innerHTML=`${index===0?'<div class="compare-glass" data-glass></div>':''}<div class="compare-candidate-head"><span class="compare-round-icon ${index===2?'compare-warm-icon':''}">${icon(index===2?'folder':'file')}</span><div><h2></h2><p class="compare-source-badge"></p></div></div><p class="compare-candidate-excerpt"></p><p class="compare-candidate-relation"><i></i><span></span></p><button type="button" class="compare-button ${index===0?'compare-primary':''}" data-action="preview-candidate"><span>${index===0?'放在一起看':'看看这一处'}</span>${icon('next')}</button><span class="compare-decision" hidden></span>`;
       article.querySelector('h2').textContent=item.title;
       article.querySelector('.compare-source-badge').textContent=sourceBadge(item);
@@ -227,9 +255,9 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
       list.append(article);
     });
     $('.compare-empty').hidden=items.length>0;
-    $('.compare-candidates-thread').hidden=items.length!==3;
+    $('.compare-candidates-thread').hidden=items.length<2;
     if($('.compare-candidates-bird'))$('.compare-candidates-bird').hidden=items.length===0 || !assets.birdPerched;
-    setupGlass();
+    setupGlass();setupElasticCandidates();
   }
   function modal(title,html,type) {
     if(modalType===type)return;
@@ -298,11 +326,15 @@ export function mountComparisonScreen({root,view,onAction=()=>{},onReturn=()=>{}
     $('.compare-top-return span').textContent=screen==='returned'?'全部轨迹':'返回原来的事情';
     $('.compare-demo').textContent=current.isDemo?'演示内容':'本地对照';
     $('.compare-profile').hidden=typeof onProfile!=='function';
-    text('focus',current.matter?.focus?.text);text('question',current.query?.question);
+    text('focus',current.matter?.focus?.text);text('originalText',canonicalOriginalText(current.matter));text('question',current.query?.question);
     if(current.isDemo)all('[data-text="focus"]').forEach(el=>emphasizeTerm(el,'必须'));
     text('shortQuestion',current.query?.shortQuestion || current.query?.question);
-    if(screen==='search') {
-      field('question',current.query?.question);field('instructions',current.query?.instructions);
+      if(screen==='search') {
+        const matterContext=asText(current.matter?.title);
+        $('[data-search-context]').hidden=!matterContext;
+        $('[data-search-context]').title=matterContext;
+        $('[data-search-context]').setAttribute('aria-label',matterContext?`搜索会同时带入原事项：${matterContext}`:'');
+        field('question',current.query?.question);field('instructions',current.query?.instructions);
       all('[data-direction]').forEach(el=>{const selected=el.dataset.direction===current.query?.direction;el.classList.toggle('compare-selected',selected);el.setAttribute('aria-pressed',String(selected));});
       const scopes=current.scopeOptions || [{value:'past',label:'既往思考'},{value:'zhihu',label:'知乎公开内容'}];
       const wrap=$('[data-options="scopes"]');

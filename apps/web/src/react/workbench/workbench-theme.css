@@ -1,0 +1,124 @@
+@import '@radix-ui/colors/sand.css';
+@import '@radix-ui/colors/sand-dark.css';
+@import '@radix-ui/colors/sage.css';
+@import '@radix-ui/colors/sage-dark.css';
+@import '@radix-ui/colors/teal.css';
+@import '@radix-ui/colors/teal-dark.css';
+@import '@radix-ui/colors/amber.css';
+@import '@radix-ui/colors/amber-dark.css';
+@import '@radix-ui/colors/tomato.css';
+@import '@radix-ui/colors/tomato-dark.css';
+@import '@radix-ui/colors/black-alpha.css';
+@import './workbench-typography.css';
+@import './workbench-actions.css';
+
+/* Current workbench only; inherited by dialogs and body-mounted Radix portals. */
+:root[data-trace-appearance] {
+  --trace-surface-shell:var(--sand-2);
+  --trace-surface-workbench:var(--sand-1);
+  --trace-surface-panel:var(--sand-2);
+  --trace-surface-muted:var(--sage-3);
+  --trace-text-primary:var(--sand-12);
+  /* Reading/support/meta are distinct; enabled content must not look disabled. */
+  --trace-text-secondary:color-mix(in srgb,var(--sand-12) 72%,var(--sand-11));
+  --trace-text-muted:color-mix(in srgb,var(--sand-12) 40%,var(--sand-11));
+  --trace-text-disabled:var(--sand-11);
+  --trace-border-subtle:var(--sand-6);
+  --trace-border-control:var(--sand-9);
+  --trace-action-primary:var(--teal-12);
+  --trace-action-hover:var(--teal-12);
+  --trace-on-primary:var(--sand-1);
+  --trace-focus:var(--teal-11);
+  --trace-positive-text:var(--teal-12);
+  --trace-positive-bg:var(--teal-3);
+  --trace-pending-text:var(--amber-12);
+  --trace-pending-bg:var(--amber-3);
+  --trace-danger-text:var(--tomato-12);
+  --trace-danger-bg:var(--tomato-3);
+  --trace-navigation-surface:var(--sand-2);
+  --trace-navigation-active:var(--sage-5);
+  --trace-grid-dot:var(--sand-8);
+  --trace-shadow-card:none;
+  --trace-shadow-menu:0 4px 16px var(--black-a3);
+  --trace-shadow-dialog:var(--trace-shadow-menu);
+  --trace-radius-chip:4px;
+  --trace-radius-control:8px;
+  --trace-radius-panel:12px;
+  --trace-radius-card:12px;
+  --trace-radius-dialog:16px;
+  --trace-radius-menu-item:calc(var(--trace-radius-panel) - var(--trace-menu-inset));
+  background:var(--trace-surface-workbench);
+  color:var(--trace-text-primary);
+}
+:root[data-trace-appearance=dark] {
+  --trace-surface-shell:var(--sand-1);
+  --trace-surface-workbench:var(--sand-1);
+  --trace-surface-panel:var(--sand-2);
+  --trace-action-primary:var(--teal-9);
+  --trace-action-hover:var(--teal-10);
+  --trace-on-primary:var(--sand-1);
+  --trace-shadow-menu:0 4px 16px var(--black-a6);
+}
+html[data-trace-appearance] .trace-ui { color-scheme:inherit; }
+
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) :is(input,textarea,select) { caret-color:var(--trace-focus); accent-color:var(--trace-focus); }
+html[data-trace-appearance] ::selection { color:var(--trace-text-primary); background:var(--teal-5); }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui),
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) * { transition:none; animation:none; scroll-behavior:auto; }
+
+html[data-trace-appearance] .wb-wordmark { font-size:20px; }
+html[data-trace-appearance] .wb-page-heading { align-items:center; }
+
+html[data-trace-appearance] .wb-editor :is(input,textarea,select),
+html[data-trace-appearance] .wb-search-input input { background:var(--trace-surface-panel); color:var(--trace-text-primary); }
+html[data-trace-appearance] .wb-button { border-color:var(--trace-border-control); }
+html[data-trace-appearance] .wb-primary { color:var(--trace-on-primary); background:var(--trace-action-primary); border-color:var(--trace-action-primary); }
+html[data-trace-appearance] .wb-primary:hover { background:var(--trace-action-hover); }
+html[data-trace-appearance] .wb-list-row { border-radius:0; margin:0; padding:12px; min-height:76px; }
+html[data-trace-appearance] .wb-list-row:is(:hover,.is-current) { background:var(--sage-4); color:var(--trace-text-primary); }
+html[data-trace-appearance] .wb-segment button[aria-pressed=true] { box-shadow:none; }
+html[data-trace-appearance] .wb-card :is(.wb-media-image,.wb-media-video,.wb-document-preview) { border-radius:0; }
+html[data-trace-appearance] .wb-save-status { font-size:12px; min-width:0; }
+.wb-save-status>span,.wb-inline-meta { display:inline-flex; gap:12px; flex-wrap:wrap; }
+html[data-trace-appearance] .wb-save-status>span { white-space:nowrap; }
+html[data-trace-appearance] .wb-recent { display:flex; flex-direction:column; overflow:hidden; }
+html[data-trace-appearance] .wb-list-pane { display:flex; flex-direction:column; overflow:hidden; }
+.wb-item-list { min-height:0; overflow:auto; overscroll-behavior:contain; max-height:var(--wb-list-height,100%); flex:0 1 auto; scroll-padding-block:16px; }
+.wb-list-pane>.wb-item-list { margin-top:16px; }
+.wb-find-results.wb-item-list { max-height:min(var(--wb-list-height,56dvh),56dvh); padding-top:0; margin-top:16px; }
+.wb-find-results .wb-find-row small>span { display:block; }
+.wb-inline-meta { font-weight:400; }
+.wb-thinking-composer { position:relative; }
+.wb-thinking-composer>div:last-child { justify-content:flex-end; }
+.wb-input-history { position:absolute; left:12px; right:12px; bottom:calc(100% + 8px); z-index:40; display:block!important; max-height:min(204px,40dvh); overflow:auto; padding:0!important; border:0.5px solid var(--trace-border-control); border-radius:8px; background:var(--trace-surface-panel); box-shadow:var(--trace-shadow-menu); color:var(--trace-text-primary)!important; }
+.wb-input-history [role=option] { min-height:48px; padding:12px; white-space:pre-wrap; overflow-wrap:anywhere; cursor:pointer; font-size:14px; line-height:24px; }
+.wb-input-history [role=option][aria-selected=true] { background:var(--sage-5); }
+html[data-trace-appearance] .tu-menu { box-shadow:inset 0 0 0 0.5px var(--trace-border-subtle),var(--trace-shadow-menu); }
+html[data-trace-appearance] .tu-menu-title { display:none; }
+html[data-trace-appearance] .tu-button,
+html[data-trace-appearance] .tu-button:hover:not(:disabled),
+html[data-trace-appearance] .tu-button:active:not(:disabled) {
+  background:var(--trace-surface-panel); color:var(--trace-text-primary); border:0.5px solid var(--trace-border-control); box-shadow:none; text-shadow:none; transform:none; font-size:14px;
+}
+html[data-trace-appearance] .tu-button:is(.tu-icon-button,.tu-ghost) { border-color:transparent; background:transparent; }
+html[data-trace-appearance] .tu-button:hover:not(:disabled) { background:var(--sage-4); }
+html[data-trace-appearance] .tu-button:active:not(:disabled) { background:var(--sage-5); }
+html[data-trace-appearance] .tu-button:is(.tu-primary,[data-variant=primary]) { background:var(--trace-action-primary); color:var(--trace-on-primary); }
+html[data-trace-appearance] .tu-button:disabled { color:var(--trace-text-disabled); background:var(--trace-surface-muted); }
+html[data-trace-appearance] .tu-text-button::after { display:none; }
+html[data-trace-appearance] .tu-process-state>svg { animation:none; }
+html[data-trace-appearance] :is(.tu-evolution,.tu-evolution-entry,.tu-compare) { border-width:0.5px; box-shadow:none; }
+@media(max-width:1439px) { html[data-trace-appearance] .wb-recent { display:none; } }
+@media(max-width:767px) { html[data-trace-appearance] .wb-save-status>span { display:none; } }
+
+html[data-trace-appearance=light] .trace-ui { color-scheme:light; }
+html[data-trace-appearance=dark] .trace-ui { color-scheme:dark; }
+html[data-trace-appearance] :is(.tu-timeline-entry,.tu-history-trigger) { border-width:0.5px; }
+html[data-trace-appearance] .wb-dialog::backdrop { background:var(--black-a8); }
+html[data-trace-appearance] .wb-node[data-selected] { outline:2px solid var(--trace-focus); }
+/* Conversation, composer and execution controls share one real scroll owner.
+   A shrinking flex history must not push save controls into overflow:hidden. */
+html[data-trace-appearance] .wb-thinking-pane:has(.wb-thinking-composer) { display:block; overflow:auto; }
+html[data-trace-appearance] .wb-messages { min-height:0; overflow:visible; }
+html[data-trace-appearance] .wb-thinking-composer { margin-top:16px; padding:12px; background:var(--trace-surface-panel); }
+html[data-trace-appearance] .wb-thinking-composer textarea { min-height:88px; max-height:24dvh; }

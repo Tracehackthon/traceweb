@@ -1,0 +1,33 @@
+/* Opt-in approved soft-tool palette. No existing page opts in in this change.
+   The root attribute also covers Radix portals in the isolated specimen. */
+:root[data-trace-theme="soft"], .trace-soft-ui {
+  --trace-surface-shell: #eceef2;
+  --trace-surface-workbench: #f7f8fa;
+  --trace-surface-panel: #fff;
+  --trace-surface-muted: #eff1f4;
+  --trace-text-primary: #282c33;
+  --trace-text-secondary: #626975;
+  --trace-border-subtle: #e1e4e9;
+}
+.trace-ui .tu-state-empty { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 24px; min-width: 0; padding: 32px 0; }
+.trace-ui .tu-state-empty [data-slot=empty-header] { max-width: 440px; }
+.trace-ui .tu-state-empty h2 { margin: 16px 0 8px; font-size: 18px; line-height: 26px; font-weight: 600; }
+.trace-ui .tu-state-empty p { margin: 0; color: var(--trace-text-secondary); }
+.trace-ui .tu-state-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.trace-ui .tu-status-notice { min-width: 0; padding: 16px 0; }
+.trace-ui .tu-status-notice .tu-process-state { padding: 0; }
+.trace-ui .tu-status-notice strong { display: block; font-weight: 600; }
+.trace-ui .tu-notice-description { display: block; margin-top: 4px; color: var(--trace-text-secondary); white-space: pre-wrap; }
+.trace-ui .tu-status-notice .tu-state-actions { margin-top: 16px; padding-left: 24px; }
+.trace-ui .tu-skeleton { background: var(--trace-surface-muted); border-radius: var(--trace-radius-chip); animation: tu-skeleton-pulse 1.6s ease-in-out infinite; }
+.trace-ui .tu-expandable { min-width: 0; }
+.trace-ui .tu-expandable-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.trace-ui .tu-expandable-body[data-expanded=false] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--trace-clamp-lines); overflow: hidden; }
+.trace-ui .tu-expandable > button { margin-top: 8px; }
+@keyframes tu-skeleton-pulse { 50% { opacity: .5; } }
+@media (max-width: 767px), (pointer: coarse) {
+  .trace-ui .tu-state-actions > .tu-button, .trace-ui .tu-expandable > button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trace-ui .tu-skeleton, .trace-soft-ui .tu-working, :root[data-trace-theme="soft"] .tu-working { animation: none; }
+}

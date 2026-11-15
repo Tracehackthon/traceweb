@@ -1,0 +1,56 @@
+--- a/packages/drawnix/src/drawnix.tsx
++++ b/packages/drawnix/src/drawnix.tsx
+@@ -70,6 +70,9 @@
+   onLanguageChange?: (language: Language) => void;
+   afterInit?: (board: PlaitBoard) => void;
+   tutorial?: boolean;
++  // Trace feasibility lab: expose the existing Plait plugin chain, not a new engine.
++  extraPlugins?: PlaitPlugin[];
++  showDefaultToolbars?: boolean;
+ } & React.HTMLAttributes<HTMLDivElement>;
+ 
+ export type { DrawnixToolState } from './hooks/use-drawnix';
+@@ -101,6 +104,8 @@
+   onLanguageChange,
+   afterInit,
+   tutorial = false,
++  extraPlugins = [],
++  showDefaultToolbars = true,
+ }) => {
+   const options: PlaitBoardOptions = {
+     readonly: false,
+@@ -208,6 +213,7 @@
+     buildPencilPlugin(updateAppState),
+     buildTextLinkPlugin(updateAppState),
+     buildToolStateSyncPlugin(syncBoardPointerToToolState),
++    ...extraPlugins,
+   ];
+ 
+   const containerRef = useRef<HTMLDivElement>(null);
+@@ -258,6 +264,7 @@
+             >
+               {tutorial && board && <Tutorial />}
+             </Board>
++            {showDefaultToolbars && <>
+             <AppToolbar></AppToolbar>
+             <CreationToolbar></CreationToolbar>
+             <ZoomToolbar></ZoomToolbar>
+@@ -265,6 +272,7 @@
+             <PopupToolbar></PopupToolbar>
+             <LinkPopup></LinkPopup>
+             <ClosePencilToolbar></ClosePencilToolbar>
++            </>}
+             <TTDDialog container={containerRef.current}></TTDDialog>
+             <CleanConfirm container={containerRef.current}></CleanConfirm>
+             <Toast toast={toast} container={containerRef.current}></Toast>
+--- a/packages/drawnix/src/styles/index.scss
++++ b/packages/drawnix/src/styles/index.scss
+@@ -1,5 +1,6 @@
+-@use './../../../../node_modules/@plait/draw/styles/styles.scss' as *;
+-@use './../../../../node_modules/@plait/mind/styles/styles.scss' as *;
++// Trace lab: resolve installed packages rather than upstream monorepo layout.
++@use './../../../../../../node_modules/@plait/draw/styles/styles.scss' as *;
++@use './../../../../../../node_modules/@plait/mind/styles/styles.scss' as *;
+ @use './variables.scss' as *;
+ @use './theme.scss' as *;
+ 

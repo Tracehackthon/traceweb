@@ -8,7 +8,27 @@ const invokePublic = async (channel, payload) => {
   }
 }
 
+const setupProgressListeners = new Set()
+const pendingSetupProgress = []
+ipcRenderer.on('trace-native:setup-progress', (_event, payload) => {
+  if (setupProgressListeners.size === 0) {
+    pendingSetupProgress.push(payload)
+    while (pendingSetupProgress.length > 32) pendingSetupProgress.shift()
+    return
+  }
+  for (const listener of setupProgressListeners) listener(payload)
+})
+
 contextBridge.exposeInMainWorld('traceNative', {
+  onAgentTasksChanged(listener) {
+    if(typeof listener!=='function')return undefined
+    const handler=()=>listener();ipcRenderer.on('trace-native:agent-tasks-changed',handler)
+    return ()=>ipcRenderer.removeListener('trace-native:agent-tasks-changed',handler)
+  },
+  getRuntimeStatus() {
+    try { return ipcRenderer.sendSync('trace-native:runtime-status') }
+    catch { return null }
+  },
   requestCapability(request) {
     return invokePublic('trace-native:capability', request)
   },
@@ -17,5 +37,11 @@ contextBridge.exposeInMainWorld('traceNative', {
   },
   reportCandidate(payload) {
     ipcRenderer.send('trace-native:discussion-candidate', payload)
+  },
+  onSetupProgress(listener) {
+    if (typeof listener !== 'function') return undefined
+    setupProgressListeners.add(listener)
+    while (pendingSetupProgress.length) listener(pendingSetupProgress.shift())
+    return () => setupProgressListeners.delete(listener)
   },
 })

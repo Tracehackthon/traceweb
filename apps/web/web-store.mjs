@@ -230,8 +230,18 @@ export function createWebStore({ file } = {}) {
   } catch (error) { db.close(); throw error; }
   function put(body) {
     demand(plain(body) && Number.isSafeInteger(body.expectedRevision) && body.expectedRevision >= 0 && identity(body.commandId) && body.commandId.length <= 200, 'INVALID_COMMAND', '需要有效的 expectedRevision、commandId 和 host。', 400);
-    demand(Object.keys(body).every(key => ['expectedRevision', 'host', 'commandId'].includes(key)), 'INVALID_COMMAND', '请求包含未支持的字段。', 400);
-    const host = normalizeHost(body.host), fingerprint = sha(stableJson({ expectedRevision: body.expectedRevision, host }));
+    demand(Object.keys(body).every(key => ['expectedRevision', 'host', 'commandId', 'operations'].includes(key)), 'INVALID_COMMAND', '请求包含未支持的字段。', 400);
+    // The browser runtime sends the ordered product operations alongside the
+    // canonical host snapshot. They are an idempotency/audit input, not a
+    // second state store: the normalized host remains the only persisted
+    // workspace payload, while the command fingerprint covers both values.
+    let operations;
+    if (body.operations !== undefined) {
+      demand(Array.isArray(body.operations) && body.operations.length <= 256 && body.operations.every(plain), 'INVALID_COMMAND', 'operations 必须是有限的对象数组。', 400);
+      checkTree(body.operations);
+      operations = structuredClone(body.operations);
+    }
+    const host = normalizeHost(body.host), fingerprint = sha(stableJson({ expectedRevision: body.expectedRevision, host, ...(operations === undefined ? {} : { operations }) }));
     return transaction(() => {
       const revision = currentRevision();
       // Validate the authoritative current snapshot before accepting any replacement.
@@ -239,7 +249,9 @@ export function createWebStore({ file } = {}) {
       const known = db.prepare('SELECT request_sha256,committed_revision FROM web_commands WHERE command_id=?').get(body.commandId);
       if (known) {
         if (known.request_sha256 !== fingerprint) throw new WebStoreError(409, 'COMMAND_CONFLICT', '相同 commandId 不能提交不同内容。', revision);
-        return readSnapshot(known.committed_revision);
+        const committed = readSnapshot(known.committed_revision);
+        // A replay proves the original commit, not that its snapshot is still head.
+        return revision === known.committed_revision ? committed : { ...committed, headRevision: revision };
       }
       if (body.expectedRevision !== revision) throw new WebStoreError(409, 'REVISION_CONFLICT', '工作区已有更新，未覆盖；请重新读取并保留当前草稿。', revision);
       demand(revision < Number.MAX_SAFE_INTEGER, 'REVISION_EXHAUSTED', '工作区修订已达上限。', 503);

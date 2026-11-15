@@ -1,9 +1,16 @@
+import './fonts.css';
+import '../../../shared/ui-geometry.css'
+import homeStylesheet from './home.css?url'
+import mattersStylesheet from './matters/matters.css?url'
+import discussionStylesheet from './style.css?url'
 import { routeFor } from './home-model.js'
 import { createPrototypeSession } from './prototype-session.js'
 
 const root = document.querySelector('#app')
+document.documentElement.dataset.traceGeometry = 'true'
 const session = createPrototypeSession()
 const styles = new Map()
+const stylesheetUrls = { home: homeStylesheet, matters: mattersStylesheet, discussion: discussionStylesheet }
 let screen, activeRoute, homeSnapshot, revision = 0
 
 async function stylesheet(route) {
@@ -11,7 +18,7 @@ async function stylesheet(route) {
     const link = document.createElement('link')
     link.rel = 'stylesheet'
     link.dataset.desktopStyle = route
-    link.href = new URL(({home:'./home.css',matters:'./matters/matters.css',discussion:'./style.css'})[route], import.meta.url).href
+    link.href = stylesheetUrls[route]
     link.media = 'not all'
     const ready = new Promise((resolve,reject) => {link.onload=resolve;link.onerror=reject})
     styles.set(route,{link,ready});document.head.append(link)
@@ -107,7 +114,7 @@ async function renderRoute({focusSearch=false}={}) {
     } else {
       document.title='Trace · 深度讨论'
       const back=document.createElement('a');back.href='?view=home';back.textContent='← 返回首页'
-      back.style.cssText='display:block;margin:0 8px 14px;color:#406c57;font:13px system-ui;text-decoration:none'
+      back.style.cssText='display:block;margin:0 calc(2 * var(--trace-space-unit)) calc(4 * var(--trace-space-unit));color:#406c57;font:13px system-ui;text-decoration:none'
       document.querySelector('.sidebar .new-thread')?.before(back)
     }
   } catch(error) {

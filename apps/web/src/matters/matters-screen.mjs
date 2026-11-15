@@ -146,8 +146,13 @@ export function mountMattersScreen({ root, view: initialView, onAction, onHome =
     if (destroyed) return;
     const rect = root.getBoundingClientRect();
     const width = rect.width || W, height = rect.height || H;
+    const narrow = width <= 760;
     const scale = Math.min(width / W, height / H);
-    stage.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    // The desktop scene is deliberately authored at 1672 × 941.  Do not
+    // shrink that scene into a thumbnail on a phone: the mobile stylesheet
+    // turns the same semantic nodes into a real reading flow instead.
+    shell.dataset.narrow = narrow ? 'true' : 'false';
+    stage.style.transform = narrow ? 'none' : `translate(-50%, -50%) scale(${scale})`;
     shell.style.setProperty('--matters-copy-boost', String(Math.max(1, Math.min(1.36, .70 / scale))));
     shell.dataset.compact = scale < .68 ? 'true' : 'false';
     // The material adapter has its own settled-resize debounce; no animation-frame displacement rebuild.

@@ -1,0 +1,37 @@
+[
+  {
+    "source": "sources/halo-toast.txt",
+    "sha256": "95dfe5323b3c1d1c55b0ea576ba45b3c611207077fc273e4610a7a9f5e495f0a",
+    "kind": "user attachment; demo, not verified upstream implementation"
+  },
+  {
+    "source": "sources/video-section.txt",
+    "sha256": "e5e9c062fdf56caa83c78a9085764dad75367dfa155360dc0cfc09beff77d7bd",
+    "kind": "user attachment; demo, not verified upstream implementation"
+  },
+  {
+    "source": "sources/wizard-expandable.txt",
+    "sha256": "e599fd61f8f72a315bf1887acdeefa1d02e2c6d87ba3653f9dd997f33eb6bda3",
+    "kind": "user attachment; demo, not verified upstream implementation"
+  },
+  {
+    "source": "sources/texture-card.txt",
+    "sha256": "87aa85dfb3e0d7bfb2705307773f52929778d66b993b95bc82b51b738fdd3055",
+    "kind": "user attachment; demo, not verified upstream implementation"
+  },
+  {
+    "source": "sources/shift-card.txt",
+    "sha256": "6cca55babf6c77a9818eaa3dc5eef939784e7089088ad6580c53b60319415163",
+    "kind": "user attachment; demo, not verified upstream implementation"
+  },
+  {
+    "source": "sources/youtube-player.txt",
+    "sha256": "bbfc7ce1acc1a0b48a236a9505fb7c2a08365373da1f0ecd4f0e6391b72f62f5",
+    "kind": "user attachment; demo, not verified upstream implementation"
+  },
+  {
+    "source": "sources/mock-browser-window.txt",
+    "sha256": "dca7428f0af2135426388b3e9d8e2687b784ff08cec27593b4ff5cd10024914f",
+    "kind": "user attachment; demo, not verified upstream implementation"
+  }
+]

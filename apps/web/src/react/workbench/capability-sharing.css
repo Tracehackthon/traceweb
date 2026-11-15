@@ -1,0 +1,23 @@
+.wb-capability-packet{display:grid;gap:24px;min-width:0}
+.wb-capability-packet p{margin:8px 0;overflow-wrap:anywhere}
+.wb-capability-packet h3,.wb-capability-packet h4{margin:0}
+.wb-capability-packet .wb-check{display:flex;align-items:flex-start;gap:8px;margin:8px 0}
+.wb-capability-packet .wb-check input{flex:none;margin-top:4px}
+.wb-packet-people,.wb-packet-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.wb-packet-body{display:grid;gap:20px;min-width:0}
+.wb-packet-body p{white-space:pre-wrap;font-size:var(--wb-text-reading);line-height:var(--wb-leading-reading)}
+.wb-packet-steps{display:grid;gap:16px;padding-left:24px;margin:8px 0}
+.wb-packet-steps>li{padding-left:4px}
+.wb-packet-steps>li::marker{font-variant-numeric:tabular-nums;color:var(--trace-text-secondary)}
+.wb-packet-source-choice{display:grid;gap:8px;margin:16px 0;min-width:0}
+.wb-packet-compare>section+section{padding-left:24px;border-left:.5px solid var(--trace-border-subtle)}
+@media(max-width:767px){.wb-packet-people,.wb-packet-compare{grid-template-columns:minmax(0,1fr)}.wb-packet-compare>section+section{padding-left:0;padding-top:24px;border-left:0;border-top:.5px solid var(--trace-border-subtle)}}
+
+.wb-packet-source-choice[data-source-match=true]{box-shadow:inset 2px 0 0 var(--trace-focus);padding-left:16px}
+
+/* A long review must not lose its object, mode, or close action while scrolling. */
+:is(.wb-packet-dialog,.wb-review-dialog){scroll-padding-block-start:calc(56px + 2 * var(--wb-dialog-padding))}
+:is(.wb-packet-dialog,.wb-review-dialog)>header{position:sticky;top:calc(-1 * var(--wb-dialog-padding));z-index:2;background:var(--trace-surface-panel);margin:calc(-1 * var(--wb-dialog-padding)) calc(-1 * var(--wb-dialog-padding)) 24px;padding:var(--wb-dialog-padding);border-bottom:.5px solid var(--trace-border-subtle)}
+:is(.wb-packet-dialog,.wb-review-dialog) .wb-modal-heading{min-width:0}
+:is(.wb-packet-dialog,.wb-review-dialog) .wb-modal-context{margin:4px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--wb-text-meta);line-height:var(--wb-leading-meta);color:var(--trace-text-secondary)}
+.wb-packet-body>.wb-halo-badge{justify-self:start}

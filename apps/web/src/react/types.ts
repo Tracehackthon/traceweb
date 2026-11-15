@@ -1,4 +1,4 @@
-export type ViewName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite' | 'works' | 'search' | 'all' | 'discussion';
+export type ViewName = 'home' | 'matters' | 'chain' | 'compare' | 'worksite' | 'works' | 'search' | 'all' | 'projects' | 'discussion';
 
 export interface SelectionAnchor {
   field: string;
@@ -17,6 +17,9 @@ export interface RouteMemory {
   q?: string;
   kind?: string;
   recordId?: string;
+  selectedId?: string;
+  detailTab?: string;
+  includeHistory?: string;
   returnTarget?: RouteMemory;
   anchor?: SelectionAnchor;
   scroll?: Array<{ className: string; top: number }>;
@@ -27,10 +30,26 @@ export interface StorageInfo {
   [key: string]: unknown;
 }
 
+/** Read-only search projection, not a second persisted content model. */
+export interface LibraryRecord {
+  id: string;
+  kind: string;
+  matterId?: string;
+  title: string;
+  text: string;
+  meta?: string;
+  before?: string;
+  interpretation?: string;
+  unconfirmed?: string;
+  route: RouteMemory | null;
+}
+
 export interface WebStatus {
   state: 'loading' | 'saving' | 'saved' | 'error';
   text: string;
 }
+
+export type WorkspaceLoadState = 'loading' | 'ready' | 'empty' | 'recoverable-error' | 'unrecoverable-error';
 
 export interface DialogState {
   type: 'profile' | 'sources' | 'capability' | 'work-context' | 'message' | 'record';
@@ -55,8 +74,20 @@ export interface WorkspaceSnapshot {
   revision: number;
   storage: StorageInfo | null;
   ready: boolean;
+  loadState: WorkspaceLoadState;
   busy: boolean;
   pending: boolean;
+  recoveryDraft: {
+    revision: number;
+    host: any;
+    submittedHost?: any;
+    authoritativeHost?: any;
+    authoritativeRevision?: number;
+    headRevision?: number;
+    unconfirmedAcknowledgement?: any;
+    conflicts?: string[];
+    command?: { commandId: string; expectedRevision: number; host: any; operations?: any[] };
+  } | null;
   status: WebStatus;
   error: string | null;
   dialog: DialogState | null;

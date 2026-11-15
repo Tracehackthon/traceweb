@@ -1,9 +1,19 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, protocol, screen, session, shell, Tray } from 'electron'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve, sep } from 'node:path'
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DEFAULT_CLOUD_ORIGIN, DEFAULT_RUNTIME_ORIGIN, createRuntimeCapabilityClient, resolveCodexExecutable } from './runtime-client.mjs'
+import { ensureRuntimeIdentity } from './runtime-installation-identity.mjs'
+import { applyRuntimeIntegrationConfig } from './runtime-integrations.mjs'
+import { bindNativeAgentProject } from './runtime-project-binding.mjs'
+import { createDesktopShutdownController, launchIntent } from './lifecycle.mjs'
+import { createDesktopWorkbench } from './workbench-store.mjs'
+import { createWorkbenchAgent } from './workbench-agent.mjs'
+import { clearVersionBoundStorage } from './storage-lifecycle.mjs'
+import { isAddressInUse, isLoopbackHttpOrigin, selectLoopbackPort } from './runtime-port-selection.mjs'
+import { probeProductWorkspace } from './runtime-readiness.mjs'
+import { inspectManagedRuntime, inspectProjectTrace, listQuarantinedArtifacts, purgeQuarantinedArtifact, quarantineProjectEntry, restoreQuarantinedArtifact } from './artifact-lifecycle.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const discussionOrigin = 'http://127.0.0.1:4173'
@@ -27,14 +37,62 @@ let overlayWindow
 let tray
 let quitting = false
 let capabilityClient
+let desktopWorkbench
+let workbenchAgent
+let taskHandoffRuntimeConnected=false
 let bundledRuntime
 const discussionWindows = new Set()
 let zhihuAuthWindow
 let interactiveBounds = []
+let overlayNativeRegion = false
+let overlayRegionSignature = ''
 let codexEventPollTimer
 let codexEventPollInFlight = false
+let runtimeHeartbeatFailures = 0
 let overlayReady = false
+const IPC_TIMEOUT_MS = 45_000
+const WORKSPACE_IPC_TIMEOUT_MS = 15_000
+const RUNTIME_START_TIMEOUT_MS = 45_000
+let bundledRuntimeStatus = {
+  connected: !app.isPackaged,
+  bundled: app.isPackaged,
+  state: app.isPackaged ? 'starting' : 'external',
+  message: app.isPackaged ? '正在启动 Trace 本机内容服务…' : '正在连接 Trace 本机内容服务…',
+}
+let bundledRuntimeStartPromise = null
+let bundledRuntimeAttempt = 0
+let bundledRuntimeRecoveryTimer = null
+let bundledRuntimeRecoveryAttempt = 0
 const pendingCodexEvents = []
+const desktopLaunchIntent = launchIntent(process.argv)
+const shutdownController = createDesktopShutdownController({
+  app,
+  listWindows: () => BrowserWindow.getAllWindows(),
+  flushStorage: () => {
+    for (const active of new Set(BrowserWindow.getAllWindows().filter(window => !window.isDestroyed()).map(window => window.webContents.session))) active.flushStorageData()
+  },
+  destroyTray: () => {
+    if (tray && !tray.isDestroyed()) tray.destroy()
+    tray = undefined
+  },
+  stopPolling: () => {
+    stopCodexEventPolling()
+    stopBundledRuntimeRecovery()
+  },
+  closeCapability: () => {
+    capabilityClient?.close?.()
+    capabilityClient = undefined
+  },
+  closeRuntime: async () => {
+    await workbenchAgent?.close()
+    desktopWorkbench?.close()
+    try { await bundledRuntimeStartPromise } catch { /* startup failure has already been reported */ }
+    const runtime = bundledRuntime
+    bundledRuntime = undefined
+    await runtime?.close?.()
+  },
+  onStart: () => { quitting = true },
+})
 
 function sendCodexEvent(event) {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
@@ -44,6 +102,39 @@ function sendCodexEvent(event) {
     return
   }
   overlayWindow.webContents.send('trace-native:codex-event', event)
+}
+
+function sendSetupProgress(event) {
+  for (const window of discussionWindows) {
+    if (!window.isDestroyed()) window.webContents.send('trace-native:setup-progress', event)
+  }
+}
+
+function setBundledRuntimeStatus(next) {
+  bundledRuntimeStatus = {
+    connected: next.connected === true,
+    bundled: next.bundled === true,
+    state: typeof next.state === 'string' ? next.state : next.connected === true ? 'connected' : 'failed',
+    message: typeof next.message === 'string' && next.message.length <= 240 ? next.message : 'Trace 本机内容服务暂时不可用，请重试。',
+  }
+  sendSetupProgress({
+    kind: 'runtime',
+    status: bundledRuntimeStatus.connected ? 'completed' : bundledRuntimeStatus.state === 'starting' ? 'running' : 'failed',
+    phase: bundledRuntimeStatus.state === 'starting' ? 'starting' : bundledRuntimeStatus.connected ? 'ready' : 'failed',
+    message: bundledRuntimeStatus.message,
+  })
+}
+
+function publicBundledRuntimeStatus() {
+  return { ...bundledRuntimeStatus }
+}
+
+function withIpcTimeout(value, timeoutMs, message) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+  })
+  return Promise.race([Promise.resolve(value), timeout]).finally(() => clearTimeout(timer))
 }
 
 function installDiscussionProtocol() {
@@ -72,6 +163,123 @@ function writeDesktopSettings(value) {
   const file = settingsFile()
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function lifecycleProjectList(settings = readDesktopSettings()) {
+  const projects = Array.isArray(settings.lifecycleProjects) ? settings.lifecycleProjects.filter((item) =>
+    item && typeof item.id === 'string' && /^[a-f0-9-]{12,40}$/i.test(item.id) && typeof item.path === 'string' && resolve(item.path) === item.path,
+  ).map((item) => ({ id: item.id, path: item.path })) : []
+  if (typeof settings.projectDir === 'string' && resolve(settings.projectDir) === settings.projectDir) {
+    const existing = projects.find((item) => process.platform === 'win32' ? item.path.toLowerCase() === settings.projectDir.toLowerCase() : item.path === settings.projectDir)
+    if (!existing) {
+      let valid = false
+      try { const stat = lstatSync(settings.projectDir); valid = stat.isDirectory() && !stat.isSymbolicLink() } catch {}
+      if (valid) {
+        const item = { id: randomBytes(12).toString('hex'), path: settings.projectDir }
+        projects.push(item)
+        const retainedEntries = Array.isArray(settings.lifecycleProjects) ? settings.lifecycleProjects : []
+        writeDesktopSettings({ ...settings, lifecycleProjects: [...retainedEntries, item] })
+      }
+    }
+  }
+  return projects
+}
+
+function registeredLifecycleProject(projectId) {
+  if (typeof projectId !== 'string' || !/^[a-f0-9-]{12,40}$/i.test(projectId)) throw new Error('项目库 ID 无效。')
+  const settings = readDesktopSettings()
+  const project = lifecycleProjectList(settings).find((item) => item.id === projectId)
+  if (!project) throw new Error('该项目不在 Trace 本机项目库中。')
+  const rootPath = resolve(project.path)
+  let stat
+  try { stat = lstatSync(rootPath) } catch { throw new Error('项目目录不可访问；未执行操作。') }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('项目目录不可用或不是普通目录；未执行操作。')
+  return { ...project, path: rootPath }
+}
+
+function readProjectLifecycleLibrary() {
+  const firstSettings = readDesktopSettings()
+  const projects = lifecycleProjectList(firstSettings)
+  const settings = readDesktopSettings()
+  const normalized = projects.map((project) => {
+    let available = false
+    try { const stat = lstatSync(project.path); available = stat.isDirectory() && !stat.isSymbolicLink() } catch {}
+    return { id: project.id, name: basename(project.path) || '未命名项目', available }
+  })
+  const activeProjectId = settings.lifecycleActiveProjectId || projects.find((project) => process.platform === 'win32' ? project.path.toLowerCase() === settings.projectDir?.toLowerCase() : project.path === settings.projectDir)?.id || null
+  const runtime = app.isPackaged
+    ? inspectManagedRuntime(join(process.resourcesPath, 'trace-runtime'))
+    : { scope: 'managed-runtime', state: 'unavailable', complete: true, entries: [], warnings: ['开发模式使用外部 Runtime；开发 checkout 不属于受管 Runtime 清理范围。'] }
+  return { projects: normalized, activeProjectId, runtime }
+}
+
+async function handleProjectLifecycleRequest(senderWindow, request) {
+  const operation = request?.operation
+  if (typeof operation !== 'string' || !operation.startsWith('project.lifecycle.')) return undefined
+  const action = operation.slice('project.lifecycle.'.length)
+  if (action === 'projects.read') return readProjectLifecycleLibrary()
+  if (action === 'project.add') {
+    const result = await dialog.showOpenDialog(senderWindow, { title: '添加要由 Trace 管理的项目目录', properties: ['openDirectory'] })
+    if (result.canceled || !result.filePaths[0]) return { cancelled: true }
+    const projectPath = resolve(result.filePaths[0])
+    let stat
+    try { stat = lstatSync(projectPath) } catch { throw new Error('所选目录不可访问；未添加。') }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('请选择真实的项目目录，而不是符号链接。')
+    const settings = readDesktopSettings()
+    const projects = lifecycleProjectList(settings)
+    const duplicate = projects.find((item) => process.platform === 'win32' ? item.path.toLowerCase() === projectPath.toLowerCase() : item.path === projectPath)
+    if (duplicate) return { id: duplicate.id, name: basename(projectPath), available: true, existing: true }
+    const item = { id: randomBytes(12).toString('hex'), path: projectPath }
+    writeDesktopSettings({ ...readDesktopSettings(), lifecycleProjects: [...projects, item] })
+    return { id: item.id, name: basename(projectPath), available: true }
+  }
+
+  const project = registeredLifecycleProject(request.projectId)
+  if (action === 'project.activate') {
+    const settings = readDesktopSettings()
+    writeDesktopSettings({ ...settings, projectDir: project.path, lifecycleActiveProjectId: project.id })
+    capabilityClient?.setProjectDir?.(project.path)
+    bindNativeAgentProject(project.path)
+    return { activeProjectId: project.id }
+  }
+  if (action === 'inventory') return inspectProjectTrace(project.path, { projectId: project.id, allowQuarantine: true })
+  if (action === 'quarantine.read') return listQuarantinedArtifacts(project.path, { projectId: project.id })
+  if (action === 'quarantine') return quarantineProjectEntry(project.path, { projectId: project.id, entryId: request.entryId })
+  if (action === 'restore') return restoreQuarantinedArtifact(project.path, request.id)
+  if (action === 'purge') {
+    const entry = listQuarantinedArtifacts(project.path, { projectId: project.id }).entries.find((item) => item.id === request.id)
+    if (!entry) throw new Error('该文件不在所选项目的可恢复隔离区。')
+    const confirmation = await dialog.showMessageBox(senderWindow, {
+      type: 'warning', title: '永久清除隔离文件？', message: `永久清除“${entry.name}”？`,
+      detail: `原项目位置：.trace/${entry.originalPath}\n\n此操作不可撤销。Trace 会在清除前再次验证隔离文件的内容校验值。`,
+      buttons: ['永久清除', '取消'], defaultId: 1, cancelId: 1, noLink: true,
+    })
+    if (confirmation.response !== 0) return { cancelled: true }
+    return purgeQuarantinedArtifact(project.path, request.id)
+  }
+  throw new Error('不支持的项目生命周期操作。')
+}
+
+function publicProjectLifecycleError(error) {
+  const raw = error instanceof Error ? error.message : String(error || '')
+  if (typeof error?.code === 'string' || /[A-Za-z]:[\\/]|\\\\|\/(?:Users|home|mnt|Volumes|private|tmp|var|opt)\//i.test(raw)) {
+    const code = typeof error?.code === 'string' ? `（${error.code}）` : ''
+    return `项目文件操作未完成${code}；未继续清除文件。`
+  }
+  return raw.length <= 400 ? raw : '项目文件操作未完成；请重新盘点后重试。'
+}
+
+function prepareVersionedDesktopStorage() {
+  const current = readDesktopSettings()
+  const currentVersion = app.getVersion()
+  const cleanup = clearVersionBoundStorage({
+    userData: app.getPath('userData'),
+    previousVersion: current.desktopVersion,
+    currentVersion,
+  })
+  if (current.desktopVersion !== currentVersion) writeDesktopSettings({ ...current, desktopVersion: currentVersion })
+  if (cleanup.failed.length) console.warn(`Trace could not clear ${cleanup.failed.length} transient cache location(s) during upgrade.`)
+  return cleanup
 }
 
 function finite(value) { return typeof value === 'number' && Number.isFinite(value) }
@@ -165,40 +373,196 @@ function saveCurrentPlacement(payload) {
 }
 async function runtimeReady() {
   if (!backendOrigin) return false
-  try {
-    const responses = await Promise.all(['/api/product/workspace', '/api/agent/capabilities'].map((pathname) => (
-      fetch(new URL(pathname, backendOrigin), { signal: AbortSignal.timeout(1200), headers: { accept: 'application/json' } })
-    )))
-    return responses.every((response) => response.ok && (response.headers.get('content-type') || '').includes('application/json'))
-  } catch { return false }
+  if (app.isPackaged && !isLoopbackHttpOrigin(backendOrigin)) return false
+  // The Product Workspace is the content authority. The 0.2.11 bundled
+  // Runtime has this route but no /api/runtime/heartbeat; probing the latter
+  // repeatedly replaced a healthy listener and lost the desktop connection.
+  return probeProductWorkspace(backendOrigin)
 }
-async function ensureBundledRuntime() {
-  if (await runtimeReady() || !app.isPackaged) return
-  const dynamicBinding = !configuredBackendOrigin
-  const target = new URL(backendOrigin || DEFAULT_RUNTIME_ORIGIN)
-  if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)) return
+
+function isAgentStartupFailure(error) {
+  const code = String(error?.code || '').toUpperCase()
+  return code === 'PRODUCT_IDENTITY_UNVERIFIED' || code.startsWith('AGENT_') || code === 'INVALID_WORKSPACE' || code === 'INVALID_INSTALLATION'
+}
+
+function runtimeOriginForBinding(target, port) {
+  const hostname = target.hostname.toLowerCase() === 'localhost' ? 'localhost' : '127.0.0.1'
+  return `http://${hostname}:${Number(port)}`
+}
+
+async function startBundledRuntime({ agentEnabled, cacheBust = false, port, targetOrigin } = {}) {
   const runtimeRoot = join(process.resourcesPath, 'trace-runtime')
   const server = join(runtimeRoot, 'apps', 'desktop', 'server.mjs')
-  if (!existsSync(server)) return
+  const specifier = `${pathToFileURL(server).href}${cacheBust ? `?attempt=${++bundledRuntimeAttempt}` : ''}`
+  if (port !== undefined) process.env.TRACE_DESKTOP_PORT = String(port)
+  process.env.TRACE_AGENT_ENABLED = agentEnabled ? '1' : '0'
+  let loaded
+  try {
+    loaded = await withIpcTimeout(import(specifier), RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
+    taskHandoffRuntimeConnected=false
+    if(typeof loaded.bindTaskHandoffOwner==='function'&&desktopWorkbench){
+      desktopWorkbench.enableTaskHandoff()
+      loaded.bindTaskHandoffOwner((request,response)=>desktopWorkbench.handleTaskHandoff(request,response))
+      taskHandoffRuntimeConnected=true
+    }
+    const binding = await withIpcTimeout(loaded.ready, RUNTIME_START_TIMEOUT_MS, 'Trace 本机内容服务启动超时')
+    bundledRuntime = loaded
+    if (!binding || !Number.isInteger(Number(binding.port)) || Number(binding.port) < 1 || Number(binding.port) > 65_535) throw new Error('Trace 本机内容服务没有返回有效连接')
+    // Port 0 is resolved by the runtime itself.  Always publish the actual
+    // listener origin so the renderer and subsequent capability requests do
+    // not keep using a stale configured port after collision recovery.
+    const target = targetOrigin ? new URL(targetOrigin) : null
+    const targetHostname = target?.hostname?.toLowerCase()
+    const preservesConfiguredOrigin = configuredBackendOrigin
+      && (targetHostname === 'localhost' || targetHostname === '127.0.0.1')
+      && Number(binding.port) === Number(target?.port || 0)
+    if (!preservesConfiguredOrigin) {
+      backendOrigin = runtimeOriginForBinding(target || new URL(DEFAULT_RUNTIME_ORIGIN), binding.port)
+    }
+    capabilityClient?.setRuntimeOrigin?.(backendOrigin)
+    return binding
+  } catch (error) {
+    taskHandoffRuntimeConnected=false
+    try { await loaded?.close?.() } catch { /* startup cleanup is best effort */ }
+    if (bundledRuntime === loaded) bundledRuntime = undefined
+    throw error
+  }
+}
+
+async function doEnsureBundledRuntime({ retry = false } = {}) {
+  // A packaged build may only own a loopback listener.  An explicitly
+  // configured external origin is not rewritten or contacted; surface a
+  // local repair state instead of silently redirecting the renderer.
+  if (app.isPackaged && backendOrigin && !isLoopbackHttpOrigin(backendOrigin)) {
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务地址不可用，请重新启动 Trace。' })
+    return
+  }
+  if (await runtimeReady()) {
+    if (bundledRuntimeStatus.state !== 'degraded') setBundledRuntimeStatus({ connected: true, bundled: app.isPackaged, state: 'connected', message: 'Trace 本机内容服务已连接。' })
+    return
+  }
+  if (!app.isPackaged) {
+    setBundledRuntimeStatus({ connected: Boolean(backendOrigin), bundled: false, state: 'external', message: '正在连接 Trace 本机内容服务…' })
+    return
+  }
+  const target = new URL(backendOrigin || DEFAULT_RUNTIME_ORIGIN)
+  if (!isLoopbackHttpOrigin(target.href)) {
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务地址不可用，请重新启动 Trace。' })
+    return
+  }
+  const runtimeRoot = join(process.resourcesPath, 'trace-runtime')
+  const server = join(runtimeRoot, 'apps', 'desktop', 'server.mjs')
+  if (!existsSync(server)) {
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: '当前安装缺少 Trace 本机内容服务，请重新安装后重试。' })
+    throw new Error('Trace bundled runtime entrypoint is missing')
+  }
   const stateRoot = join(app.getPath('userData'), 'state')
   mkdirSync(stateRoot, { recursive: true })
+  // A failed heartbeat can leave the previous module loaded even though its
+  // listener is no longer authoritative. Close it before probing/binding a
+  // replacement so recovery cannot leak a second loopback server.
+  if (bundledRuntime) {
+    try { await bundledRuntime.close?.() } catch { /* recovery will report a fresh failure */ }
+    bundledRuntime = undefined
+  }
+  const settings = readDesktopSettings()
+  const persistedIdentity = ensureRuntimeIdentity(settings, () => randomBytes(24).toString('hex'))
+  if (persistedIdentity.changed) writeDesktopSettings(persistedIdentity.settings)
   process.env.TRACE_RUNTIME_ROOT = runtimeRoot
   process.env.TRACE_BUNDLED_RUNTIME = '1'
-  process.env.TRACE_DESKTOP_PORT = dynamicBinding ? '0' : target.port || '80'
+  const preferredPort = configuredBackendOrigin ? Number(target.port || 80) : 0
+  // An explicit origin is honoured when its loopback port is free.  If it is
+  // occupied, ask the OS for a loopback-only ephemeral port instead of
+  // retrying the same EADDRINUSE failure forever.  The real bind below still
+  // handles a probe race by retrying with port 0.
+  let selectedPort = configuredBackendOrigin ? await selectLoopbackPort(preferredPort) : 0
+  const migratedFromBusyPort = configuredBackendOrigin && preferredPort > 0 && selectedPort === 0
+  process.env.TRACE_DESKTOP_PORT = String(selectedPort)
   process.env.TRACE_WEB_STATE_FILE = join(stateRoot, 'web.sqlite')
   process.env.TRACE_AGENT_STATE_FILE = join(stateRoot, 'agent.sqlite')
   process.env.TRACE_AGENT_RUNTIME_ROOT = join(stateRoot, 'agent-runs')
+  // The packaged runtime must never silently accept a legacy/null identity.
+  // Bind this app-owned database to stable IDs and let the runtime perform its
+  // explicit, transactional legacy upgrade before serving any state.
+  process.env.TRACE_INSTALLATION_ID = persistedIdentity.identity.installationId
+  process.env.TRACE_WORKSPACE_ID = persistedIdentity.identity.workspaceId
+  process.env.TRACE_UPGRADE_LEGACY_IDENTITY = '1'
+  delete process.env.TRACE_ALLOW_LEGACY_IDENTITY
   process.env.TRACE_AGENT_ENABLED ??= '1'
+  bindNativeAgentProject(process.env.TRACE_PROJECT_DIR || settings.projectDir)
   process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN ??= randomBytes(32).toString('base64url')
+  const integrationConfigFile = process.env.TRACE_DESKTOP_INTEGRATIONS_FILE || join(app.getPath('userData'), 'runtime-integrations.json')
+  applyRuntimeIntegrationConfig({ file: integrationConfigFile })
   const codexExecutable = resolveCodexExecutable()
   if (codexExecutable) process.env.TRACE_CODEX_BIN = codexExecutable
-  bundledRuntime = await import(pathToFileURL(server).href)
-  const binding = await bundledRuntime.ready
-  if (dynamicBinding) {
-    const port = Number(binding?.port)
-    if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('Trace bundled runtime did not report a valid loopback port')
-    backendOrigin = `http://127.0.0.1:${port}`
+  setBundledRuntimeStatus({ connected: false, bundled: true, state: 'starting', message: '正在启动 Trace 本机内容服务…' })
+  const requestedAgent = process.env.TRACE_AGENT_ENABLED !== '0'
+  try {
+    await startBundledRuntime({ agentEnabled: requestedAgent, cacheBust: retry, port: selectedPort, targetOrigin: target.href })
+    runtimeHeartbeatFailures = 0
+    setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: migratedFromBusyPort ? 'Trace 本机内容服务已连接（已自动避开占用端口）。' : 'Trace 本机内容服务已连接。' })
+  } catch (error) {
+    if (configuredBackendOrigin && isAddressInUse(error) && selectedPort !== 0) {
+      // The availability probe and the bind are necessarily separate.  Do a
+      // single bounded fallback to an OS-selected loopback port; never fall
+      // back to an external origin or keep retrying a known busy port.
+      selectedPort = 0
+      try {
+        await startBundledRuntime({ agentEnabled: requestedAgent, cacheBust: true, port: selectedPort, targetOrigin: target.href })
+        runtimeHeartbeatFailures = 0
+        setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: 'Trace 本机内容服务已连接（已自动避开占用端口）。' })
+        return
+      } catch (fallbackError) {
+        error = fallbackError
+      }
+    }
+    // Agent is optional for reading and editing the Product Workspace. If an
+    // old agent ledger cannot be opened, retry the same packaged server with
+    // Agent disabled rather than leaving the product window without a local
+    // listener. Product state remains authoritative and readable.
+    if (requestedAgent && isAgentStartupFailure(error)) {
+      try {
+        await startBundledRuntime({ agentEnabled: false, cacheBust: true, port: selectedPort, targetOrigin: target.href })
+        setBundledRuntimeStatus({ connected: true, bundled: true, state: 'degraded', message: 'Trace 内容已连接；本机 Agent 暂时不可用，可稍后重试。' })
+        return
+      } catch (fallbackError) {
+        error = fallbackError
+      }
+    }
+    setBundledRuntimeStatus({ connected: false, bundled: true, state: 'failed', message: 'Trace 本机内容服务没有启动，请重试。' })
+    throw error
   }
+}
+
+function ensureBundledRuntime(options = {}) {
+  if (bundledRuntimeStartPromise) return bundledRuntimeStartPromise
+  let settled
+  const task = doEnsureBundledRuntime(options)
+  settled = task.finally(() => {
+    if (bundledRuntimeStartPromise === settled) bundledRuntimeStartPromise = null
+  })
+  bundledRuntimeStartPromise = settled
+  return settled
+}
+
+const RUNTIME_RECOVERY_DELAYS_MS = [750, 2_000, 5_000]
+function stopBundledRuntimeRecovery() {
+  if (bundledRuntimeRecoveryTimer) clearTimeout(bundledRuntimeRecoveryTimer)
+  bundledRuntimeRecoveryTimer = null
+  bundledRuntimeRecoveryAttempt = 0
+}
+function scheduleBundledRuntimeRecovery() {
+  if (quitting || !app.isPackaged || bundledRuntimeStatus.connected || bundledRuntimeRecoveryTimer) return
+  const attempt = bundledRuntimeRecoveryAttempt++
+  if (attempt >= RUNTIME_RECOVERY_DELAYS_MS.length) return
+  bundledRuntimeRecoveryTimer = setTimeout(() => {
+    bundledRuntimeRecoveryTimer = null
+    void ensureBundledRuntime({ retry: true }).then(() => {
+      if (bundledRuntimeStatus.connected) stopBundledRuntimeRecovery()
+      else scheduleBundledRuntimeRecovery()
+    }).catch(() => scheduleBundledRuntimeRecovery())
+  }, RUNTIME_RECOVERY_DELAYS_MS[attempt])
+  bundledRuntimeRecoveryTimer.unref?.()
 }
 
 function positionOverlay() {
@@ -208,14 +572,26 @@ function positionOverlay() {
 }
 
 function showOverlay() {
-  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  if (quitting) return
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    createOverlayWindow()
+    return
+  }
   positionOverlay()
+  overlayNativeRegion = false
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
   overlayWindow.showInactive()
+  // Windows floating placement can drop behind normal windows when moved below the taskbar.
+  overlayWindow.setAlwaysOnTop(true, process.platform === 'win32' ? 'pop-up-menu' : 'floating')
+  applyOverlayInteractiveRegion()
 }
 
 function toggleOverlay() {
-  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  if (quitting) return
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    showOverlay()
+    return
+  }
   if (overlayWindow.isVisible()) overlayWindow.hide()
   else showOverlay()
 }
@@ -236,7 +612,7 @@ function parseDiscussionQuery(rawUrl) {
   // The native window hosts the current Trace product shell. Explicitly pin
   // its route so legacy observation query keys do not send file:// builds to
   // the removed /legacy.html absolute path.
-  query.view = 'home'
+  query.view = url.searchParams.get('view') === 'home' ? 'home' : 'canvas'
   query.from = 'trace-native'
   return query
 }
@@ -253,8 +629,12 @@ function openDiscussion(rawUrl) {
     minHeight: 620,
     show: false,
     autoHideMenuBar: true,
+    ...(process.platform === 'win32' && query.view === 'home' ? {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { color: '#f3f7f2', symbolColor: '#215b4d', height: 40 },
+    } : {}),
     backgroundColor: '#f3f0e7',
-    title: 'Trace · 深度讨论',
+    title: query.view === 'home' ? 'Trace · 旧版内容' : 'Trace',
     icon: appIconPath,
     webPreferences: {
       preload: join(root, 'discussion-preload.cjs'),
@@ -265,6 +645,13 @@ function openDiscussion(rawUrl) {
   })
 
   discussionWindows.add(discussionWindow)
+  if (process.platform === 'win32' && query.view === 'home') {
+    discussionWindow.webContents.on('did-finish-load', () => {
+      // Leave the system window controls unobstructed; the empty top edge
+      // remains draggable after removing the dark native title bar.
+      void discussionWindow.webContents.insertCSS('body::before { content: ""; position: fixed; top: 0; left: 0; right: 140px; height: 40px; z-index: 2147483647; -webkit-app-region: drag; }').catch(() => {})
+    })
+  }
   discussionWindow.once('ready-to-show', () => discussionWindow.show())
   discussionWindow.on('closed', () => discussionWindows.delete(discussionWindow))
   discussionWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -299,11 +686,24 @@ function createOverlayWindow() {
     },
   })
 
-  overlayWindow.setAlwaysOnTop(true, 'floating')
+  overlayWindow.setAlwaysOnTop(true, process.platform === 'win32' ? 'pop-up-menu' : 'floating')
+  const ownedOverlay = overlayWindow
+  ownedOverlay.once('closed', () => {
+    if (overlayWindow !== ownedOverlay) return
+    overlayWindow = undefined
+    overlayReady = false
+    interactiveBounds = []
+    overlayNativeRegion = false
+    overlayRegionSignature = ''
+  })
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   overlayWindow.setIgnoreMouseEvents(true, { forward: true })
+  // An empty setShape list restores a fullscreen rectangle, so never use it
+  // for the initial transparent surface before the renderer reports its UI.
+  if (process.platform === 'win32') ownedOverlay.setShape([{ x: 0, y: 0, width: 1, height: 1 }])
   overlayWindow.on('hide', () => {
-    if (!overlayWindow.isDestroyed()) overlayWindow.setIgnoreMouseEvents(true, { forward: false })
+    if (!ownedOverlay.isDestroyed()) ownedOverlay.setIgnoreMouseEvents(true, { forward: false })
+    if (overlayWindow === ownedOverlay) overlayNativeRegion = false
   })
   overlayWindow.webContents.on('did-start-loading', () => { overlayReady = false })
   overlayWindow.webContents.on('did-finish-load', () => {
@@ -337,8 +737,7 @@ function createTray() {
     {
       label: '退出',
       click: () => {
-        quitting = true
-        app.quit()
+        void shutdownController.requestShutdown('tray')
       },
     },
   ]))
@@ -356,13 +755,41 @@ function startCodexEventPolling() {
     if (codexEventPollInFlight || !overlayWindow || overlayWindow.isDestroyed() || !overlayWindow.webContents) return
     codexEventPollInFlight = true
     try {
-      const result = await capabilityClient.request({ operation: 'codex.events' })
-      if (Array.isArray(result?.events)) {
-        for (const event of result.events.slice(0, 128)) sendCodexEvent(event)
+      // Event polling is a projection and may legitimately be empty when
+      // Agent is disabled.  Liveness is checked through a separate
+      // loopback-only endpoint so a 404/Agent failure cannot masquerade as a
+      // healthy desktop runtime.
+      let heartbeatOk = true
+      try {
+        await capabilityClient.request({ operation: 'runtime.heartbeat' })
+      } catch {
+        heartbeatOk = false
+        runtimeHeartbeatFailures += 1
+        // Fail closed after a short consecutive-failure budget.  The last
+        // projection is retained for context, but connected state is no longer
+        // reported as authoritative and recovery is bounded by the existing
+        // retry schedule.
+        if (runtimeHeartbeatFailures >= 3 && app.isPackaged) {
+          setBundledRuntimeStatus({ connected: false, bundled: true, state: 'degraded', message: 'Trace 本机内容服务暂时失去响应，正在尝试恢复…' })
+          scheduleBundledRuntimeRecovery()
+        }
       }
-    } catch {
-      // Runtime startup/disconnect is normal. The pet stays at its last
-      // projection and does not invent a local task to fill the gap.
+      if (heartbeatOk) {
+        runtimeHeartbeatFailures = 0
+        if (!bundledRuntimeStatus.connected && app.isPackaged) {
+          setBundledRuntimeStatus({ connected: true, bundled: true, state: 'connected', message: 'Trace 本机内容服务已连接。' })
+          stopBundledRuntimeRecovery()
+        }
+        try {
+          const result = await capabilityClient.request({ operation: 'codex.events' })
+          if (Array.isArray(result?.events)) {
+            for (const event of result.events.slice(0, 128)) sendCodexEvent(event)
+          }
+        } catch {
+          // Event projection is best effort.  Heartbeat remains authoritative
+          // for connection state and independently triggers recovery.
+        }
+      }
     } finally {
       codexEventPollInFlight = false
     }
@@ -427,16 +854,36 @@ function openZhihuAuthorization(loginUrl, parentWindow) {
   })
 }
 
-const ownsInstance = app.requestSingleInstanceLock()
+const ownsInstance = app.requestSingleInstanceLock(desktopLaunchIntent)
 if (!ownsInstance) {
-  app.quit()
+  app.exit(0)
+} else if (desktopLaunchIntent.action === 'shutdown-for-update') {
+  // The installer can be launched when Trace is already closed. In that case
+  // this helper owns the lock itself and must not create any windows/runtime.
+  app.releaseSingleInstanceLock()
+  app.exit(0)
 } else {
-  app.on('second-instance', showOverlay)
+  prepareVersionedDesktopStorage()
+  app.on('second-instance', (_event, commandLine, _workingDirectory, additionalData) => {
+    const action = additionalData?.action || launchIntent(commandLine).action
+    if (action === 'shutdown-for-update') {
+      void shutdownController.requestShutdown('installer')
+      return
+    }
+    showOverlay()
+  })
   app.whenReady().then(() => {
     void (async () => {
       installDiscussionProtocol()
+      desktopWorkbench = createDesktopWorkbench({file:join(app.getPath('userData'),'state','workbench','web.sqlite')})
+      workbenchAgent = createWorkbenchAgent({directory:join(app.getPath('userData'),'state','workbench','executions'),
+        runtimeRoot:app.isPackaged?join(process.resourcesPath,'trace-runtime'):resolve(root,'../../runtime-dist'),store:desktopWorkbench,
+        getExecutable:()=>resolveCodexExecutable(),getProject:()=>readDesktopSettings().projectDir||process.env.TRACE_PROJECT_DIR,
+        onChange:()=>{for(const window of discussionWindows)if(!window.isDestroyed())window.webContents.send('trace-native:agent-tasks-changed')},
+      })
       try { await ensureBundledRuntime() }
       catch (error) { console.error(`Trace bundled runtime did not start: ${error instanceof Error ? error.message : String(error)}`) }
+      if (quitting) return
       const settings = readDesktopSettings()
       capabilityClient = createRuntimeCapabilityClient({
         origin: backendOrigin || DEFAULT_RUNTIME_ORIGIN,
@@ -445,13 +892,40 @@ if (!ownsInstance) {
         desktopSnapshotToken: process.env.TRACE_DESKTOP_SNAPSHOT_TOKEN,
         cloudFetchImpl: session.defaultSession.fetch.bind(session.defaultSession),
         onCodexEvent: (event) => sendCodexEvent(event),
+        onSetupProgress: (event) => sendSetupProgress(event),
+        getRuntimeStatus: () => publicBundledRuntimeStatus(),
+        retryRuntime: async () => {
+          try {
+            await ensureBundledRuntime({ retry: true })
+          } catch {
+            // The public status is deliberately stable and does not include
+            // server paths, ports or loader details.
+          }
+          return publicBundledRuntimeStatus()
+        },
+        getCodexThreadId: (workId) => readDesktopSettings().codexThreads?.[workId],
+        setCodexThreadId: (workId, threadId) => {
+          const current = readDesktopSettings()
+          const entries = current.codexThreads && typeof current.codexThreads === 'object' && !Array.isArray(current.codexThreads)
+            ? { ...current.codexThreads }
+            : {}
+          entries[workId] = threadId
+          const keys = Object.keys(entries)
+          while (keys.length > 128) delete entries[keys.shift()]
+          writeDesktopSettings({ ...current, codexThreads: entries })
+        },
       })
       app.setAppUserModelId('store.neutrom.trace.desktop')
       Menu.setApplicationMenu(null)
       createOverlayWindow()
       createTray()
       startCodexEventPolling()
-      if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=home`)
+      if (openProductOnStart) openDiscussion(`${discussionOrigin}/?view=canvas`)
+      // Runtime startup can briefly race an updater, antivirus scanner or a
+      // previous instance finishing its shutdown.  Do not leave the product
+      // window on a permanent recovery screen: retry a few times in the same
+      // process and publish the existing setup-progress event when it is back.
+      scheduleBundledRuntimeRecovery()
 
       screen.on('display-metrics-changed', positionOverlay)
       screen.on('display-added', positionOverlay)
@@ -460,23 +934,71 @@ if (!ownsInstance) {
   })
 }
 
+ipcMain.on('trace-native:runtime-status', (event) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) {
+    event.returnValue = { connected: false, bundled: app.isPackaged, state: 'failed', message: 'Trace 本机内容服务暂时不可用，请重试。' }
+    return
+  }
+  event.returnValue = publicBundledRuntimeStatus()
+})
+
+// Chromium can deliver queued overlay IPC after native destruction has begun.
+// Never dereference BrowserWindow.webContents until its owner is proven live.
+function isLiveOverlaySender(event) {
+  if (quitting || !overlayWindow || overlayWindow.isDestroyed()) return false
+  const contents = overlayWindow.webContents
+  return !contents.isDestroyed() && event.sender === contents
+}
+
+function applyOverlayInteractiveRegion() {
+  if (quitting || !overlayWindow || overlayWindow.isDestroyed() || process.platform !== 'win32') return
+  const window = overlayWindow
+  const size = window.getContentBounds()
+  const zoom = window.webContents.getZoomFactor()
+  const rects = interactiveBounds.flatMap(rect => {
+    // CSS pixels become window-local DIP, never physical screen pixels. Keep
+    // the authored shadows/labels inside the native drawing/hit-test region.
+    const x = Math.max(0, Math.floor((rect.x - 20) * zoom))
+    const y = Math.max(0, Math.floor((rect.y - 20) * zoom))
+    const right = Math.min(size.width, Math.ceil((rect.x + rect.width + 20) * zoom))
+    const bottom = Math.min(size.height, Math.ceil((rect.y + rect.height + 20) * zoom))
+    return right > x && bottom > y ? [{ x, y, width: right - x, height: bottom - y }] : []
+  })
+  const shape = rects.length ? rects : [{ x: 0, y: 0, width: 1, height: 1 }]
+  const signature = JSON.stringify(shape)
+  if (signature !== overlayRegionSignature) {
+    window.setShape(shape)
+    overlayRegionSignature = signature
+  }
+  // Windows can now hit the visible pet without first receiving a forwarded
+  // mousemove. The native shape, not blur/mouseleave races, owns passthrough.
+  const enabled = rects.length > 0
+  if (enabled !== overlayNativeRegion) {
+    overlayNativeRegion = enabled
+    window.setIgnoreMouseEvents(!enabled, { forward: !enabled })
+  }
+}
+
 ipcMain.on('trace-native:set-ignore-mouse-events', (event, ignore) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents || typeof ignore !== 'boolean') return
+  if (!isLiveOverlaySender(event) || typeof ignore !== 'boolean') return
+  if (process.platform === 'win32' && overlayNativeRegion) return
   overlayWindow.setIgnoreMouseEvents(ignore, { forward: ignore })
 })
 
 ipcMain.on('trace-native:interactive-bounds', (event, payload) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents || !Array.isArray(payload)) return
+  if (!isLiveOverlaySender(event) || !Array.isArray(payload)) return
   interactiveBounds = payload.slice(0, 64).flatMap((value) => {
     if (!value || typeof value !== 'object') return []
     const x = Number(value.x), y = Number(value.y), width = Number(value.width), height = Number(value.height)
     if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0 || width > 20_000 || height > 20_000) return []
     return [{ x, y, width, height }]
   })
+  applyOverlayInteractiveRegion()
 })
 
 ipcMain.on('trace-native:open-discussion', (event, url) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents || typeof url !== 'string') return
+  if (!isLiveOverlaySender(event) || typeof url !== 'string') return
   openDiscussion(url)
 })
 
@@ -491,26 +1013,60 @@ ipcMain.on('trace-native:discussion-candidate', (event, payload) => {
 ipcMain.handle('trace-native:capability', async (event, request) => {
   const senderWindow = BrowserWindow.fromWebContents(event.sender)
   if (!senderWindow || senderWindow !== overlayWindow && !discussionWindows.has(senderWindow)) throw new Error('Capability caller is not a Trace window')
+  if(request?.operation==='workbench.agent.project.select'){
+    if(!discussionWindows.has(senderWindow))throw Error('只能在任务工作面选择项目')
+    const result=await dialog.showOpenDialog(senderWindow,{title:'选择本次Agent执行项目',properties:['openDirectory']})
+    if(!result.canceled&&result.filePaths[0]){writeDesktopSettings({...readDesktopSettings(),projectDir:result.filePaths[0]});bindNativeAgentProject(result.filePaths[0]);capabilityClient?.setProjectDir?.(result.filePaths[0])}
+    return workbenchAgent.request({operation:'workbench.agent.status'})
+  }
+  if(typeof request?.operation==='string'&&request.operation.startsWith('workbench.agent.')){
+    if(!discussionWindows.has(senderWindow)||!workbenchAgent)throw Error('本机执行器尚未就绪')
+    return workbenchAgent.request(request)
+  }
+  if (request?.operation==='workbench.legacy.open') {
+    if(!discussionWindows.has(senderWindow))throw Error('只能从 Trace 工作台打开旧内容')
+    openDiscussion(`${discussionOrigin}/?view=home`)
+    return {opened:true}
+  }
+  if (['workbench.request','product.resource.save','product.resource.read'].includes(request?.operation)) {
+    if(!discussionWindows.has(senderWindow)||!desktopWorkbench)throw Error('Trace 本机工作区尚未就绪')
+    if(request.operation==='workbench.request'&&request.method==='POST'&&request.body?.operations?.some(op=>op.type==='task.result.adopt'))throw Error('采用运行结果必须先经过原生结果预览与核验。')
+    if(request.operation==='workbench.request'&&request.method==='POST'&&request.body?.operations?.some(op=>['task.cancel','task.execution'].includes(op.type)&&workbenchAgent?.hasAttempt(op.id)))throw Error('任务已有本机执行记录，请在执行面板处理，不能取消准备或改绑另一份回执。')
+    if(request.operation==='workbench.request'&&String(request.pathname).startsWith('/api/product/task-handoffs/')){
+      if(!taskHandoffRuntimeConnected)throw Error('当前Runtime尚未连接同一任务桥接；手动准备仍可继续，没有向旧服务发送。')
+      const value=await desktopWorkbench.request(request)
+      if(request.pathname==='/api/product/task-handoffs/configuration'&&value.ok!==false)return {...value,baseUrl:backendOrigin,mcpEntry:join(app.isPackaged?join(process.resourcesPath,'trace-runtime'):resolve(root,'../../runtime-dist'),'dist','apps','mcp','src','main.js')}
+      return value
+    }
+    return desktopWorkbench.request(request)
+  }
+  if (typeof request?.operation === 'string' && request.operation.startsWith('project.lifecycle.')) {
+    if (!discussionWindows.has(senderWindow)) throw new Error('项目生命周期功能只能由 Trace Web 产品窗口调用')
+    try { return await handleProjectLifecycleRequest(senderWindow, request) }
+    catch (error) { throw new Error(publicProjectLifecycleError(error)) }
+  }
   if (!capabilityClient) throw new Error('Trace 本机能力仍在启动，请稍后再试')
   if (request?.operation === 'work.project.select') {
     const result = await dialog.showOpenDialog(senderWindow, { title: '选择要与 Codex 一起工作的项目', properties: ['openDirectory'] })
-    if (result.canceled || !result.filePaths[0]) return capabilityClient.request({ operation: 'work.environment' })
+    if (result.canceled || !result.filePaths[0]) return withIpcTimeout(capabilityClient.request({ operation: 'work.environment' }), IPC_TIMEOUT_MS, 'Trace 本机能力响应超时，请重试。')
     const selected = capabilityClient.setProjectDir(result.filePaths[0])
+    bindNativeAgentProject(result.filePaths[0])
     writeDesktopSettings({ ...readDesktopSettings(), projectDir: result.filePaths[0] })
     return selected
   }
-  const result = await capabilityClient.request(request)
+  const timeoutMs = request?.operation === 'work.run' ? 210_000 : request?.operation === 'agent.run' ? 200_000 : IPC_TIMEOUT_MS
+  const result = await withIpcTimeout(capabilityClient.request(request), timeoutMs, 'Trace 本机能力响应超时，请重试。')
   if (request?.operation === 'zhihu.oauth.start') await openZhihuAuthorization(result.login_url, senderWindow)
   return result
 })
 
 ipcMain.handle('trace-native:placement:get', (event) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
+  if (!isLiveOverlaySender(event)) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
   return currentPlacement()
 })
 
 ipcMain.handle('trace-native:placement:save', (event, payload) => {
-  if (!overlayWindow || event.sender !== overlayWindow.webContents) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
+  if (!isLiveOverlaySender(event)) throw new Error('桌宠位置请求不是来自 Trace 桌面窗口')
   return saveCurrentPlacement(payload)
 })
 
@@ -521,12 +1077,12 @@ ipcMain.handle('trace-native:workspace', async (event, payload) => {
   const pathname = payload?.pathname
   const method = payload?.options?.method || 'GET'
   const body = payload?.options?.body
-  return capabilityClient.request({ operation: 'workspace.request', pathname, method, ...(body === undefined ? {} : { body }) })
+  return withIpcTimeout(
+    capabilityClient.request({ operation: 'workspace.request', pathname, method, ...(body === undefined ? {} : { body }) }),
+    WORKSPACE_IPC_TIMEOUT_MS,
+    'Trace 本机内容读取超时，请重试。',
+  )
 })
 
 app.on('window-all-closed', () => {})
-app.on('before-quit', () => {
-  quitting = true
-  stopCodexEventPolling()
-  void bundledRuntime?.close?.()
-})
+app.on('before-quit', (event) => shutdownController.handleBeforeQuit(event))

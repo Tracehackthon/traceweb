@@ -6,7 +6,7 @@ const storage = {
 
 let revision = 0;
 let host: any = null;
-const commands = new Map<string, { fingerprint: string; revision: number }>();
+const commands = new Map<string, { fingerprint: string; revision: number; host: any }>();
 
 const clone = <T>(value: T): T => value === null ? value : structuredClone(value);
 const stable = (value: any): string => Array.isArray(value)
@@ -53,12 +53,12 @@ export async function demoWorkspaceRequest(url: string, options: RequestInit = {
   const known = commands.get(payload.commandId);
   if (known) {
     if (known.fingerprint !== fingerprint) return failure(409, 'COMMAND_REUSED', '同一演示命令包含不同内容。');
-    return Response.json({ revision: known.revision, replayed: true, storage });
+    return Response.json({ revision: known.revision, host: clone(known.host), headRevision: revision, replayed: true, storage });
   }
   if (payload.expectedRevision !== revision) return failure(409, 'REVISION_CONFLICT', '演示页面已有更新，请重新打开。');
 
   revision += 1;
   host = clone(payload.host);
-  commands.set(payload.commandId, { fingerprint, revision });
-  return Response.json({ revision, replayed: false, storage });
+  commands.set(payload.commandId, { fingerprint, revision, host: clone(host) });
+  return Response.json({ revision, host: clone(host), headRevision: revision, replayed: false, storage });
 }

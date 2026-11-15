@@ -1,0 +1,64 @@
+/* Feedback, spatial continuity and real processing only. No canvas/camera tween. */
+:root[data-trace-appearance] {
+  --trace-motion-ease:cubic-bezier(0.23,1,0.32,1);
+  --trace-motion-fast:120ms;
+  --trace-motion-enter:200ms;
+  --trace-motion-exit:160ms;
+}
+@keyframes trace-overlay-in { from {opacity:0;transform:scale(.97)} to {opacity:1;transform:scale(1)} }
+@keyframes trace-overlay-out { from {opacity:1;transform:scale(1)} to {opacity:0;transform:scale(.97)} }
+@keyframes trace-working { to {transform:rotate(360deg)} }
+@media (prefers-reduced-motion:no-preference) {
+  /* Pointer feedback only. Keyboard navigation/input remains immediate. */
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.wb-shell,.wb-dialog) button.wb-button:not(.wb-icon-button) {
+    transition:transform var(--trace-motion-fast) var(--trace-motion-ease),opacity var(--trace-motion-fast) var(--trace-motion-ease);
+  }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.wb-shell,.wb-dialog) button.wb-button:not(.wb-icon-button):active:not(:disabled) { transform:scale(.97); }
+
+  /* Crossfade a shadow layer rather than animating paint-heavy box-shadow. */
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-shell :is(.wb-navigation nav button,.wb-list-row,.wb-capability-summary,.wb-halo-segmented>button,.wb-halo-tabs [role=tab],.wb-dock>button) { position:relative; isolation:isolate; box-shadow:none; }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-shell :is(.wb-navigation nav button,.wb-list-row,.wb-capability-summary,.wb-halo-segmented>button,.wb-halo-tabs [role=tab],.wb-dock>button)::after {
+    content:''; position:absolute; inset:0; height:auto; border-radius:inherit; background:none; pointer-events:none; box-shadow:var(--trace-state-selected-shadow); opacity:0; transition:opacity var(--trace-motion-fast) var(--trace-motion-ease);
+  }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-shell :is(.wb-navigation nav button[aria-current=page],.wb-list-row[aria-current=true],.wb-capability-summary[aria-current=true],.wb-halo-segmented>button[data-state=on],.wb-halo-tabs [role=tab][data-state=active],.wb-dock>button[aria-pressed=true])::after { opacity:1; }
+
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.tu-menu,.tu-tooltip) {
+    transform-origin:var(--radix-dropdown-menu-content-transform-origin,var(--radix-tooltip-content-transform-origin,top right));
+  }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.tu-menu[data-state=open],.tu-tooltip[data-state=delayed-open]) { animation:trace-overlay-in var(--trace-motion-exit) var(--trace-motion-ease); }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.tu-menu,.tu-tooltip)[data-state=closed] { animation:trace-overlay-out 125ms var(--trace-motion-ease); }
+  /* Busy icons reflect an actual pending phase, never a fabricated percentage. */
+  html[data-trace-appearance]:not([data-reduce-motion=true]) .tu-process-state[data-phase=pending]>.tu-working { animation:trace-working 1000ms linear infinite; }
+  html[data-trace-appearance]:not([data-reduce-motion=true]) .wb-halo-progress-track>span { transition:transform var(--trace-motion-enter) var(--trace-motion-ease); }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-dialog::backdrop { opacity:1; transition:opacity var(--trace-motion-enter) var(--trace-motion-ease); }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-dialog[data-motion-state=closing]::backdrop { opacity:0; transition-duration:var(--trace-motion-exit); }
+  @starting-style { html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-dialog::backdrop { opacity:0; } }
+}
+@media (prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine) {
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-shell :is(.wb-list-row,.wb-capability-summary,.wb-halo-segmented>button,.wb-halo-tabs [role=tab]) :is(svg) { transition:opacity var(--trace-motion-fast) var(--trace-motion-ease); }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-shell :is(.wb-list-row,.wb-capability-summary,.wb-halo-segmented>button,.wb-halo-tabs [role=tab]):hover::after { opacity:.55; }
+  html[data-trace-appearance][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-shell :is(.wb-capability-summary[aria-current=true],.wb-list-row[aria-current=true],.wb-halo-tabs [data-state=active]):hover::after { opacity:1; }
+}
+html[data-trace-appearance][data-trace-input=keyboard] :is(.wb-shell,.wb-dialog,.trace-ui) *,
+html[data-trace-appearance][data-reduce-motion=true] :is(.wb-shell,.wb-dialog,.trace-ui) * { transition:none!important; animation:none!important; }
+@media (prefers-reduced-motion:reduce) { html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) * { transition:none!important; animation:none!important; } }
+html[data-trace-appearance][data-trace-input=keyboard] :is(.wb-dialog,.tu-menu,.tu-tooltip),
+html[data-trace-appearance][data-reduce-motion=true] :is(.wb-dialog,.tu-menu,.tu-tooltip),
+html[data-trace-appearance] .tu-tooltip[data-state=instant-open] { animation:none!important; transition:none!important; }
+@media (prefers-reduced-motion:reduce) { html[data-trace-appearance] :is(.wb-dialog,.tu-menu,.tu-tooltip) { animation:none!important; transition:none!important; } }
+
+/* Native Presence needs an exit animation signal, not a second visible tween. */
+@keyframes trace-popover-presence { from { opacity:1; } to { opacity:1; } }
+html[data-workbench-motion=true][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-motion-popover[data-state] { animation:none; }
+@media(prefers-reduced-motion:no-preference) {
+  html[data-workbench-motion=true][data-trace-input=pointer]:not([data-reduce-motion=true]) .wb-motion-popover[data-state=closed]:not([data-motion-exit=immediate]) { animation:trace-popover-presence var(--trace-motion-fast) var(--trace-motion-ease); }
+}
+/* Preserve the Presence name at zero time when modality changes mid-exit. */
+html[data-workbench-motion=true][data-trace-input=keyboard] .wb-motion-popover[data-state=closed]:not([data-motion-exit=immediate]),
+html[data-workbench-motion=true][data-reduce-motion=true] .wb-motion-popover[data-state=closed]:not([data-motion-exit=immediate]) { animation:trace-popover-presence 0s!important; }
+@media(prefers-reduced-motion:reduce) { html[data-workbench-motion=true] .wb-motion-popover[data-state=closed]:not([data-motion-exit=immediate]) { animation:trace-popover-presence 0s!important; } }
+@media(prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine) {
+  html[data-workbench-motion=true][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.wb-shell,.wb-dialog) :is(.wb-button,.wb-icon-button) { position:relative; isolation:isolate; }
+  html[data-workbench-motion=true][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.wb-shell,.wb-dialog) :is(.wb-button,.wb-icon-button)::after { content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:var(--trace-state-selected-shadow);opacity:0;transition:opacity var(--trace-motion-fast) var(--trace-motion-ease); }
+  html[data-workbench-motion=true][data-trace-input=pointer]:not([data-reduce-motion=true]) :is(.wb-shell,.wb-dialog) :is(.wb-button,.wb-icon-button):hover:not(:disabled)::after { opacity:.55; }
+}

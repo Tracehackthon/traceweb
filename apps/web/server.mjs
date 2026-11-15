@@ -4,11 +4,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { createWebStore } from './web-store.mjs'
+import { createProductWorkspace } from '@trace/product-workspace/node'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
 const workspace = path.resolve(root, '../..')
-const webStore = createWebStore({ file: path.resolve(process.env.TRACE_WEB_STATE_FILE || path.join(workspace, '.trace/state/web.sqlite')) })
+const webStore = createProductWorkspace({ file: path.resolve(process.env.TRACE_WEB_STATE_FILE || path.join(workspace, '.trace/state/web.sqlite')), allowSnapshotWrites:true })
 const requestedPort = Number(process.env.TRACE_DESKTOP_PORT ?? '4173')
 const port = Number.isInteger(requestedPort) && requestedPort > 0 ? requestedPort : 4173
 const distRoot = path.resolve(process.env.TRACE_WEB_DIST_DIR || path.join(root, 'dist'))
@@ -33,6 +33,7 @@ const mimeTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
   ['.mjs', 'text/javascript; charset=utf-8'],
+  ['.wasm', 'application/wasm'],
   ['.css', 'text/css; charset=utf-8'],
   ['.png', 'image/png'],
   ['.webp', 'image/webp'],
@@ -42,6 +43,9 @@ const mimeTypes = new Map([
   ['.woff', 'font/woff'],
   ['.ttf', 'font/ttf'],
   ['.json', 'application/json; charset=utf-8'],
+  ['.webmanifest', 'application/manifest+json'],
+  ['.ico', 'image/x-icon'],
+  ['.txt', 'text/plain; charset=utf-8'],
 ])
 
 function resolveAsset(url = '/') {
@@ -88,7 +92,7 @@ const server = http.createServer(async (request, response) => {
   // belong to the SPA; only concrete files should bypass the history fallback.
   if (asset && staticRoot === distRoot && !path.extname(pathname) && (!fs.existsSync(asset) || fs.statSync(asset).isDirectory())) asset = path.join(staticRoot, 'index.html')
   const allowedAsset = asset && (staticRoot === distRoot
-    ? (asset === path.join(staticRoot, 'index.html') || asset === path.join(staticRoot, 'legacy.html') || ['assets', 'public', 'home', 'matters', 'product', 'decor', 'showcase', 'brand', 'scene', 'real', 'fonts', 'video'].some((directory) => asset.startsWith(path.join(staticRoot, directory) + path.sep)))
+    ? (['index.html', 'legacy.html', 'workbench-appearance.js', 'favicon.ico', 'site.webmanifest', 'robots.txt'].some(name => asset === path.join(staticRoot, name)) || ['assets', 'public', 'home', 'matters', 'product', 'decor', 'showcase', 'brand', 'scene', 'real', 'fonts', 'video', 'licenses'].some((directory) => asset.startsWith(path.join(staticRoot, directory) + path.sep)))
     : (['index.html','legacy.html'].includes(path.basename(asset)) && path.dirname(asset) === root || asset.startsWith(path.join(root,'src') + path.sep) || asset.startsWith(path.join(root,'public') + path.sep)))
   if (!allowedAsset || !fs.existsSync(asset) || !fs.statSync(asset).isFile()) {
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })

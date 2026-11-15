@@ -2,11 +2,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { verifyRuntimeBuildDirectory } from './verify-desktop-runtime-imports.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const desktop = path.join(root, 'apps', 'desktop-pet', 'lib', 'desktop')
+const desktopPackage = path.join(root, 'apps', 'desktop-pet')
+const desktop = path.join(desktopPackage, 'lib', 'desktop')
 const discussion = path.join(desktop, 'discussion')
 const runtime = path.join(root, 'apps', 'desktop-pet', 'runtime-dist')
+const runtimeContract = path.join(desktopPackage, 'runtime-contract.json')
 const forbidden = [
   'video/trace-demo.mp4',
   'product/fonts/TraceSans.ttf',
@@ -37,12 +40,18 @@ const requiredApiSurface = {
   zhihu: ['/api/search/capabilities', '/api/search/zhihu', '/api/search/global', '/api/zhihu/status', '/api/zhihu/oauth/start', '/api/zhihu/oauth/check', '/api/zhihu/oauth/disconnect', '/api/zhihu/oauth/connect', '/api/zhihu/oauth/result', '/api/zhihu/search', '/api/zhihu/user/read'],
   host: ['/api/product/host/sessions', '/api/product/host/turns', '/api/product/host/findings', '/api/product/host/session/attach', '/api/product/host/session/pause', '/api/product/host/session/detach', '/api/product/host/event', '/api/product/host/finding', '/api/product/host/sensemaking/jobs', '/api/product/host/sensemaking/results', '/api/product/host/sensemaking/privacy', '/api/product/host/routing/proposals', '/api/product/host/routing/propose', '/api/product/host/routing/decide', '/api/product/host/activation/history', '/api/product/host/activation/mark', '/api/product/host/repository/preflight', '/api/product/host/repository/apply', '/api/product/host/repository/recovery/preview', '/api/product/host/repository/recovery/reconcile', '/api/product/host/repository/recovery/status', '/api/product/host/publication-policies', '/api/product/host/publication-policy/preview', '/api/product/host/publication-policy/adopt', '/api/product/host/publication-policy/revoke', '/api/product/host/capability/orchestrations', '/api/product/host/capability/trials', '/api/product/host/capability/trial/create', '/api/product/host/capability/trial/complete', '/api/product/host/capability/stage', '/api/product/host/capability/validate', '/api/product/host/capability/publish', '/api/product/host/capability/rollback'],
 }
-
 function auditRuntimeIdentity() {
   if (!fs.existsSync(runtime)) throw new Error('Bundled Trace Runtime is missing; run npm run runtime:stage first')
   const runtimeInfo = readJson(path.join(runtime, 'runtime.json'), 'runtime.json')
   const manifest = readJson(path.join(runtime, 'release-manifest.json'), 'release-manifest.json')
   const sidecar = readJson(path.join(runtime, 'desktop-runtime-source.json'), 'desktop-runtime-source.json')
+  const contract = readJson(runtimeContract, 'runtime-contract.json')
+  if (contract.schema_version !== 'trace.desktop-runtime-contract@0.1.0') throw new Error('Unsupported runtime contract schema')
+  if (runtimeInfo.runtime_version !== contract.runtime_version) throw new Error('Runtime package version does not match runtime contract')
+  if (runtimeInfo.source_identity?.git_commit !== contract.source?.git_commit) throw new Error('Runtime source commit does not match runtime contract')
+  if (!Array.isArray(contract.required_source_files) || contract.required_source_files.length === 0) throw new Error('Runtime contract has no required source files')
+  if (!Array.isArray(contract.required_materialized_files) || contract.required_materialized_files.length === 0) throw new Error('Runtime contract has no required materialized files')
+  const requiredRuntimeFiles = [...new Set([...contract.required_source_files, ...contract.required_materialized_files])]
   if (!runtimeInfo.source_identity?.content_sha256 || !manifest.source_identity?.content_sha256) throw new Error('Runtime package has no content identity')
   for (const key of ['runtime_version', 'distribution_eligibility']) {
     if (runtimeInfo[key] !== manifest[key]) throw new Error(`Runtime identity mismatch at ${key}`)
@@ -81,12 +90,14 @@ function auditRuntimeIdentity() {
     const actualHash = createHash('sha256').update(content).digest('hex')
     if (actualHash !== entry.sha256 || content.length !== entry.bytes) throw new Error(`Runtime manifest checksum mismatch: ${entry.path}`)
   }
+  for (const required of requiredRuntimeFiles) if (!seen.has(required)) throw new Error(`Runtime package is missing first-run qualifier: ${required}`)
   return { version: runtimeInfo.runtime_version, eligibility: runtimeInfo.distribution_eligibility, files: files.length }
 }
 
 if (!fs.existsSync(path.join(desktop, 'main.mjs')) || !fs.existsSync(path.join(discussion, 'index.html'))) {
   throw new Error('Desktop build is incomplete')
 }
+const runtimeImportAudit = verifyRuntimeBuildDirectory(desktopPackage)
 const runtimeAudit = auditRuntimeIdentity()
 for (const relative of forbidden) {
   if (fs.existsSync(path.join(discussion, relative))) throw new Error(`Desktop build contains Web-only asset: ${relative}`)
@@ -95,12 +106,15 @@ if (fs.existsSync(path.join(desktop, 'renderer.js.map'))) throw new Error('Deskt
 
 const discussionBytes = bytes(discussion)
 const desktopBytes = bytes(desktop)
-if (discussionBytes > 8 * 1024 * 1024) throw new Error(`Desktop discussion assets exceed 8 MiB: ${discussionBytes}`)
-if (desktopBytes > 14 * 1024 * 1024) throw new Error(`Desktop application exceeds 14 MiB before packaging: ${desktopBytes}`)
+// MiSans's four unmodified licensed weights alone occupy about 20 MiB. The
+// current workbench also ships the pinned local PDF assets instead of a CDN.
+if (discussionBytes > 36 * 1024 * 1024) throw new Error(`Desktop discussion assets exceed 36 MiB: ${discussionBytes}`)
+if (desktopBytes > 42 * 1024 * 1024) throw new Error(`Desktop application exceeds 42 MiB before packaging: ${desktopBytes}`)
 
 console.log(JSON.stringify({
   status: 'desktop-package-audited',
   runtime: runtimeAudit,
+  runtimeImports: runtimeImportAudit,
   desktopMiB: Number((desktopBytes / 1024 / 1024).toFixed(2)),
   discussionMiB: Number((discussionBytes / 1024 / 1024).toFixed(2)),
 }))
