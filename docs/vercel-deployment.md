@@ -11,7 +11,7 @@ Vercel 只部署 `apps/web` 的浏览器本地保存版本。`apps/desktop-pet` 
 - Root Directory：仓库根目录
 - Framework：Vite
 - Install Command：`npm ci`
-- Build Command：`npm test && npm run build:vercel`
+- Build Command：`sh scripts/vercel-build.sh`（内部运行 `npm run build:vercel`，不运行用例测试）
 - Output Directory：`apps/web/dist-vercel`
 - Node.js：22.x
 
@@ -35,7 +35,7 @@ Vercel 项目 `neutronm/traceweb` 已连接 GitHub 仓库 `Tracehackthon/tracewe
 
 - `main` push：Production Deployment。
 - 其它分支／Pull Request：Preview Deployment。
-- 构建和测试失败：保留上一个成功部署，不切换 Production。
+- 构建失败：保留上一个成功部署，不切换 Production；浏览器端到端验收在 Preview 环境单独完成。
 - `vercel.json` 中 `git.deploymentEnabled=true`，仓库本身允许 Git 触发；真实部署是否成功仍以 Vercel 的构建状态和线上访问结果为准。
 
 ## 线上验收
