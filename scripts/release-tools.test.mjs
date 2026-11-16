@@ -6,6 +6,8 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
+import { verifyRuntimeBuildDirectory } from './verify-desktop-runtime-imports.mjs'
+import { createWebBuildProvenance, verifyWebBuildAssets, verifyWebBuildDirectory } from './web-build-provenance.mjs'
 
 const require = createRequire(path.join(path.resolve(import.meta.dirname, '..'), 'apps', 'desktop-pet', 'package.json'))
 const { createPackage } = require('@electron/asar')
@@ -13,6 +15,52 @@ const { createPackage } = require('@electron/asar')
 const root = path.resolve(import.meta.dirname, '..')
 const checksum = path.join(root, 'scripts', 'checksum-release.mjs')
 const smoke = path.join(root, 'scripts', 'release-smoke.mjs')
+const runtimeContract = path.join(root, 'apps', 'desktop-pet', 'runtime-contract.json')
+
+test('desktop Web provenance binds packaged assets to the current local Web source and fails closed on stale output', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trace-web-provenance-'))
+  const webRoot = path.join(directory, 'web')
+  const outputDir = path.join(directory, 'discussion')
+  fs.mkdirSync(path.join(webRoot, 'src'), { recursive: true })
+  fs.mkdirSync(path.join(webRoot, 'public'), { recursive: true })
+  fs.mkdirSync(outputDir, { recursive: true })
+  fs.writeFileSync(path.join(webRoot, 'index.html'), '<main>source</main>')
+  fs.writeFileSync(path.join(webRoot, 'src', 'main.js'), 'export const value = 1')
+  fs.writeFileSync(path.join(outputDir, 'index.html'), '<main>built</main>')
+  fs.writeFileSync(path.join(outputDir, 'assets.js'), 'export const built = true')
+
+  try {
+    const provenance = await createWebBuildProvenance({ webRoot, outputDir })
+    const verified = await verifyWebBuildDirectory({ webRoot, outputDir })
+    assert.equal(verified.buildId, provenance.buildId)
+    assert.equal(verified.artifacts.length, 2)
+    const packagedAudit = verifyWebBuildAssets(provenance, (relative) => fs.readFileSync(path.join(outputDir, relative)))
+    assert.equal(packagedAudit.files, 2)
+    assert.throws(() => verifyWebBuildAssets(provenance, (relative) => relative === 'index.html' ? fs.readFileSync(path.join(outputDir, relative)) : Buffer.from('stale')),
+      /Packaged Web asset mismatch/)
+
+    fs.writeFileSync(path.join(webRoot, 'src', 'main.js'), 'export const value = 2')
+    await assert.rejects(verifyWebBuildDirectory({ webRoot, outputDir }), /current local Web source/)
+    fs.writeFileSync(path.join(webRoot, 'src', 'main.js'), 'export const value = 1')
+    fs.writeFileSync(path.join(outputDir, 'assets.js'), 'stale-or-tampered')
+    await assert.rejects(verifyWebBuildDirectory({ webRoot, outputDir }), /artifact mismatch/)
+  } finally { fs.rmSync(directory, { recursive: true, force: true }) }
+})
+
+test('desktop runtime contract pins the packaged qualifier and MCP dependency materialization', () => {
+  const contract = JSON.parse(fs.readFileSync(runtimeContract, 'utf8'))
+  assert.equal(contract.schema_version, 'trace.desktop-runtime-contract@0.1.0')
+  assert.equal(contract.repository, 'https://github.com/Tracehackthon/trace_backend')
+  assert.equal(contract.source.ref, 'codex/fix-packaged-codex-qualification-0.8.0')
+  assert.match(contract.source.git_commit, /^[0-9a-f]{40}$/)
+  assert.equal(contract.runtime_version, '0.8.0')
+  assert.deepEqual(contract.required_source_files, ['native/qualify-codex-app-server.mjs'])
+  assert.deepEqual(contract.required_materialized_files, [
+    'dist/apps/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js',
+    'dist/apps/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js',
+    'dist/apps/mcp/node_modules/zod/v3/index.js',
+  ])
+})
 
 test('release checksum is deterministic for a directory', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trace-release-checksum-'))
@@ -60,5 +108,25 @@ test('release smoke rejects a development identity before publishing', async () 
     const result = spawnSync(process.execPath, [smoke, '--unpacked', directory, '--expected-version', '0.2.0'], { encoding: 'utf8' })
     assert.notEqual(result.status, 0)
     assert.match(result.stderr, /asar|non-release runtime|invalid/i)
+  } finally { fs.rmSync(directory, { recursive: true, force: true }) }
+})
+
+test('desktop runtime import verification catches a missing packaged module', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trace-desktop-runtime-imports-'))
+  try {
+    const desktop = path.join(directory, 'lib', 'desktop')
+    fs.mkdirSync(desktop, { recursive: true })
+    fs.writeFileSync(path.join(desktop, 'main.mjs'), "import './runtime-port-selection.mjs'\n")
+    fs.writeFileSync(path.join(desktop, 'preload.cjs'), 'module.exports = {}\n')
+    fs.writeFileSync(path.join(desktop, 'discussion-preload.cjs'), 'module.exports = {}\n')
+    assert.throws(() => verifyRuntimeBuildDirectory(directory), /runtime-port-selection\.mjs/)
+    fs.writeFileSync(path.join(desktop, 'runtime-port-selection.mjs'), 'export const selected = true\n')
+    const verified = verifyRuntimeBuildDirectory(directory)
+    assert.ok(verified.files.includes('lib/desktop/runtime-port-selection.mjs'))
+    assert.deepEqual(verified.edges, [{
+      from: 'lib/desktop/main.mjs',
+      specifier: './runtime-port-selection.mjs',
+      to: 'lib/desktop/runtime-port-selection.mjs',
+    }])
   } finally { fs.rmSync(directory, { recursive: true, force: true }) }
 })

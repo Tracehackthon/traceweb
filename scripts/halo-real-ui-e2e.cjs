@@ -1,0 +1,107 @@
+const {selectValue}=require('./helpers/select-control.cjs');
+// Full production bundle -> native controls -> IndexedDB -> reload verification.
+const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+const {chromium}=require('playwright');
+const root=path.resolve(__dirname,'..'),dist=path.join(root,'apps/web/dist'),out=path.join(root,'.test-results/halo-real-ui',process.env.TRACE_HALO_REAL_RUN||'browser-01');
+assert(!fs.existsSync(path.join(out,'report.json')),'Use a fresh run identity');fs.mkdirSync(out,{recursive:true});
+for(const k of ['TMP','TEMP','TMPDIR'])process.env[k]=path.join(out,'tmp');fs.mkdirSync(process.env.TMP,{recursive:true});
+let server,browser,page;const checks=[],errors=[],injectedFaults=[];const check=(name,ok)=>{assert(ok,name);checks.push(name);console.log('PASS '+name);};
+const read=()=>page.evaluate(async()=>{const db=await new Promise((res,rej)=>{const r=indexedDB.open('trace-portal-workspace-v1');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});try{return await new Promise((res,rej)=>{const tx=db.transaction(['workspace','resources','canvases']),result={};for(const key of ['workspace','resources','canvases']){const r=tx.objectStore(key)[key==='workspace'?'get':'getAll'](key==='workspace'?'current':undefined);r.onsuccess=()=>result[key]=r.result;}tx.oncomplete=()=>res(result);tx.onerror=()=>rej(tx.error);});}finally{db.close();}});
+(async()=>{try{
+server=http.createServer((req,res)=>{const u=new URL(req.url,'http://localhost'),p=path.resolve(dist,'.'+(u.pathname==='/app'?'/index.html':u.pathname));if(!p.startsWith(dist+path.sep)||!fs.existsSync(p)||!fs.statSync(p).isFile()){res.writeHead(404);res.end();return;}res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2','.svg':'image/svg+xml','.wasm':'application/wasm'})[path.extname(p)]||'application/octet-stream');fs.createReadStream(p).pipe(res);});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
+browser=await chromium.launch({headless:true});const ctx=await browser.newContext({viewport:{width:1440,height:940}});page=await ctx.newPage();page.setDefaultTimeout(10000);
+page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});await ctx.route('**/*',r=>['blob:','data:'].includes(new URL(r.request().url()).protocol)||new URL(r.request().url()).origin===base?r.continue():r.abort());
+await ctx.addInitScript(()=>{
+  const digest=SubtleCrypto.prototype.digest;
+  SubtleCrypto.prototype.digest=async function(algorithm,data){
+    if(window.__holdCapabilitySave&&new TextDecoder().decode(data).includes('capability.edit')){
+      window.__holdCapabilitySave=false;await new Promise(resolve=>window.__releaseCapabilitySave=resolve);
+    }
+    return digest.call(this,algorithm,data);
+  };
+  const transaction=IDBDatabase.prototype.transaction;
+  IDBDatabase.prototype.transaction=function(stores,mode,...rest){
+    if(window.__failCapabilitySave&&mode==='readwrite'&&(typeof stores==='string'?[stores]:Array.from(stores)).includes('workspace')){
+      window.__failCapabilitySave=false;throw Error('E2E: 保存暂时失败，原输入保留');
+    }
+    return transaction.call(this,stores,mode,...rest);
+  };
+});
+await page.goto(base+'/app?view=canvas');await page.getByRole('button',{name:'开始画布',exact:true}).click();await page.locator('[data-workbench-ready=true]').waitFor();
+const nav=name=>page.getByRole('navigation',{name:'三大工作区'}).getByRole('button',{name,exact:true});
+const title=page.getByRole('textbox',{name:'名称',exact:true}),purpose=page.getByRole('textbox',{name:'解决什么需要',exact:true}),save=page.getByRole('button',{name:'保存草稿版本',exact:true});
+await nav('能力库').click();await page.getByRole('button',{name:'新建能力',exact:true}).click();
+await title.fill('区分观察和解释');await purpose.fill('复核访谈和研究记录时，先保留发生了什么，再讨论它可能意味着什么。');
+await page.getByRole('textbox',{name:'适用范围与限制',exact:true}).fill('适合访谈复盘、用户反馈和小范围研究；不能凭一次观察推断普遍结论。');
+await page.getByRole('textbox',{name:'使用方法',exact:true}).fill('1. 原样留下观察与出处。\n2. 单独列出解释和假设。\n3. 寻找反例，保留暂时无法判断的部分。');
+await page.getByRole('textbox',{name:'依据',exact:true}).fill('以本次记录的原话和行为为依据。');
+await page.getByRole('textbox',{name:'示例',exact:true}).fill('“没有点击按钮”是观察；“不感兴趣”仍是需要验证的解释。');
+await page.evaluate(()=>window.__holdCapabilitySave=true);injectedFaults.push('hold the real capability command hash until manually released');await save.click();
+const progress=page.getByRole('progressbar',{name:'正在保存草稿版本'});await progress.waitFor();
+check('pending save is unknown progress, not a timer percentage',await progress.getAttribute('aria-valuenow')===null&&await save.isDisabled());
+check('pending save has not claimed success',await page.getByText('草稿已保存',{exact:true}).count()===0);
+await page.screenshot({path:path.join(out,'capability-saving.png')});
+await page.evaluate(()=>{window.__releaseCapabilitySave();delete window.__releaseCapabilitySave;});await page.getByText('草稿已保存',{exact:true}).waitFor();
+let snapshot=await read(),cap=Object.values(snapshot.workspace.host.capabilities)[0];
+check('single save advances the real capability exactly once',cap.title==='区分观察和解释'&&cap.version===2&&Object.keys(cap.versions).length===2);
+check('persistent notice describes the saved version',await page.locator('.wb-halo-notice').getAttribute('role')==='status'&&await progress.count()===0);
+await page.screenshot({path:path.join(out,'capability-saved.png')});
+await page.getByRole('button',{name:'收起保存提示',exact:true}).click();check('dismissing success does not change saved content',(await read()).workspace.host.capabilities[cap.id].version===2);
+await page.getByRole('button',{name:'新建能力',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.wb-capability-detail input')?.value==='新的方法');await title.fill('小步验证一个假设');await purpose.fill('先明确一个可观察的变化，用最小的尝试检验，再决定是否继续。');await save.click();await page.getByText('草稿已保存',{exact:true}).waitFor();
+await page.locator('.wb-capability-summary').filter({hasText:'区分观察和解释'}).click();await page.waitForFunction(()=>document.querySelector('.wb-capability-detail input')?.value==='区分观察和解释');
+await page.locator('.wb-capability-detail').evaluate(e=>e.scrollTop=0);
+check('summary cards use the actual purpose and immutable version',await page.locator('.wb-capability-summary').filter({hasText:'区分观察和解释'}).innerText().then(t=>t.includes('复核访谈')&&t.includes('v2')));
+check('one capability item is visibly current',await page.locator('.wb-capability-summary[aria-current=true]').count()===1);
+await page.screenshot({path:path.join(out,'light-capabilities.png')});
+const row=page.locator('.wb-capability-summary').filter({hasText:'区分观察和解释'});await row.focus();await row.press('ArrowDown');check('summary list retains arrow-key navigation',await page.locator('.wb-capability-summary').nth(1).evaluate(e=>e===document.activeElement));
+await nav('思考画布').click();
+await page.locator('input[type=file]').setInputFiles({name:'访谈观察.txt',mimeType:'text/plain',buffer:Buffer.from('用户打开设置后停留了十秒，随后返回画布。\n这条记录只描述观察，还不能说明用户是否理解了设置。')});
+const queue=page.getByRole('region',{name:'材料导入队列'});await queue.locator('[data-phase=done]').waitFor();await page.getByRole('button',{name:'移除队列记录 访谈观察.txt'}).click();
+await page.getByRole('tab',{name:'来源',exact:true}).click();await page.getByRole('button',{name:'写一条摘记',exact:true}).click();
+const annotation=page.getByRole('textbox',{name:'我的摘记',exact:true});await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='我的摘记');check('expanding annotation focuses its real editor',await annotation.evaluate(e=>e===document.activeElement));
+const note='先回看原话和停留的位置，再追问当时在找什么；不要直接推断“不感兴趣”。';await annotation.fill(note);
+await annotation.dispatchEvent('compositionstart');await annotation.press('Escape');check('IME Escape does not collapse annotation',await annotation.isVisible());await annotation.dispatchEvent('compositionend');
+await annotation.press('Escape');check('collapse restores trigger focus without losing draft',await page.getByRole('button',{name:'编辑我的摘记',exact:true}).evaluate(e=>e===document.activeElement));
+await page.getByRole('button',{name:'编辑我的摘记',exact:true}).click();check('reopen keeps exact unsaved annotation',await annotation.inputValue()===note);
+await page.getByRole('button',{name:'保存摘记',exact:true}).click();await page.getByText('摘记已保存',{exact:true}).waitFor();snapshot=await read();
+const savedAnnotation=Object.values(snapshot.workspace.host.expressions).find(e=>e.kind==='annotation');
+check('annotation writes to canonical source and version',savedAnnotation?.versions[1].text===note&&savedAnnotation.versions[1].refs[0].kind==='material'&&savedAnnotation.versions[1].refs[0].version===1);
+await annotation.fill(note+' 这次补充需要核对。');await page.evaluate(()=>window.__failCapabilitySave=true);injectedFaults.push('one annotation write transaction failure');await page.getByRole('button',{name:'保存摘记',exact:true}).click();await page.locator('.wb-halo-annotation .wb-halo-notice[data-tone=error]').waitFor();
+check('failed annotation retains draft and does not duplicate the saved source note',await annotation.inputValue()===note+' 这次补充需要核对。'&&Object.values((await read()).workspace.host.expressions).filter(e=>e.kind==='annotation').length===1);
+await page.getByRole('button',{name:'核对并重试原命令',exact:true}).click();await page.locator('.wb-halo-annotation .wb-halo-notice[data-tone=success]').waitFor();check('annotation retry reconciles the same canonical identity',(await read()).workspace.host.expressions[savedAnnotation.id].version===2);
+await annotation.fill(note);await page.getByRole('button',{name:'保存摘记',exact:true}).click();await page.getByText('摘记已保存',{exact:true}).waitFor();check('editing after retry reuses the note instead of creating a duplicate',Object.values((await read()).workspace.host.expressions).filter(e=>e.kind==='annotation').length===1&&(await read()).workspace.host.expressions[savedAnnotation.id].version===3);
+await page.screenshot({path:path.join(out,'light-annotation.png')});
+await page.getByRole('button',{name:'收起摘记',exact:true}).click();check('collapsed saved note has a readable preview',await page.locator('.wb-halo-annotation-preview').innerText()===note);
+await page.getByRole('button',{name:'围绕这条线索讨论',exact:true}).click();
+const input=page.getByRole('textbox',{name:'继续共同思考'});await input.fill('把观察与解释分开，并保留这个问题：用户当时希望找到什么？');await page.getByRole('button',{name:'留下这段思考',exact:true}).click();await page.locator('.wb-messages article').waitFor();
+const group=page.getByRole('radiogroup',{name:'协作记录类型'}),internal=group.getByRole('radio',{name:'Trace 内思考',exact:true}),external=group.getByRole('radio',{name:'外部任务',exact:true});
+await internal.click();check('clicking the current segment cannot clear selection',await internal.getAttribute('aria-checked')==='true');
+check('segment counts come from saved sessions, not sample data',await internal.locator('.wb-halo-segment-count').innerText()==='1');
+check('connection badge does not claim a live agent',await page.locator('.wb-halo-badge').filter({hasText:'尚未连接 Agent'}).count()===1);
+await page.screenshot({path:path.join(out,'light-collaboration.png')});
+await internal.press('ArrowRight');await page.waitForFunction(()=>document.activeElement?.getAttribute('aria-label')==='外部任务');await external.press('Space');
+await page.getByRole('textbox',{name:'外部任务目标'}).fill('复核访谈观察，列出两个可以继续追问的问题，不要把解释改写成事实。');await page.getByRole('button',{name:'保存任务准备',exact:true}).click();await page.locator('.wb-task-detail').waitFor();
+snapshot=await read();check('external task surface shows saved preparation, not delivery',Object.values(snapshot.workspace.host.tasks).length===1&&Object.values(snapshot.workspace.host.tasks)[0].status==='prepared'&&(await page.locator('.wb-task-detail').innerText()).includes('尚未交接'));
+check('task count is updated from canonical task state',await external.locator('.wb-halo-segment-count').innerText()==='1');await page.screenshot({path:path.join(out,'light-task.png')});await page.getByRole('button',{name:'取消尚未交接的准备',exact:true}).click();await page.locator('.wb-task-detail .wb-halo-badge[data-tone=warning]').waitFor();check('cancelled task badge follows its authoritative status',Object.values((await read()).workspace.host.tasks)[0].status==='cancelled');
+await internal.click();check('segment switch retains the existing discussion and message',await page.locator('.wb-messages article').count()===1&&await input.inputValue()==='');
+await page.getByRole('button',{name:'设置',exact:true}).click();await selectValue(page.getByRole('combobox',{name:'外观',exact:true}),'dark');await page.getByRole('button',{name:'关闭对话框',exact:true}).click();await page.screenshot({path:path.join(out,'dark-collaboration.png')});
+await nav('能力库').click();await row.click();await page.locator('.wb-capability-detail').evaluate(e=>e.scrollTop=0);await page.getByRole('button',{name:'能力版本操作',exact:true}).click();await page.getByRole('menuitem',{name:'发布当前个人库版本',exact:true}).click();await page.locator('.wb-capability-heading-meta .wb-halo-badge[data-tone=success]').waitFor();
+check('published badge follows the canonical published version',(await read()).workspace.host.capabilities[cap.id].status==='published');await page.screenshot({path:path.join(out,'dark-capabilities.png')});
+await page.getByRole('button',{name:'能力版本操作',exact:true}).click();await page.getByRole('menuitem',{name:'停用，停止后续有效引用',exact:true}).click();await page.locator('.wb-capability-heading-meta .wb-halo-badge[data-tone=warning]').waitFor();check('disabled badge follows canonical state without rewriting content',(await read()).workspace.host.capabilities[cap.id].status==='disabled'&&(await read()).workspace.host.capabilities[cap.id].version===2);
+await page.getByRole('button',{name:'能力版本操作',exact:true}).click();await page.getByRole('menuitem',{name:'恢复为草稿',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.wb-capability-heading-meta')?.textContent.includes('草稿'));check('restore returns to draft, not automatically published',(await read()).workspace.host.capabilities[cap.id].status==='draft');
+await purpose.fill('保存失败时，这份修改也应保留。');await page.evaluate(()=>window.__failCapabilitySave=true);injectedFaults.push('one workspace write transaction failure');await save.click();await page.locator('.wb-halo-notice[data-tone=error]').waitFor();
+check('save failure is persistent alert, not green success',await page.locator('.wb-halo-notice[data-tone=error]').getAttribute('role')==='alert'&&await page.getByText('草稿已保存',{exact:true}).count()===0);
+check('failed save preserves draft and authoritative previous version',await purpose.inputValue()==='保存失败时，这份修改也应保留。'&&(await read()).workspace.host.capabilities[cap.id].version===2);
+await page.screenshot({path:path.join(out,'dark-save-failure.png')});await page.getByRole('button',{name:'核对并重试原命令',exact:true}).click();await page.waitForFunction(()=>{const text=document.querySelector('.wb-save-status')?.textContent||'';return text.includes('已保存内容')&&!text.includes('正在保存')&&!text.includes('未确认');});
+await page.getByText('草稿已保存',{exact:true}).waitFor();check('retry reaches exactly one authoritative new version',(await read()).workspace.host.capabilities[cap.id].version===3);check('retry reconciles local notice and draft base with the confirmed receipt',await page.locator('.wb-halo-notice[data-tone=error]').count()===0&&!(await page.locator('.wb-capability-detail').innerText()).includes('这份草稿基于旧版本'));
+await page.reload();await row.click();check('reload restores the authoritative retried revision',await purpose.inputValue()==='保存失败时，这份修改也应保留。');
+await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize({width:390,height:844});await page.locator('.wb-capability-detail').evaluate(e=>e.scrollTop=0);await page.screenshot({path:path.join(out,'narrow-capabilities.png')});
+check('narrow capability surface has no horizontal overflow',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)&&await page.locator('.wb-halo-surface').evaluate(e=>e.getBoundingClientRect().right<=innerWidth));
+await page.getByRole('button',{name:'切换工作区',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Agent 协作',exact:true}).click();
+check('narrow segments keep 44px touch targets',await group.getByRole('radio').evaluateAll(es=>es.every(e=>e.getBoundingClientRect().height>=44)));
+check('reduced-motion mode adds no decorative animation',await page.evaluate(()=>matchMedia('(prefers-reduced-motion:reduce)').matches&&document.getAnimations().length===0));
+check('no renderer or console errors',errors.length===0);
+snapshot=await read();fs.writeFileSync(path.join(out,'storage.json'),JSON.stringify(snapshot,null,2));
+fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({passed:true,checks,errors,injectedFaults,entrySha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(dist,'index.html'))).digest('hex')},null,2));
+}catch(e){if(page)await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({passed:false,checks,errors,injectedFaults,error:e.stack},null,2));throw e;}finally{if(browser)await browser.close();if(server)await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e);process.exitCode=1});

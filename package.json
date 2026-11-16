@@ -8,9 +8,11 @@
   },
   "scripts": {
     "dev": "npm --prefix apps/web run dev",
+    "dev:browser": "node scripts/dev-browser.mjs",
+    "dev:landing": "npm run dev:browser",
     "start": "npm --prefix apps/web start",
     "build": "npm run build:web",
-    "build:web": "npm --prefix apps/web run build",
+    "build:web": "node scripts/verify-product-workspace.mjs && node scripts/verify-ui-resources.mjs && node scripts/verify-infinite-canvas.mjs && node scripts/verify-pdf-resources.mjs && npm --prefix apps/web run build",
     "build:vercel": "node scripts/build-vercel.mjs",
     "build:pet": "npm --prefix apps/desktop-pet run build",
     "release:checksum": "node scripts/checksum-release.mjs",
@@ -18,16 +20,24 @@
     "test:release-tools": "node --test scripts/release-tools.test.mjs",
     "desktop:pet": "npm --prefix apps/desktop-pet run desktop",
     "test:browser-storage": "node scripts/browser-storage-e2e.cjs",
+    "test:ui-components": "node scripts/ui-components-e2e.cjs",
+    "test:ui-components:desktop": "node scripts/ui-components-e2e.cjs --desktop",
     "test:demo-storage": "node scripts/demo-storage-compat-e2e.cjs",
     "test": "npm --prefix apps/web test",
     "test:e2e": "node scripts/product-e2e.cjs",
     "test:canvas": "node scripts/canvas-interactions-e2e.cjs",
     "test:desktop-capabilities": "node --test scripts/desktop-capability-bridge.test.mjs",
+    "test:desktop-headless": "node scripts/desktop-capability-headless.mjs",
+    "test:desktop-headless-contract": "node scripts/desktop-headless-contract.mjs",
+    "test:desktop-headless:cloud": "node scripts/desktop-capability-headless.mjs --live-cloud",
     "test:experience": "node scripts/experience-e2e.cjs",
     "test:ui-renovation": "node scripts/ui-renovation-e2e.cjs",
     "video:studio": "remotion studio video/src/index.tsx --public-dir=video/public --no-open",
     "video:render": "remotion render video/src/index.tsx TraceDemo apps/web/public/video/trace-demo.mp4 --public-dir=video/public --codec=h264 --crf=23 --pixel-format=yuv420p",
-    "video:poster": "remotion still video/src/index.tsx TraceDemo apps/web/public/video/trace-demo-poster.jpg --public-dir=video/public --frame=90 --image-format=jpeg"
+    "video:poster": "remotion still video/src/index.tsx TraceDemo apps/web/public/video/trace-demo-poster.jpg --public-dir=video/public --frame=90 --image-format=jpeg",
+    "test:workbench": "node scripts/workbench-e2e.cjs --materials",
+    "test:workbench:desktop": "node scripts/workbench-e2e.cjs --desktop --materials",
+    "test:workbench:performance": "node scripts/workbench-performance.cjs"
   },
   "devDependencies": {
     "@remotion/cli": "^4.0.506",
@@ -41,6 +51,11 @@
     "vite": "^8.3.0"
   },
   "dependencies": {
+    "@radix-ui/colors": "3.0.0",
+    "@trace/product-workspace": "file:vendor/trace-product-workspace-0.3.0-frontend.18.tgz",
+    "lucide-react": "1.65.0",
+    "pdfjs-dist": "6.4.299",
+    "radix-ui": "1.8.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   }

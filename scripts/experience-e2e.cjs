@@ -1,3 +1,4 @@
+const {selectValue}=require('./helpers/select-control.cjs');
 const { chromium } = require('playwright');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -111,8 +112,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const optionShape = await page.evaluate(() => ({ source: [...document.querySelectorAll('#capture-source option')].map((item) => item.textContent), agent: [...document.querySelectorAll('#capture-agent option')].map((item) => item.textContent) }));
     check('home composer exposes one source dropdown and one Agent dropdown', await sourceSelect.isVisible() && await agentSelect.isVisible() && JSON.stringify(optionShape.source) === JSON.stringify(['不联网', '知乎搜索', '全网搜索']) && JSON.stringify(optionShape.agent) === JSON.stringify(['不交给 Agent', 'Codex 原生', 'Codex Harness', '自定义 Agent']), optionShape);
     const capabilityCallsBefore = capabilityRequests.length;
-    await sourceSelect.selectOption('zhihu');
-    await agentSelect.selectOption('codex-native');
+    await selectValue(sourceSelect,'zhihu');
+    await selectValue(agentSelect,'codex-native');
     check('selecting source and Agent stays a local intent until capture', capabilityRequests.length === capabilityCallsBefore && await page.locator('.web-connection-center').count() === 0 && await page.locator('.web-dialog[open]').count() === 0, { capabilityCallsBefore, capabilityCallsAfter: capabilityRequests.length });
     await page.route('**/api/search/zhihu', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ protocol_version: 1, provider: 'zhihu', source: 'zhihu', query: '测试一次从知乎问题到 Codex 原生交接的完整输入路径', content_mode: 'summary', saved_to_trace: false, items: [{ id: 'external:e2e-zhihu-source', provider: 'zhihu', source: 'zhihu', title: '如何把公开经验带回正在思考的问题', author: '知乎答主', url: 'https://www.zhihu.com/question/1/answer/2', excerpt: '公开内容先作为可核对的材料，再由用户决定是否保留以及建立什么关系。', content_id: 'answer-2', content_type: 'Answer', vote_up_count: 27, comment_count: 4, authority_level: '2', edited_at: '2026-09-14T16:00:00.000Z', content_mode: 'summary', fetched_at: '2026-09-15T00:00:00.000Z' }] }) });
@@ -170,8 +171,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${base}/app`, { waitUntil: 'domcontentloaded' });
     await page.locator('#capture-input').waitFor();
-    await page.locator('#capture-source').selectOption('zhihu');
-    await page.locator('#capture-agent').selectOption('none');
+    await selectValue(page.locator('#capture-source'),'zhihu');
+    await selectValue(page.locator('#capture-agent'),'none');
     await page.locator('#capture-input').fill('移动端也要能看清知乎返回的公开来源');
     await page.locator('#capture-input').press('Enter');
     await page.locator('.web-capability-source').waitFor({ timeout: 10000 });

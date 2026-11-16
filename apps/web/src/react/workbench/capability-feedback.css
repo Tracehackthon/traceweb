@@ -1,0 +1,11 @@
+.wb-capability-feedback{display:grid;gap:24px;min-width:0}
+.wb-capability-feedback p{margin:8px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.wb-capability-feedback h3,.wb-feedback-panel h3{margin:0}
+.wb-feedback-panel{display:grid;gap:16px;padding-top:24px}
+.wb-feedback-panel>header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px}
+.wb-feedback-row{display:grid;gap:8px;padding:16px;text-align:start;min-width:0;background:transparent;border:0;border-radius:var(--trace-radius-control);color:var(--trace-text-primary)}
+.wb-feedback-row:hover{background:var(--trace-surface-muted)}
+.wb-feedback-row>span{font-size:var(--wb-text-meta);line-height:var(--wb-leading-meta);color:var(--trace-text-secondary)}
+.wb-feedback-row strong{overflow-wrap:anywhere}
+.wb-capability-feedback .wb-check{display:flex;align-items:flex-start;gap:8px;margin:8px 0}
+.wb-capability-feedback .wb-check input{flex:none;margin-top:4px}

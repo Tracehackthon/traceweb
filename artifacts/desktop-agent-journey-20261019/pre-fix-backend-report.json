@@ -1,0 +1,45 @@
+{
+  "status": "agent-return-recovered",
+  "warning": "Isolated unpacked candidate, not installed or published",
+  "package": {
+    "exeSha256": "0e0b7bdf8bc82ea6db171c07f75583104075b8538d298aa9f0972ff545418cda",
+    "appAsarSha256": "82dd654eaaef617d47f94acbe18e7a43d673738c60c441736dc564866f0ab28e",
+    "runtimeSource": {
+      "git_commit": "a088b8658d76d1f825366fa8060712592b6460db",
+      "git_tree": "d395eef93addca1225fb705f262bbf45168464f9",
+      "worktree_state": "clean",
+      "clean": true,
+      "content_sha256": "3d41831375e2b54c44d788e6da1de701adf30b90394922bf98e91f1af37ed7b0",
+      "source_file_count": 532,
+      "dirty_path_count": 0
+    }
+  },
+  "qualification": {
+    "version": "0.155.0-alpha.2.6",
+    "schemaFingerprint": "7fb0a4afe41cbd6071084c7febf20fc536dfcd7e2237f637409205bd7b082a59"
+  },
+  "before": {
+    "revision": 8,
+    "matterId": "matter-<redacted-uuid>",
+    "workId": "work-<redacted-uuid>",
+    "resultId": null,
+    "deliveryId": "delivery:<redacted-uuid>",
+    "returnId": "return:<redacted-uuid>",
+    "fact": "实际读到的合成内容：这次隔离桌面试用只验证一条合成工作能否从 Trace 交给 Codex 并返回；当前理解是先保存原话和理解，再让 Codex 只依据明确带入的内容报告可核验结果。另有一条未决说明：Codex 的回答应保留为待复核结果，不改写用户的理解。我没有运行命令或修改文件，也没有改动这些理解。仍待确认：这条返回结果是否已由用户复核。"
+  },
+  "after": {
+    "revision": 8,
+    "matterId": "matter-<redacted-uuid>",
+    "workId": "work-<redacted-uuid>",
+    "resultId": null,
+    "deliveryId": "delivery:<redacted-uuid>",
+    "returnId": "return:<redacted-uuid>",
+    "fact": "实际读到的合成内容：这次隔离桌面试用只验证一条合成工作能否从 Trace 交给 Codex 并返回；当前理解是先保存原话和理解，再让 Codex 只依据明确带入的内容报告可核验结果。另有一条未决说明：Codex 的回答应保留为待复核结果，不改写用户的理解。我没有运行命令或修改文件，也没有改动这些理解。仍待确认：这条返回结果是否已由用户复核。"
+  },
+  "agent": {
+    "runId": "<redacted-uuid>",
+    "status": "succeeded",
+    "resultHash": "a347324fb74a97bec934fca7972125167909d8c27a243c949958765f475accd5"
+  },
+  "userData": "D:\\AGeneral Workspace\\AI-powered\\harness\\.tmp\\trace-desktop-agent-journey-retry-20261019\\user-data"
+}

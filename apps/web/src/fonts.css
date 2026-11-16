@@ -1,0 +1,19 @@
+/* Latin: Bricolage Grotesque. Chinese: MiSans. Code: existing monospace. */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/BricolageGrotesque-variable.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+  unicode-range: U+0000-024F, U+1E00-1EFF;
+}
+html { font-optical-sizing: auto; }
+
+@font-face { font-family: MiSans; src: url("/fonts/MiSans-Regular.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; unicode-range: U+2E80-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF, U+20000-323AF; }
+
+@font-face { font-family: MiSans; src: url("/fonts/MiSans-Medium.woff2") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; unicode-range: U+2E80-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF, U+20000-323AF; }
+
+@font-face { font-family: MiSans; src: url("/fonts/MiSans-Semibold.woff2") format("woff2"); font-style: normal; font-weight: 600; font-display: swap; unicode-range: U+2E80-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF, U+20000-323AF; }
+
+@font-face { font-family: MiSans; src: url("/fonts/MiSans-Bold.woff2") format("woff2"); font-style: normal; font-weight: 700; font-display: swap; unicode-range: U+2E80-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF, U+20000-323AF; }

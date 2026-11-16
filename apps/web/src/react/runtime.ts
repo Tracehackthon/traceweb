@@ -1,13 +1,21 @@
 import * as B from '../product/bridge.mjs';
+import { recordDialogTitle } from './presentation-copy.mjs';
 import { productCommandRequest, workspaceRequest, storageLabel } from './workspace-storage';
 import { homeEntries, mattersView, recordsOf, titleOf } from '../product/library.mjs';
 import { createCompleteDemoWorkspace } from '../product/demo-workspace.mjs';
 import { hasNativeCapabilityBridge, nativeWorkEnvironment, readNativeWork, runNativeWork, searchPublic } from './capability-client';
-import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceSnapshot } from './types';
+import { classifyWorkspaceLoadFailure, publicWorkspaceLoadMessage, WORKSPACE_LOAD_STATES, workspaceDataState, workspaceError, withWorkspaceTimeout } from './workspace-load.mjs';
+import { canNavigateWhileSavePending } from './save-navigation.mjs';
+import { productReturnRoute, retainPresentationReturn } from './route-presentation.mjs';
+import { matchesAuthoritativeWorkReturn } from './native-work-reconcile.mjs';
+import { existingMatterForHandoff } from './handoff-resolution.mjs';
+import { buildComparisonSearchQuery } from './comparison-search.mjs';
+import { assertWorkspaceHost, reconcileWorkspaceAuthority, validateWorkspaceAcknowledgement } from './workspace-authority.mjs';
+import type { DialogState, RouteMemory, RouteNavigationOptions, SelectionAnchor, ViewName, WebStatus, WorkspaceLoadState, WorkspaceSnapshot } from './types';
 
 const clone = <T>(value: T): T => structuredClone(value);
 const uid = (kind: string) => `${kind}-${crypto.randomUUID()}`;
-const allowed: ViewName[] = ['home', 'matters', 'chain', 'compare', 'worksite', 'works', 'search', 'all', 'discussion'];
+const allowed: ViewName[] = ['home', 'matters', 'chain', 'compare', 'worksite', 'works', 'search', 'all', 'projects', 'discussion'];
 export const completeDemoMode = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 
 type HarnessHandoff = {
@@ -42,7 +50,7 @@ function urlFor(route: RouteMemory): URL {
   url.search = '';
   url.hash = '';
   url.searchParams.set('view', route.view);
-  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record']] as const) {
+  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record'], ['selectedId', 'selected'], ['detailTab', 'tab'], ['includeHistory', 'history']] as const) {
     const value = route[key];
     if (value) url.searchParams.set(param, String(value));
   }
@@ -65,14 +73,14 @@ function fromUrl(): RouteMemory {
     memory = null;
   }
   const route: RouteMemory = { view };
-  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record']] as const) {
+  for (const [key, param] of [['matterId', 'matter'], ['workId', 'work'], ['sessionId', 'session'], ['screen', 'screen'], ['q', 'q'], ['kind', 'kind'], ['recordId', 'record'], ['selectedId', 'selected'], ['detailTab', 'tab'], ['includeHistory', 'history']] as const) {
     if (params.has(param)) route[key] = params.get(param) || undefined;
   }
   return memory && urlFor(memory).search === location.search ? memory : route;
 }
 
 function routeKey(route: RouteMemory): string {
-  return JSON.stringify({ view: route.view, matterId: route.matterId, workId: route.workId, sessionId: route.sessionId, screen: route.screen, q: route.q, kind: route.kind, recordId: route.recordId });
+  return JSON.stringify({ view: route.view, matterId: route.matterId, workId: route.workId, sessionId: route.sessionId, screen: route.screen, q: route.q, kind: route.kind, recordId: route.recordId, selectedId: route.selectedId, detailTab: route.detailTab, includeHistory: route.includeHistory });
 }
 
 function sameValue(left: unknown, right: unknown): boolean {
@@ -91,20 +99,28 @@ export class WebRuntime {
   private listeners = new Set<() => void>();
   private host: any = null;
   private revision = 0;
+  private observedHeadRevision = 0;
+  private workspaceEpoch = 0;
   private recoveryGeneration = 0;
   private storage: any = null;
   private route: RouteMemory = fromUrl();
   private ready = false;
+  private loadState: WorkspaceLoadState = WORKSPACE_LOAD_STATES.loading as WorkspaceLoadState;
   private busy = false;
   private pendingPayload: any = null;
+  private pendingBase: any = null;
+  private pendingProductCommand = false;
   private pendingOperations: any[] | null = null;
   private pendingGeneration = 0;
   private dirty = 0;
   private saved = 0;
   private timer: number | undefined;
   private tail: Promise<unknown> = Promise.resolve();
-  private continuation: (() => void) | null = null;
-  private startPromise: Promise<void> | null = null;
+  private flushInFlight: Promise<void> | null = null;
+  private continuation: ((authoritative: any) => void) | null = null;
+  private loadInFlight: Promise<void> | null = null;
+  private loadGeneration = 0;
+  private recoveryDraft: WorkspaceSnapshot['recoveryDraft'] = null;
   private routeRoot: HTMLElement | null = null;
   private nativeWorkReady = false;
   // Matters keeps a short-lived presentation state for the approved
@@ -117,7 +133,7 @@ export class WebRuntime {
   private snapshot: RuntimeSnapshot = this.makeSnapshot();
 
   private makeSnapshot(): RuntimeSnapshot {
-    return { host: this.host, revision: this.revision, storage: this.storage, ready: this.ready, busy: this.busy, pending: Boolean(this.pendingPayload || this.continuation || this.dirty > this.saved), status: this.status, error: this.error, dialog: this.dialog, route: this.route };
+    return { host: this.host, revision: this.revision, storage: this.storage, ready: this.ready, loadState: this.loadState, busy: this.busy, pending: Boolean(this.pendingPayload || this.continuation || this.dirty > this.saved), recoveryDraft: this.recoveryDraft, status: this.status, error: this.error, dialog: this.dialog, route: this.route };
   }
 
   private emit(): void {
@@ -139,9 +155,8 @@ export class WebRuntime {
   isReducedMotion = (): boolean => Boolean(this.host?.preferences?.reduceMotion) || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
   async start(): Promise<void> {
-    if (this.startPromise) return this.startPromise;
-    this.startPromise = this.loadWorkspace();
-    return this.startPromise;
+    if (this.ready) return;
+    return this.beginLoad('initial');
   }
 
   private setStatus(state: WebStatus['state'], text: string): void {
@@ -149,33 +164,135 @@ export class WebRuntime {
     this.emit();
   }
 
-  private async loadWorkspace(): Promise<void> {
-    this.setStatus('loading', `正在读取${storageLabel}中的内容…`);
+  private beginLoad(mode: 'initial' | 'retry' | 'saved'): Promise<void> {
+    if (this.loadInFlight) return this.loadInFlight;
+    const generation = ++this.loadGeneration;
+    const task = this.loadWorkspace(mode, generation);
+    let settled: Promise<void>;
+    settled = task.finally(() => {
+      if (this.loadInFlight === settled) this.loadInFlight = null;
+    });
+    this.loadInFlight = settled;
+    return settled;
+  }
+
+  private async readWorkspace(): Promise<{ data: any; state: WorkspaceLoadState }> {
+    let response: Response;
     try {
-      const response = await workspaceRequest('/api/web/workspace', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`读取本机内容失败（${response.status}），没有重置数据。`);
-      const data = await response.json();
-      if (!Number.isInteger(data.revision)) throw new Error('存储响应不正确');
-      this.host = data.host || (completeDemoMode ? createCompleteDemoWorkspace() : B.createBridge());
-      this.revision = data.revision;
-      this.storage = data.storage;
-      const recovered = B.recoverPendingComparisons(this.host);
-      if (!sameValue(recovered, this.host)) {
-        this.host = recovered;
-        await this.save(this.host, uid('recovery'), [{ type: 'workspace.recover' }]);
-      }
-      if (!data.host && completeDemoMode) await this.save(this.host);
-      this.route = fromUrl();
-      await this.resumeHarnessHandoff();
-      this.ready = true;
-      this.error = null;
-      this.setPreferences();
-      this.setStatus('saved', `内容保存在${storageLabel}`);
-      this.emit();
+      response = await withWorkspaceTimeout(workspaceRequest('/api/web/workspace', { cache: 'no-store' }));
     } catch (cause) {
-      this.error = cause instanceof Error ? cause.message : String(cause);
-      this.setStatus('error', '内容暂时无法读取。原有内容没有被覆盖，请重新加载。');
       throw cause;
+    }
+    let data: any;
+    try {
+      data = await withWorkspaceTimeout(response.json(), { timeoutMs: 2_000, code: 'WORKSPACE_RESPONSE_INVALID', message: '工作区响应不完整，未覆盖已保存内容。' });
+    } catch (cause) {
+      if (cause && typeof cause === 'object' && 'code' in cause) throw cause;
+      throw workspaceError('工作区响应不完整，未覆盖已保存内容。', { code: 'WORKSPACE_RESPONSE_INVALID' });
+    }
+    if (!response.ok) {
+      const detail = data?.error;
+      throw workspaceError(typeof detail?.message === 'string' ? detail.message : `读取${storageLabel}失败。`, { code: detail?.code || 'STORAGE_FAILURE', status: response.status });
+    }
+    return { data, state: workspaceDataState(data) as WorkspaceLoadState };
+  }
+
+  private setLoadFailure(cause: unknown): void {
+    const state = classifyWorkspaceLoadFailure(cause) as WorkspaceLoadState;
+    this.loadState = state;
+    this.error = publicWorkspaceLoadMessage(state);
+    // A failed refresh must not hide a workspace already being edited. The
+    // initial shell has no safe host to mount, so it stays in the recovery
+    // surface instead of manufacturing an empty workspace.
+    if (!this.host) this.ready = false;
+    this.status = { state: 'error', text: this.error };
+    this.emit();
+  }
+
+  private applyLoadedWorkspace(data: any, state: WorkspaceLoadState, mode: 'initial' | 'retry' | 'saved'): void {
+    const keepLocal = mode === 'retry' && this.host !== null;
+    const diskHost = data.host ? clone(data.host) : (completeDemoMode ? createCompleteDemoWorkspace() : B.createBridge());
+    let repairedHost = diskHost;
+    try {
+      // Preserve legacy home text, but only mount a structurally readable host.
+      if (typeof diskHost?.chain?.capture === 'string') diskHost.chain.capture = { text: diskHost.chain.capture, sourceIds: [], excerpt: '', excerptSourceId: null };
+      assertWorkspaceHost(diskHost);
+      repairedHost = B.recoverPendingComparisons(diskHost);
+    } catch (cause) {
+      throw workspaceError('工作区结构或版本不正确，未覆盖已保存内容。', { code: 'INVALID_HOST' });
+    }
+    const needsRepair = !sameValue(repairedHost, diskHost);
+    if (!keepLocal) {
+      this.workspaceEpoch += 1;
+      this.host = repairedHost;
+      this.revision = data.revision;
+      this.observedHeadRevision = data.revision;
+      this.storage = data.storage;
+      this.pendingPayload = null;
+      this.pendingBase = null;
+      this.pendingOperations = null;
+      this.continuation = null;
+      this.dirty = this.saved = 0;
+    } else {
+      this.observedHeadRevision = Math.max(this.observedHeadRevision, data.revision);
+      // Observing a newer head is not rebasing the local host onto it. In
+      // particular it must not change the CAS base of an uncertain command.
+      if (data.revision !== this.revision) {
+        this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host),
+          authoritativeHost: clone(repairedHost), authoritativeRevision: data.revision,
+          ...(this.pendingPayload ? { command: clone(this.pendingPayload) } : {}) };
+      }
+    }
+    this.route = fromUrl();
+    const handoffOperations = !keepLocal && mode !== 'saved' ? this.resumeHarnessHandoff() : null;
+    this.ready = true;
+    this.loadState = (keepLocal ? WORKSPACE_LOAD_STATES.ready : state) as WorkspaceLoadState;
+    this.error = null;
+    if (mode === 'saved') this.recoveryGeneration += 1;
+    this.setPreferences();
+    if (!keepLocal && (needsRepair || (!data.host && completeDemoMode) || handoffOperations?.length)) {
+      const operations = [
+        ...(needsRepair ? [{ type: 'workspace.recover' }] : []),
+        ...(handoffOperations || []),
+      ];
+      // Schedule repair after the shell is usable; a slow or unavailable write
+      // must not turn a successful read back into an infinite startup spinner.
+      this.draft(this.host, operations.length ? operations : null);
+    } else if (this.pendingPayload || this.dirty > this.saved || (keepLocal && data.revision !== this.revision)) {
+      this.status = { state: 'error', text: '未保存草稿仍在页面中，请重试保存或导出。' };
+      this.emit();
+    } else {
+      this.status = { state: 'saved', text: mode === 'saved' ? '已载入本机保存的版本' : state === WORKSPACE_LOAD_STATES.empty ? '这是一个空的 Trace 空间，可以从这里开始。' : `内容保存在${storageLabel}` };
+      if (mode === 'saved') this.closeDialog();
+      this.emit();
+    }
+  }
+
+  private async loadWorkspace(mode: 'initial' | 'retry' | 'saved', generation: number): Promise<void> {
+    const editGeneration = this.dirty;
+    const readRevision = this.revision;
+    this.loadState = WORKSPACE_LOAD_STATES.loading as WorkspaceLoadState;
+    this.status = { state: 'loading', text: mode === 'saved' ? '正在读取已保存版本…' : `正在读取${storageLabel}中的内容…` };
+    this.emit();
+    try {
+      const result = await this.readWorkspace();
+      if (generation !== this.loadGeneration) return;
+      if (mode === 'saved' && (this.dirty !== editGeneration || this.revision !== readRevision)) {
+        this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host),
+          authoritativeHost: clone(result.data.host), authoritativeRevision: result.data.revision,
+          ...(this.pendingPayload ? { command: clone(this.pendingPayload) } : {}) };
+        this.loadState = WORKSPACE_LOAD_STATES.ready as WorkspaceLoadState;
+        this.setStatus('error', '读取期间又有新的修改或保存。没有替换当前内容，请先保留草稿后重新载入。');
+        return;
+      }
+      if (mode === 'saved' && (this.pendingPayload || this.dirty > this.saved)) {
+        this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host),
+          ...(this.pendingPayload ? { command: clone(this.pendingPayload), submittedHost: clone(this.pendingPayload.host) } : {}) };
+      }
+      this.applyLoadedWorkspace(result.data, result.state, mode);
+    } catch (cause) {
+      if (generation !== this.loadGeneration) return;
+      this.setLoadFailure(cause);
     }
   }
 
@@ -183,17 +300,11 @@ export class WebRuntime {
    * Turn a Harness observation into a normal Trace matter exactly once, then
    * remove the transient query parameters so refresh cannot create a copy.
    */
-  private async resumeHarnessHandoff(): Promise<void> {
+  private resumeHarnessHandoff(): any[] | null {
     const handoff = readHarnessHandoff();
-    if (!handoff || !this.host) return;
+    if (!handoff || !this.host) return null;
 
-    const existing = this.host.chain.matters.find((item: any) => {
-      const marker = item.externalHandoff;
-      if (marker?.origin !== handoff.origin) return false;
-      return handoff.observationId
-        ? marker.observationId === handoff.observationId
-        : marker.text === handoff.text && marker.source === handoff.source;
-    });
+    const existing = existingMatterForHandoff(this.host.chain.matters, handoff);
 
     let matterId: string;
     if (existing) {
@@ -224,7 +335,7 @@ export class WebRuntime {
         receivedAt: new Date().toISOString(),
       };
       this.host = next;
-      await this.save(next, uid('handoff'), [{
+      const operation = {
         type: 'capture.create',
         matterId,
         text: handoff.text,
@@ -234,62 +345,137 @@ export class WebRuntime {
           excerpt: handoff.text,
           context: handoff.origin === 'trace-native' ? '从 Trace 桌宠接续的原始现场。' : '从 DeepSeek Harness 接续的原始现场。',
         },
-      }]);
+      };
+      this.route = { view: 'chain', matterId, screen: 'resume' };
+      history.replaceState({ traceRoute: this.route }, '', urlFor(this.route));
+      try { sessionStorage.setItem(`trace:${location.search}`, JSON.stringify({ view: 'chain', matterId, screen: 'resume' })); } catch { /* storage can be disabled */ }
+      return [operation];
     }
 
     this.route = { view: 'chain', matterId, screen: 'resume' };
     history.replaceState({ traceRoute: this.route }, '', urlFor(this.route));
     try { sessionStorage.setItem(`trace:${location.search}`, JSON.stringify(this.route)); } catch { /* storage can be disabled */ }
+    return null;
   }
 
-  private async save(value: any, commandId = uid('command'), operations: any[] | null = null): Promise<any> {
-    const payload = { expectedRevision: this.revision, host: clone(value), commandId, ...(operations?.length ? { operations: clone(operations) } : {}) };
-    this.pendingPayload = payload;
-    this.pendingGeneration = this.dirty;
+  private async save(value: any, commandId = uid('command'), operations: any[] | null = null, generation = this.dirty, base = value): Promise<any> {
+    if (this.pendingPayload && this.pendingPayload.commandId !== commandId) throw new Error('请先处理未确认的保存');
+    if (!this.pendingPayload) {
+      this.pendingPayload = { expectedRevision: this.revision, host: clone(value), commandId, ...(operations?.length ? { operations: clone(operations) } : {}) };
+      this.pendingGeneration = generation;
+      this.pendingBase = clone(base);
+      this.pendingProductCommand = !completeDemoMode && hasNativeCapabilityBridge() && Boolean(operations?.length);
+    }
+    // A retry reuses the exact original envelope and transport, even after a
+    // refresh has observed another writer. Never re-fingerprint this command.
+    const payload = this.pendingPayload;
+    const epoch = this.workspaceEpoch;
+    const preserve = (extra: Partial<NonNullable<WorkspaceSnapshot['recoveryDraft']>> = {}) => {
+      this.recoveryDraft = { ...this.recoveryDraft, revision: this.revision, host: clone(this.host), submittedHost: clone(payload.host), command: clone(payload), ...extra };
+    };
     this.setStatus('saving', `正在保存到${storageLabel}…`);
     let response: Response;
     let data: any;
     try {
-      if (!completeDemoMode && hasNativeCapabilityBridge() && operations?.length) {
-        response = await productCommandRequest({ protocolVersion: 1, commandId, expectedRevision: this.revision, operations: clone(operations) });
+      let request: Promise<Response>;
+      if (this.pendingProductCommand) {
+        request = productCommandRequest({ protocolVersion: 1, commandId, expectedRevision: payload.expectedRevision, operations: clone(payload.operations) });
       } else {
-        response = await workspaceRequest('/api/web/workspace', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        request = workspaceRequest('/api/web/workspace', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       }
-      data = await response.json();
-    } catch {
-      this.setStatus('error', '保存未确认。内容仍在页面中，请重试或导出。');
+      response = await withWorkspaceTimeout(request, { code: 'WORKSPACE_SAVE_TIMEOUT', message: '保存结果暂未确认。原请求可能已提交，请保留草稿后重试核对，不会创建重复命令。' });
+      data = await withWorkspaceTimeout(response.json(), { timeoutMs: 2_000, code: 'WORKSPACE_SAVE_RESPONSE_INVALID', message: '保存回执未能完整读取。请保留草稿后重试核对。' });
+    } catch (cause) {
+      if (epoch !== this.workspaceEpoch || this.pendingPayload !== payload) throw new Error('旧工作区的保存响应已忽略');
+      preserve();
+      const timedOut = cause && typeof cause === 'object' && 'code' in cause && ['WORKSPACE_SAVE_TIMEOUT', 'WORKSPACE_SAVE_RESPONSE_INVALID'].includes(String(cause.code));
+      this.setStatus('error', timedOut && cause instanceof Error ? cause.message : '当前修改尚未确认保存；此前已保存的内容仍可浏览。你可以重试核对或导出当前修改。');
       throw new Error('保存连接中断');
     }
+    // Explicit recovery may have installed another workspace while this PUT
+    // was awaiting its response. Its old continuation/ACK must never roll the
+    // recovered host or revision back, even when the old command did commit.
+    if (epoch !== this.workspaceEpoch || this.pendingPayload !== payload) throw new Error('旧工作区的保存响应已忽略');
     if (!response.ok) {
-      const message = response.status === 409 ? '另一处已有更新，未覆盖它。请先导出，再载入新版本。' : `保存失败：${data?.error?.message || response.status}`;
+      const message = response.status === 409 ? '另一处已有更新，未覆盖它。请先保留草稿，再载入已保存版本。' : `保存失败：${data?.error?.message || response.status}`;
+      preserve();
       this.setStatus('error', message);
       throw new Error(message);
     }
-    this.revision = Math.max(this.revision, data.revision);
+    try {
+      validateWorkspaceAcknowledgement(data, payload, { productCommand: this.pendingProductCommand });
+      if (data.revision < this.observedHeadRevision) throw new Error('已观察到更新的工作区版本。这份迟到回执不能作为当前内容，请保留草稿后载入最新版本。');
+    } catch (cause) {
+      // Retain the raw, unconfirmed reply separately. An invalid or historical
+      // ACK must not replace the newer authority already read for recovery.
+      preserve({ unconfirmedAcknowledgement: clone(data) });
+      this.setStatus('error', cause instanceof Error ? cause.message : '保存回执未能核对，请先保留草稿。');
+      throw cause;
+    }
+    const reconciled = reconcileWorkspaceAuthority(this.pendingBase, this.host, data.host);
+    if (reconciled.conflicts.length) {
+      preserve({ authoritativeHost: clone(data.host), authoritativeRevision: data.revision, conflicts: reconciled.conflicts });
+      this.setStatus('error', '保存结果与新草稿修改了同一处。已保留两份内容，没有自动覆盖；请导出后核对已保存版本。');
+      throw new Error('保存结果与新草稿冲突');
+    }
+    this.host = reconciled.host;
+    this.revision = data.revision;
+    this.observedHeadRevision = data.revision;
     this.storage = data.storage;
-    this.pendingPayload = null;
-    this.pendingOperations = null;
-    this.setStatus('saved', `已保存在${storageLabel}`);
+    this.saved = Math.max(this.saved, this.pendingGeneration);
+    if (this.pendingPayload?.commandId === commandId) this.pendingPayload = null;
+    this.pendingBase = null;
+    // A successful retry has reconciled the stale writer; do not keep an old
+    // recovery export/action around after the authoritative save succeeds.
+    if (this.recoveryDraft?.command?.commandId === commandId || (this.recoveryDraft?.host && sameValue(this.recoveryDraft.host, value))) this.recoveryDraft = null;
+    this.setPreferences();
+    this.setStatus(this.dirty > this.saved ? 'saving' : 'saved', this.dirty > this.saved ? '此前修改已保存，新草稿待保存…' : `已保存在${storageLabel}`);
+    if (this.dirty > this.saved) {
+      // The original debounce may have fired while a command was pending.
+      // Re-arm it; a successful older save must not strand the newer draft.
+      if (this.timer) window.clearTimeout(this.timer);
+      this.timer = window.setTimeout(() => { void this.flush().catch(() => undefined); }, 350);
+    }
     this.emit();
     return data;
   }
 
   private async flush(): Promise<void> {
     if (this.timer) window.clearTimeout(this.timer);
-    await this.tail;
+    if (this.flushInFlight) { await this.flushInFlight; return this.flush(); }
     if (this.pendingPayload) throw new Error('请先处理未确认的保存');
     if (this.dirty <= this.saved) return;
     const generation = this.dirty;
     const snapshot = clone(this.host);
     const operations = this.pendingOperations ? clone(this.pendingOperations) : null;
-    const job = this.tail.then(() => this.save(snapshot, uid('command'), operations)).then(() => { this.saved = Math.max(this.saved, generation); this.emit(); });
+    // This batch now belongs to this save attempt. Drafts created while the
+    // request is in flight start a new batch and must not be cleared by the
+    // older request's success callback.
+    this.pendingOperations = null;
+    const job = this.tail.then(() => this.save(snapshot, uid('command'), operations, generation)).then(() => { this.saved = Math.max(this.saved, generation); this.emit(); });
     this.tail = job.catch(() => undefined);
-    await job;
+    this.flushInFlight = job;
+    try { await job; } finally { if (this.flushInFlight === job) this.flushInFlight = null; }
+  }
+
+  private async drainDrafts(): Promise<void> {
+    // A business command needs an acknowledged base, not merely the end of
+    // the batch that was pending when it started waiting. New typing during
+    // that wait belongs to another explicit operation batch.
+    do { await this.flush(); } while (this.dirty > this.saved);
   }
 
   draft(next: any, operation: any | any[] | null = null): void {
     this.host = next;
-    this.pendingOperations = operation ? (Array.isArray(operation) ? clone(operation) : [clone(operation)]) : null;
+    if (this.pendingPayload && this.recoveryDraft) this.recoveryDraft = { ...this.recoveryDraft, host: clone(next) };
+    // A selection commonly follows an editor draft in the same debounce
+    // window. Both operations are required: sending only FOCUS makes the
+    // authoritative runtime validate the selection against the older text.
+    // Keep operations in order instead of replacing the earlier draft.
+    if (operation) {
+      const additions = Array.isArray(operation) ? operation : [operation];
+      this.pendingOperations = [...(this.pendingOperations || []), ...clone(additions)];
+    }
     this.dirty += 1;
     if (!this.pendingPayload) this.setStatus('saving', '草稿待保存…');
     if (this.timer) window.clearTimeout(this.timer);
@@ -302,23 +488,22 @@ export class WebRuntime {
     this.busy = true;
     this.emit();
     try {
-      await this.flush();
+      await this.drainDrafts();
+      const base = clone(this.host);
       const next = transform(this.host);
       if (next?.error) {
         this.message(next.error.message);
         return;
       }
-      const finish = () => {
-        this.host = next;
-        this.saved = ++this.dirty;
+      const finish = (authoritative: any) => {
         this.setPreferences();
-        after(next);
+        after(authoritative);
         this.emit();
       };
       this.continuation = finish;
-      await this.save(next, uid('command'), operations);
+      const data = await this.save(next, uid('command'), operations, this.dirty, base);
       this.continuation = null;
-      finish();
+      finish(data.host);
     } catch (cause) {
       if (!this.pendingPayload) this.message(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -331,14 +516,12 @@ export class WebRuntime {
     if (!this.pendingPayload || this.busy) return;
     this.busy = true;
     const payload = this.pendingPayload;
-    const generation = this.pendingGeneration;
     this.emit();
     try {
-      await this.save(payload.host, payload.commandId, payload.operations || null);
-      this.saved = Math.max(this.saved, generation);
+      const data = await this.save(payload.host, payload.commandId, payload.operations || null);
       const finish = this.continuation;
       this.continuation = null;
-      finish?.();
+      finish?.(data.host);
       if (this.dirty > this.saved) await this.flush();
     } catch {
       // Keep the pending payload and recovery controls visible.
@@ -348,29 +531,14 @@ export class WebRuntime {
     }
   }
 
+  async retryLoad(): Promise<void> {
+    if (this.busy) return;
+    await this.beginLoad('retry');
+  }
+
   async loadSaved(): Promise<void> {
-    try {
-      const response = await workspaceRequest('/api/web/workspace', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`读取本机内容失败（${response.status}）`);
-      const data = await response.json();
-      this.host = B.recoverPendingComparisons(data.host || B.createBridge());
-      this.revision = data.revision;
-      this.storage = data.storage;
-      this.pendingPayload = null;
-      this.continuation = null;
-      this.dirty = this.saved = 0;
-      this.ready = true;
-      this.error = null;
-      // Explicitly replacing a workspace must remount scene adapters, which
-      // intentionally keep local input state during ordinary autosaves.
-      this.recoveryGeneration += 1;
-      this.setPreferences();
-      this.closeDialog();
-      this.setStatus('saved', '已载入本机保存的版本');
-      this.emit();
-    } catch (cause) {
-      this.message(cause instanceof Error ? cause.message : String(cause));
-    }
+    if (this.busy) return;
+    await this.beginLoad('saved');
   }
 
   private setPreferences(): void {
@@ -421,8 +589,8 @@ export class WebRuntime {
   }
 
   navigate(next: RouteMemory, { replace = false, origin }: RouteNavigationOptions = {}): void {
-    if (this.pendingPayload && this.continuation) {
-      this.message('本次保存尚未确认，请先重试或导出内容。');
+    if (this.pendingPayload && this.continuation && !canNavigateWhileSavePending(next)) {
+      this.message('当前修改尚未保存。此前已保存的内容仍可浏览；继续这一步前，请重试保存或导出当前修改。');
       return;
     }
     this.retain();
@@ -480,7 +648,7 @@ export class WebRuntime {
 
   openRecordIfNeeded(): void {
     const record = this.recordForRoute();
-    if (record) this.showDialog({ type: 'record', title: record.kind === 'result' ? '保存下来的这次结果' : record.kind === 'source' ? '原材料与来处' : '这次修订的记录', record });
+    if (record) this.showDialog({ type: 'record', title: recordDialogTitle(record.kind), record });
   }
 
   matter(): any | null { return this.host?.chain?.matters?.find((matter: any) => matter.id === this.route.matterId) || null; }
@@ -534,7 +702,7 @@ export class WebRuntime {
     this.nativeWorkReady = environment?.connected === true;
     const selectedAgent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as string : 'none';
     const agentLabel = ({ 'codex-native': 'Codex 原生', 'codex-harness': 'Codex Harness', custom: '自定义 Agent' } as Record<string, string>)[selectedAgent] || 'Codex';
-    const destination = { agent: environment?.connected ? environment.agentLabel : agentLabel, project: environment?.connected ? environment.projectName : '当前项目', task: `接续：${Array.from(text).slice(0, 26).join('')}` };
+    const destination = { agent: environment?.connected ? environment.agentLabel : agentLabel, project: environment?.projectName || '当前项目', task: `接续：${Array.from(text).slice(0, 26).join('')}` };
     const productOperations = [
       { type: 'capture.create', matterId, text },
       ...(selectedAgent !== 'none' ? [
@@ -558,15 +726,26 @@ export class WebRuntime {
       }
       return next;
     }, (next) => {
-      this.navigate(next.route);
+      this.navigate({ view: 'chain', matterId, screen: selectedAgent !== 'none' ? 'handoff' : 'resume' });
       const source = ['zhihu', 'web'].includes(options.source || '') ? options.source as 'zhihu' | 'web' : 'none';
       const agent = ['codex-native', 'codex-harness', 'custom'].includes(options.agent || '') ? options.agent as 'codex-native' | 'codex-harness' | 'custom' : 'none';
-      if (!completeDemoMode && (source !== 'none' || agent !== 'none')) this.showDialog({ type: 'capability', title: '让来源与 Agent 参与', capability: { matterId, query: text, source, agent } });
+      // Agent selection already routed the user to the handoff screen.  Do
+      // not open a second top-layer dialog over its primary “交给 Codex”
+      // action: the handoff button is the one confirmation/dispatch action.
+      // Source-only capture still uses the bounded capability dialog because
+      // there is no competing handoff CTA in that flow.
+      if (!completeDemoMode && source !== 'none' && agent === 'none') this.showDialog({ type: 'capability', title: '让来源参与', capability: { matterId, query: text, source, agent } });
     }, productOperations);
   }
 
   keepPublicSource(matterId: string, source: any, query: string): Promise<void> {
-    return this.commit((state) => B.keepPublicSource(state, { matterId, source, query }));
+    // One explicit command carries exactly the retained public snapshot fields;
+    // never fall back to a whole-host write in native Product mode.
+    const fields = ['id', 'provider', 'source', 'title', 'author', 'url', 'excerpt', 'content_id', 'content_type',
+      'comment_count', 'vote_up_count', 'authority_level', 'edited_at', 'content_mode', 'fetched_at'];
+    const retained = Object.fromEntries(fields.filter(key => source?.[key] !== undefined).map(key => [key, source[key]]));
+    return this.commit((state) => B.keepPublicSource(state, { matterId, source: retained, query }), undefined,
+      [{ type: 'source.keep-public', matterId, source: retained, query }]);
   }
 
   onChainAction = (action: any): void => {
@@ -590,8 +769,8 @@ export class WebRuntime {
       const workId = uid('work');
       const matterId = this.route.matterId;
       void this.commit((state) => (B.createWorkFromHandoff as any)(state, { matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }), (next) => {
-        this.navigate(next.route);
-        if (hasNativeCapabilityBridge() && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
+        this.navigate({ view: 'worksite', workId, matterId, screen: 'overview' });
+        if (this.nativeWorkReady && hasNativeCapabilityBridge() && /^Codex(?:\s|$|原生)/i.test(handoff.destination.agent || '')) void this.executeNativeWork(workId, matterId);
       }, [{ type: 'handoff.create', matterId, workId, destination: handoff.destination, role: handoff.role, note: handoff.note }]);
       return;
     }
@@ -617,7 +796,7 @@ export class WebRuntime {
     this.nativeWorkReady = environment?.connected === true;
     const task = current.handoff?.destination?.task || `接续：${Array.from(current.matter?.originalText || current.matter?.title || '这件事').slice(0, 26).join('')}`;
     const agent = current.handoff?.destination?.agent || (environment?.connected ? environment.agentLabel : 'Codex');
-    const project = environment?.connected ? environment.projectName : current.handoff?.destination?.project || '当前项目';
+    const project = environment?.projectName || current.handoff?.destination?.project || '当前项目';
     const next = B.dispatchChain(this.host, { matterId, action: { type: 'HANDOFF_DRAFT', patch: { destination: { agent, project, task } } } });
     if (next.error) { this.message(next.error.message); return; }
     this.draft(next, { type: 'chain.action', matterId, action: { type: 'HANDOFF_DRAFT', patch: { destination: { agent, project, task } } } });
@@ -631,22 +810,41 @@ export class WebRuntime {
     const intake = session?.intake?.find((item: any) => item.matterId === matterId);
     if (!work || !intake) return;
     this.showDialog({ type: 'message', title: 'Codex 正在处理', message: '这次工作已经交给本机 Codex。你可以关闭提示继续浏览，结果完成后会回到工作现场。' });
+    let agentReturned = false;
     try {
       const matter = this.host.chain.matters.find((item: any) => item.id === matterId);
       const source = matter?.captureIntent?.source === 'web' ? 'global' : matter?.captureIntent?.source || 'none';
-      const returned = await runNativeWork({ workId, matterId, title: work.title, text: intake.sourceText, role: intake.role, note: intake.note, source });
+      const threadId = typeof work.connection?.threadId === 'string' && work.connection.threadId.trim() ? work.connection.threadId.trim() : undefined;
+      const returned = await runNativeWork({ workId, matterId, title: work.title, text: intake.sourceText, role: intake.role, note: intake.note, source, ...(threadId ? { threadId } : {}) });
       if (!returned?.result) throw new Error('Codex 已接收工作，但结果还没有回到 Trace。');
-      this.closeDialog();
-      await this.commit((state) => {
-        let next = B.dispatchWorksite(state, { workId, action: { type: 'RESULT_DRAFT', patch: { matterId, ...returned.result } } });
-        if (next.error) return next;
-        next = clone(next);
-        next.worksite.works[workId].connected = true;
-        next.worksite.works[workId].connection = { hostType: 'codex', status: 'returned_for_review' };
-        return next;
-      }, () => this.navigate({ view: 'worksite', workId, matterId, screen: 'results' }), [{ type: 'worksite.action', workId, action: { type: 'RESULT_DRAFT', patch: { matterId, ...returned.result } } }]);
+      agentReturned = true;
+      await this.reconcileNativeWorkReturn(workId, matterId, returned);
     } catch (cause) {
-      this.message(cause instanceof Error ? cause.message : 'Codex 工作没有完成，可以从工作现场重新接回。');
+      const detail = cause instanceof Error ? cause.message : '请从工作现场重新接回。';
+      this.message(agentReturned ? `Codex 结果已保存在本机，但页面尚未同步：${detail}` : detail);
+    }
+  }
+
+  private async reconcileNativeWorkReturn(workId: string, matterId: string, returned: any): Promise<void> {
+    if (this.busy) throw new Error('当前页面仍在保存；请稍后载入已保存版本。');
+    this.busy = true;
+    this.emit();
+    try {
+      // work.run has already committed receive + return in the Product owner.
+      // A second RESULT_DRAFT with the pre-run revision will always conflict.
+      // Never replace a local draft if the user edited while Codex was away.
+      await this.flush();
+      if (this.pendingPayload || this.dirty > this.saved) throw new Error('请先保留未保存草稿，再载入已保存版本。');
+      const generation = this.dirty;
+      const { data, state } = await this.readWorkspace();
+      if (this.dirty !== generation || this.pendingPayload || this.dirty > this.saved) throw new Error('页面又有新的草稿；请先保留草稿，再载入已保存版本。');
+      if (!matchesAuthoritativeWorkReturn(data, workId, matterId, returned)) throw new Error('本机尚未读到这次 Codex 的对应结果，请稍后重试接回。');
+      this.applyLoadedWorkspace(data, state, 'saved');
+      this.navigate({ view: 'worksite', workId, matterId, screen: 'results' });
+      this.setStatus('saved', 'Codex 结果已回到本机，等待你复核。');
+    } finally {
+      this.busy = false;
+      this.emit();
     }
   }
 
@@ -658,16 +856,12 @@ export class WebRuntime {
     void (async () => {
       const known = await readNativeWork(work.id).catch(() => null);
       if (known?.result) {
-        await this.commit((state) => {
-          let next = B.dispatchWorksite(state, { workId: work.id, action: { type: 'RESULT_DRAFT', patch: { matterId, ...known.result } } });
-          if (next.error) return next;
-          next = clone(next);
-          next.worksite.works[work.id].connected = true;
-          next.worksite.works[work.id].connection = { hostType: 'codex', status: 'returned_for_review' };
-          return next;
-        }, () => this.navigate({ view: 'worksite', workId: work.id, matterId, screen: 'results' }), [{ type: 'worksite.action', workId: work.id, action: { type: 'RESULT_DRAFT', patch: { matterId, ...known.result } } }]);
+        try { await this.reconcileNativeWorkReturn(work.id, matterId, known); }
+        catch (cause) { this.message(cause instanceof Error ? cause.message : '结果已返回，但页面尚未同步。'); }
         return;
       }
+      const environment = await nativeWorkEnvironment().catch(() => null);
+      if (!environment?.connected) { this.message('工作准备已保存在本机；Agent 尚未启用，暂不发送。'); return; }
       await this.executeNativeWork(work.id, matterId);
     })();
   };
@@ -682,7 +876,8 @@ export class WebRuntime {
     if (!anchor) { this.message('没有可比较的文字。先选一句原话、补充或已保存的理解。'); return; }
     const sessionId = uid('compare');
     const returnTarget = { ...clone(this.route), anchor };
-    void this.commit((state) => B.openComparison(state, { sessionId, matterId: matter.id, anchor, returnTarget }), (next) => this.navigate(next.route), [{ type: 'comparison.open', sessionId, matterId: matter.id, anchor, returnTarget }]);
+    const productTarget = productReturnRoute(returnTarget);
+    void this.commit((state) => B.openComparison(state, { sessionId, matterId: matter.id, anchor, returnTarget: productTarget }), () => this.navigate({ view: 'compare', sessionId, matterId: matter.id, anchor, returnTarget }), [{ type: 'comparison.open', sessionId, matterId: matter.id, anchor, returnTarget: productTarget }]);
   }
 
   onComparisonAction = (action: any): void => {
@@ -698,16 +893,21 @@ export class WebRuntime {
       this.busy = true; this.emit();
       void (async () => {
         try {
-          await this.flush();
+          await this.drainDrafts();
+          const base = clone(this.host);
           const prepared = change(this.host);
           if (prepared.error) { this.message(prepared.error.message); return; }
           const requestId = prepared.comparisons[sessionId].model.request?.id;
           if (!requestId) { this.host = prepared; this.emit(); return; }
           const applied = B.applyPendingComparison(prepared, { sessionId, requestId });
           if (!applied.outcome.ok) { this.host = B.deliverComparisonResult(prepared, { sessionId, requestId, outcome: applied.outcome }); this.emit(); return; }
-          const finish = () => { this.host = B.deliverComparisonResult(applied.host, { sessionId, requestId, outcome: applied.outcome }); this.dirty += 1; this.emit(); void this.flush().catch(() => undefined); };
+          // Browser snapshot writes persist the completed view in the same
+          // transaction. Native Product commands compute their own outcome;
+          // neither path gets overwritten by a captured local ACK afterwards.
+          const next = B.deliverComparisonResult(applied.host, { sessionId, requestId, outcome: applied.outcome });
+          const finish = () => { this.emit(); };
           this.continuation = finish;
-          await this.save(applied.host, requestId, [{ type: 'comparison.action', sessionId, action }]);
+          await this.save(next, requestId, [{ type: 'comparison.action', sessionId, action }], this.dirty, base);
           this.continuation = null;
           finish();
         } catch (cause) {
@@ -725,13 +925,13 @@ export class WebRuntime {
     if (this.busy || !this.host || completeDemoMode) return;
     const current = B.selectComparison(this.host, sessionId, { capabilityAvailable: true, provider: hasNativeCapabilityBridge() ? 'native' : 'web' });
     const question = String(current?.query?.question || '').trim();
-    const instructions = String(current?.query?.instructions || '').trim();
     if (!question) { this.message('先写下这次想弄清楚的问题。'); return; }
-    const query = [question, instructions].filter(Boolean).join('；');
+    const canonicalMatter = this.host.chain?.matters?.find((matter: any) => matter.id === current?.matter?.id);
+    const query = buildComparisonSearchQuery({ ...current, matter: { ...current?.matter, originalText: canonicalMatter?.originalText } });
     this.busy = true;
     this.emit();
     try {
-      await this.flush();
+      await this.drainDrafts();
       const result = await searchPublic('zhihu', query, 5);
       const items = (Array.isArray(result?.items) ? result.items : []).filter((item: any) => {
         if (!item || item.provider !== 'zhihu' || item.source !== 'zhihu' || !String(item.id || '').trim() || !String(item.excerpt || '').trim()) return false;
@@ -745,6 +945,8 @@ export class WebRuntime {
         this.message('这次没有找到可核对的知乎公开内容。可以换一种说法，或直接粘贴已有材料。');
         return;
       }
+      await this.drainDrafts();
+      const base = clone(this.host);
       let next = this.host;
       const productOperations: any[] = [];
       for (const item of items) {
@@ -772,9 +974,7 @@ export class WebRuntime {
       next = B.dispatchComparison(next, { sessionId, action: backAction });
       productOperations.push({ type: 'comparison.action', sessionId, action: backAction });
       if (next.error) throw new Error(next.error.message || '搜索结果未能打开。');
-      await this.save(next, uid('search'), productOperations);
-      this.host = next;
-      this.saved = ++this.dirty;
+      await this.save(next, uid('search'), productOperations, this.dirty, base);
       this.setPreferences();
       this.emit();
     } catch (cause) {
@@ -790,7 +990,7 @@ export class WebRuntime {
     const next = B.returnFromComparison(this.host, this.route.sessionId);
     if (next.error && next.error.code !== 'stale_anchor') { this.message(next.error.message); return; }
     this.host = next;
-    this.navigate(next.route);
+    this.navigate(retainPresentationReturn(next.route, this.route.returnTarget));
   };
 
   continueComparison = (): void => {
@@ -798,7 +998,7 @@ export class WebRuntime {
     const next = B.returnFromComparison(this.host, this.route.sessionId);
     if (next.error && next.error.code !== 'stale_anchor') { this.message(next.error.message); return; }
     this.host = next;
-    this.navigate({ ...next.route, screen: 'discussion' });
+    this.navigate({ ...retainPresentationReturn(next.route, this.route.returnTarget), screen: 'discussion' });
   };
 
   onWorkAction = (action: any): void => {

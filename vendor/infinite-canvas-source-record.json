@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/basketikun/infinite-canvas",
+  "commit": "9cd3deacbcc598361807afc16c059a80dd18b6f9",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 basketikun",
+  "licensePath": "apps/web/public/licenses/infinite-canvas-MIT.txt",
+  "licenseSha256": "4a3ea42531a7fc18b11471baa1676b11ef6c8badee4e02711392d9fdc8f59d58",
+  "recordedAt": "2026-10-31T12:19:50.866Z",
+  "researchPath": "../artifacts/trace-frontend-replacement/upstream/infinite-canvas-9cd3deacbcc598361807afc16c059a80dd18b6f9",
+  "originals": [
+    {
+      "path": "LICENSE",
+      "sha256": "4a3ea42531a7fc18b11471baa1676b11ef6c8badee4e02711392d9fdc8f59d58",
+      "url": "https://github.com/basketikun/infinite-canvas/blob/9cd3deacbcc598361807afc16c059a80dd18b6f9/LICENSE"
+    },
+    {
+      "path": "web/src/components/canvas/infinite-canvas.tsx",
+      "sha256": "745d3f5664c8cdf5b460b553a02db77e6c9f47b06cdd88f213f9f1a917f376df",
+      "url": "https://github.com/basketikun/infinite-canvas/blob/9cd3deacbcc598361807afc16c059a80dd18b6f9/web/src/components/canvas/infinite-canvas.tsx"
+    },
+    {
+      "path": "web/src/lib/canvas/canvas-node-geometry.ts",
+      "sha256": "98e64c0feb889355580bbf1ca8b8a59f90bdd49ff2a4f260f07e8eac63b9f87c",
+      "url": "https://github.com/basketikun/infinite-canvas/blob/9cd3deacbcc598361807afc16c059a80dd18b6f9/web/src/lib/canvas/canvas-node-geometry.ts"
+    },
+    {
+      "path": "web/src/components/canvas/canvas-node.tsx",
+      "sha256": "ff4af1293f4a1812b0342c91b7d48409da8739a7597b270c3036d37b148a6930",
+      "url": "https://github.com/basketikun/infinite-canvas/blob/9cd3deacbcc598361807afc16c059a80dd18b6f9/web/src/components/canvas/canvas-node.tsx"
+    },
+    {
+      "path": "web/src/pages/canvas/project.tsx",
+      "sha256": "ecb88fa8b6b89128c1406d4ef6b584fde9ab64a35846d86a86aa16ddd27da534",
+      "url": "https://github.com/basketikun/infinite-canvas/blob/9cd3deacbcc598361807afc16c059a80dd18b6f9/web/src/pages/canvas/project.tsx"
+    },
+    {
+      "path": "web/src/components/canvas/canvas-connections.tsx",
+      "sha256": "877a068eb577d4a03bb079aa9b4b4108c2606b82a94c04707d68bf5b886b16b8",
+      "url": "https://github.com/basketikun/infinite-canvas/blob/9cd3deacbcc598361807afc16c059a80dd18b6f9/web/src/components/canvas/canvas-connections.tsx"
+    },
+    {
+      "path": "web/src/types/canvas.ts",
+      "sha256": "e158ad88d9fa13d5514e990c88a987700c111247dc0541d6dab8a90321ada956",
+      "url": "https://github.com/basketikun/infinite-canvas/blob/9cd3deacbcc598361807afc16c059a80dd18b6f9/web/src/types/canvas.ts"
+    }
+  ],
+  "mappings": [
+    {
+      "target": "apps/web/src/react/workbench/engine/infinite-canvas.tsx",
+      "sources": [
+        "web/src/components/canvas/infinite-canvas.tsx"
+      ],
+      "method": "adapt-source",
+      "kept": "Pointer/Space/Ctrl camera, cursor-centered wheel zoom, world transform, grid and rAF pan.",
+      "changes": "Controlled Trace viewport, local theme/classes; preserve native input/playback/scroll; cancel gestures and frame cleanup. No upstream store."
+    },
+    {
+      "target": "apps/web/src/react/workbench/engine/geometry.ts",
+      "sources": [
+        "web/src/lib/canvas/canvas-node-geometry.ts"
+      ],
+      "method": "adapt-source",
+      "kept": "Bounds, containment, group/ungroup/snap and focus transform algorithms.",
+      "changes": "Narrow local layout projection types; linear backwards group search instead of array copy/reverse."
+    },
+    {
+      "target": "apps/web/src/react/workbench/engine/node-frame.tsx",
+      "sources": [
+        "web/src/components/canvas/canvas-node.tsx"
+      ],
+      "method": "extract-and-adapt",
+      "kept": "World-coordinate resize deltas, corner anchors and media aspect behavior.",
+      "changes": "Trace content renderer, Pointer Events, four corners, one CAS layout gesture, cancel/keyboard/constant-screen hit area; upstream image editors/generation controls not imported."
+    },
+    {
+      "target": "apps/web/src/react/workbench/canvas-surface.tsx",
+      "sources": [
+        "web/src/pages/canvas/project.tsx",
+        "web/src/components/canvas/canvas-connections.tsx",
+        "web/src/lib/canvas/canvas-node-geometry.ts"
+      ],
+      "method": "extract-and-adapt",
+      "kept": "World-coordinate drag, box selection, multi-selection, grouping and cubic connection path method.",
+      "changes": "Trace canonical object refs + independent layout commands, recursive group movement, explicit unlink/remove menus; same-camera SVG ink added. No Zustand project persistence, request/generation/plugin executor, Ant/Tailwind/Motion or router."
+    },
+    {
+      "target": "apps/web/src/react/workbench/engine/types.ts",
+      "sources": [
+        "web/src/types/canvas.ts"
+      ],
+      "method": "narrow-layout-only-projection",
+      "kept": "Node position/size/group, edge endpoints and viewport field semantics.",
+      "changes": "Only types required by copied geometry; no upstream business/content schema or store."
+    }
+  ],
+  "excluded": [
+    "upstream Zustand project/content persistence",
+    "AI/model provider and generation service APIs",
+    "plugin loader/runtime/executor",
+    "upstream project account/billing UI",
+    "upstream fonts/photos/media and brand assets"
+  ],
+  "limits": [
+    "Root MIT does not license all transitive code or third-party media",
+    "Only listed source chain is migrated; not the entire upstream product",
+    "No second canvas engine or business store is added"
+  ]
+}

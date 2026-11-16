@@ -1,0 +1,46 @@
+/* Shared action geometry and hierarchy. Material/filter effects belong to
+   their existing decorative layers, never to readable text or user media. */
+:root[data-trace-appearance] { --wb-action-size:44px; --wb-action-icon:18px; --wb-status-icon:16px; }
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-button,
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) button.trace-ui.tu-button {
+  box-sizing:border-box; min-height:var(--wb-action-size); min-width:var(--wb-action-size);
+  display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 16px;
+  border:0; border-radius:var(--trace-radius-control); background:var(--trace-state-control,var(--trace-surface-muted));
+  color:var(--trace-text-primary); font-size:var(--wb-text-body); line-height:var(--wb-leading-body); font-weight:500;
+  box-shadow:inset 0 0 0 .5px var(--trace-border-subtle); text-shadow:none; text-align:center;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-primary {
+  color:var(--trace-on-primary); background:linear-gradient(145deg,var(--trace-action-primary),color-mix(in srgb,var(--trace-action-primary) 90%,var(--teal-9)));
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--trace-on-primary) 16%,transparent),var(--trace-state-idle-shadow);
+}
+html[data-trace-appearance] .wb-shell button.wb-liquid-button.wb-primary .wb-liquid-surface {
+  background:linear-gradient(145deg,var(--trace-action-primary),color-mix(in srgb,var(--trace-action-primary) 90%,var(--teal-9)));
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button.wb-icon-button,button.tu-icon-button) {
+  box-sizing:border-box; display:grid; place-items:center; flex:none; width:44px; height:44px; min-height:44px; padding:12px;
+  border:0; border-radius:var(--trace-radius-control); background:transparent; color:var(--trace-text-secondary); box-shadow:none;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) button.trace-ui.tu-button.tu-icon-button {
+  display:grid; place-items:center; padding:12px; background:transparent; box-shadow:none;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button.wb-button,button.wb-icon-button,button.trace-ui.tu-button):focus-visible {
+  outline:2px solid var(--trace-focus); outline-offset:2px; box-shadow:var(--trace-state-focus-shadow);
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(.wb-button,.wb-icon-button,.tu-icon-button) .tu-icon {
+  display:block; flex:none; width:var(--wb-action-icon); height:var(--wb-action-icon);
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button.wb-button,button.wb-icon-button,button.tu-button):disabled {
+  opacity:1; cursor:not-allowed; color:var(--trace-text-muted); background:var(--trace-surface-muted); box-shadow:inset 0 0 0 .5px var(--trace-border-subtle); filter:none;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog) button.wb-button.wb-danger { color:var(--trace-danger-text); background:var(--trace-danger-bg); }
+html[data-trace-appearance] .wb-shell button.wb-liquid-button:disabled .wb-liquid-surface { background:var(--trace-surface-muted); }
+@media(hover:hover) and (pointer:fine) {
+  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-button:not(.wb-primary):not(:disabled):hover { background:var(--trace-state-hover); }
+  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-primary:not(:disabled):hover { filter:none; }
+  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button.wb-icon-button,button.tu-icon-button):not(:disabled):hover { background:var(--trace-state-hover); }
+}
+@media(forced-colors:active) {
+  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button,a).wb-button { background:ButtonFace; color:ButtonText; border:1px solid ButtonText; box-shadow:none; }
+  html[data-trace-appearance] .wb-liquid-surface { display:none; }
+  html[data-trace-appearance] :is(.wb-shell,.wb-dialog) :is(button.wb-button,button.wb-icon-button,button.trace-ui.tu-button):focus-visible { outline:2px solid Highlight; box-shadow:none; }
+}

@@ -1,0 +1,82 @@
+/* Material exceptions are scoped to the current workbench, not user media. */
+/* Shared material palette; override these tokens rather than coloring each demo. */
+:root[data-trace-appearance] {
+  --trace-material-surface:#f3f5f7;
+  --trace-material-focus-surface:#e8edf2;
+  --trace-material-edge:#8595a3;
+  --trace-material-accent:#455d72;
+  --trace-material-accent-end:#354b5d;
+  --trace-material-on-accent:#fff;
+  --trace-material-shadow-color:#40566c;
+  --trace-material-shadow:0 3px 10px color-mix(in srgb,var(--trace-material-shadow-color) 12%,transparent);
+  --trace-material-focus-shadow:0 4px 14px color-mix(in srgb,var(--trace-material-shadow-color) 26%,transparent);
+}
+:root[data-trace-appearance=dark] {
+  --trace-material-surface:#28313a;
+  --trace-material-focus-surface:#35434f;
+  --trace-material-edge:#8095a7;
+  --trace-material-accent:#bdcddd;
+  --trace-material-accent-end:#a6bbce;
+  --trace-material-on-accent:#1b2935;
+  --trace-material-shadow-color:#071421;
+}
+
+.wb-material-defs { position:absolute; width:0; height:0; pointer-events:none; }
+.wb-gooey-search { position:relative; isolation:isolate; width:104px; height:40px; flex:none; }
+.wb-gooey-surfaces { position:absolute; inset:0; z-index:-1; pointer-events:none; }
+.wb-gooey-surfaces i { position:absolute; inset:0; border-radius:999px; background:var(--trace-material-surface); box-shadow:inset 0 0 0 .5px var(--trace-material-edge); }
+.wb-gooey-surfaces i:last-child { width:40px; right:auto; transform:translateX(0); opacity:0; }
+.wb-gooey-trigger { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:8px; background:transparent; border:0; border-radius:999px; color:var(--trace-text-primary); cursor:pointer; }
+.wb-gooey-search form { position:absolute; top:0; left:52px; right:12px; height:100%; pointer-events:none; opacity:0; }
+.wb-gooey-search input { width:100%; height:100%; padding:0; border:0; background:transparent; color:var(--trace-text-primary); font:inherit; min-width:0; }
+.wb-gooey-search input::placeholder { color:inherit; opacity:.8; }
+.wb-gooey-search[data-open=true] { width:252px; }
+.wb-gooey-search[data-open=true] .wb-gooey-surfaces i:first-child { left:48px; }
+.wb-gooey-search[data-open=true] .wb-gooey-surfaces i:last-child { opacity:1; }
+.wb-gooey-search[data-open=true] .wb-gooey-trigger { right:auto; width:40px; }
+.wb-gooey-search[data-open=true] form { opacity:1; pointer-events:auto; }
+.wb-gooey-search:focus-within { outline:none; border-radius:999px; box-shadow:var(--trace-material-focus-shadow); }
+.wb-gooey-search:focus-within .wb-gooey-surfaces i { background:var(--trace-material-focus-surface); }
+.wb-gooey-search input:focus-visible { outline:none; }
+/* Pointer initiation morphs the decorative mass; keyboard access stays instant. */
+@media (prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine) {
+  .wb-gooey-search:has(.wb-gooey-trigger:active),.wb-gooey-search:has(.wb-gooey-trigger:hover) { transition:width 250ms cubic-bezier(.77,0,.175,1); }
+  .wb-gooey-search:has(.wb-gooey-trigger:hover) .wb-gooey-surfaces i { transition:left 250ms cubic-bezier(.77,0,.175,1),opacity 200ms ease; }
+}
+html[data-trace-appearance] .wb-shell .wb-liquid-button { position:relative; isolation:isolate; overflow:visible; border-radius:999px; background:color-mix(in srgb,var(--trace-material-surface) 85%,transparent); color:var(--trace-text-primary); border:0.5px solid var(--trace-border-control); box-shadow:var(--trace-material-shadow),inset 1px 1px 1px -.5px var(--trace-material-edge),inset -1px -1px 1px -.5px var(--trace-material-edge); }
+.wb-liquid-surface { position:absolute; inset:0; z-index:-1; border-radius:inherit; overflow:hidden; pointer-events:none; background:linear-gradient(145deg,var(--trace-material-surface),var(--trace-material-focus-surface)); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
+.wb-liquid-label { position:relative; z-index:1; display:inline-flex; align-items:center; gap:8px; pointer-events:none; }
+html[data-trace-appearance] .wb-shell .wb-liquid-button:disabled { opacity:.55; cursor:not-allowed; }
+@media (hover:hover) and (pointer:fine) { html[data-trace-appearance] .wb-shell .wb-liquid-button:hover:not(:disabled) { filter:none; } }
+html[data-trace-appearance] .wb-shell .wb-liquid-button:active:not(:disabled) { box-shadow:inset 0 2px 4px var(--black-a6); }
+/* AI Prompt Box composition, reusing the existing authoritative message form. */
+html[data-trace-appearance] .wb-thinking-composer { border-radius:20px; padding:16px; background:var(--sand-2); box-shadow:var(--trace-material-shadow),inset 0 1px 0 var(--trace-surface-panel); }
+html[data-trace-appearance] .wb-thinking-composer textarea { field-sizing:content; min-height:64px; max-height:24dvh; resize:vertical; background:transparent; padding:4px; }
+html[data-trace-appearance] .wb-thinking-composer:focus-within { outline:none; border-color:var(--trace-material-edge); background:var(--trace-material-surface); box-shadow:var(--trace-material-focus-shadow); }
+html[data-trace-appearance] .wb-thinking-composer>div:last-child { padding-top:12px; }
+html[data-trace-appearance] .wb-thinking-composer .wb-primary { min-height:40px; border-radius:999px; background:linear-gradient(to bottom,var(--trace-material-accent),var(--trace-material-accent-end)); color:var(--trace-material-on-accent); box-shadow:inset 0 1px 0 color-mix(in srgb,var(--trace-material-on-accent) 22%,transparent),var(--trace-material-shadow); border:0.5px solid var(--trace-material-accent-end); }
+html[data-trace-appearance=dark] .wb-thinking-composer { background:var(--sand-3); }
+@media (max-width:767px) { .wb-gooey-search { width:44px; height:44px; }.wb-gooey-trigger span { display:none; }.wb-gooey-search[data-open=true] { width:min(220px,58vw); }.wb-gooey-search[data-open=true] .wb-gooey-trigger { width:44px; }.wb-gooey-search input { font-size:16px; }html[data-trace-appearance] .wb-shell .wb-liquid-button,html[data-trace-appearance] .wb-thinking-composer .wb-primary { min-height:44px; } }
+@media (prefers-reduced-motion:reduce) { .wb-gooey-search,.wb-gooey-search *,.wb-liquid-button { animation:none!important; transition:none!important; } }
+@media (max-width:767px) { .wb-topbar:has(.wb-gooey-search[data-open=true]) .wb-breadcrumb { display:none; }.wb-topbar:has(.wb-gooey-search[data-open=true]) .wb-gooey-search { margin-left:auto; } }
+
+.wb-gooey-search[data-open=true] form { padding-right:32px; }
+.wb-gooey-clear { position:absolute; right:0; top:0; height:100%; width:32px; display:grid; place-items:center; border:0; border-radius:999px; background:transparent; color:inherit; cursor:pointer; }
+.wb-gooey-search input::-webkit-search-cancel-button { display:none; }
+.wb-shell>.wb-import-panel { position:fixed; right:16px; bottom:76px; z-index:60; width:min(440px,calc(100vw - 32px)); margin:0; box-shadow:var(--trace-shadow-menu); }
+@media(max-width:767px) { .wb-gooey-clear { width:44px; }.wb-gooey-search[data-open=true] form { padding-right:44px; }.wb-shell>.wb-import-panel { right:8px; width:calc(100vw - 16px); bottom:80px; } }
+
+
+
+.wb-gooey-clear { color:var(--trace-text-primary); }
+
+
+/* Local focus treatment: contrast + tinted drop shadow, not a neon outline. */
+html[data-trace-appearance] .wb-gooey-search :is(button,input):focus-visible,
+html[data-trace-appearance] .wb-thinking-composer textarea:focus-visible { outline:none; }
+html[data-trace-appearance] :is(.wb-gooey-search,.wb-thinking-composer):has(:focus-visible) { box-shadow:0 5px 16px color-mix(in srgb,var(--trace-material-shadow-color) 34%,transparent); }
+html[data-trace-appearance] :is(.wb-liquid-button,.wb-thinking-composer .wb-primary):focus-visible { outline:1px solid var(--trace-material-edge); outline-offset:2px; box-shadow:var(--trace-material-focus-shadow); }
+@media (forced-colors:active) { html[data-trace-appearance] :is(.wb-gooey-search,.wb-thinking-composer):focus-within { outline:2px solid Highlight; box-shadow:none; } }
+
+html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea) { caret-color:var(--trace-material-accent); }
+html[data-trace-appearance] :is(.wb-gooey-search input,.wb-thinking-composer textarea)::selection { color:var(--trace-text-primary); background:color-mix(in srgb,var(--trace-material-accent) 20%,var(--trace-surface-panel)); }

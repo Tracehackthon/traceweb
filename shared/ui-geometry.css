@@ -1,0 +1,36 @@
+/* Shared Trace geometry, including legacy screens and the desktop overlay.
+   Keep colours, typography and interaction styles in their existing owners. */
+:root {
+  --trace-space-unit: 4px;
+  --trace-radius-chip: 4px;
+  --trace-radius-control: 8px;
+  --trace-radius-panel: 12px;
+  --trace-radius-card: 16px;
+  --trace-radius-dialog: 24px;
+  --trace-radius-pill: 9996px;
+  --trace-radius-circle: 50%;
+  --trace-menu-inset: var(--trace-space-unit);
+  --trace-radius-menu-item: max(var(--trace-radius-chip), calc(var(--trace-radius-panel) - var(--trace-menu-inset)));
+}
+
+:where([data-trace-geometry]) :where(button, input:not([type=radio]):not([type=range]):not([type=checkbox]), textarea, select) {
+  border-radius: var(--trace-radius-control);
+  padding: var(--trace-space-unit) calc(2 * var(--trace-space-unit));
+}
+:where([data-trace-geometry]) :where(input[type=checkbox]) { border-radius: var(--trace-radius-chip); margin: 0; }
+:where([data-trace-geometry]) :where(input[type=radio]) { border-radius: var(--trace-radius-circle); margin: 0; }
+
+/* Unsupported engines keep the border-radius fallback above. Scope the rule
+   to Trace so the embeddable overlay cannot reshape its non-Trace host UI. */
+@supports (corner-shape: superellipse(1.25)) {
+  :where([data-trace-geometry], [data-trace-geometry] *) {
+    corner-shape: superellipse(1.25);
+  }
+  :where([data-trace-geometry])::before,
+  :where([data-trace-geometry])::after,
+  :where([data-trace-geometry] *)::before,
+  :where([data-trace-geometry] *)::after {
+    corner-shape: superellipse(1.25);
+  }
+  [data-trace-geometry] :where(input[type=radio]) { corner-shape: round; }
+}

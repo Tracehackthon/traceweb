@@ -1,189 +1,30 @@
-import React, { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { type Observation, type ObservationStatus } from './mock-data'
-import { type PetProjection, type TraceCodexApprovalDecision } from './codex-events'
-
-type TracePanelProps = {
-  observations: Observation[]
-  focusedObservationId?: string
-  onAccept: (text: string, source?: string) => void | Promise<void>
-  onContinue: () => void
-  onClose: () => void
-  onToggleSize: () => void
-  discussionNotice: string
-  onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void
-  onHeaderPointerMove?: (event: ReactPointerEvent<HTMLElement>) => void
-  onHeaderPointerUp?: (event: ReactPointerEvent<HTMLElement>) => void
-  compact?: boolean
-  capabilities?: any
-  onCapabilityRequest?: (request: Record<string, unknown>) => Promise<any>
-  codexProjection?: PetProjection
-  onCodexDecision?: (decision: TraceCodexApprovalDecision) => Promise<void>
-  onCodexInput?: (answers: Record<string, { answers: string[] }>) => Promise<void>
-  codexInteractionBusy?: boolean
-  codexInteractionNotice?: string
-}
-
-const statusClass: Record<ObservationStatus, string> = {
-  待确认: 'pending',
-  候选中: 'candidate',
-  已采用: 'adopted',
-  需回顾: 'review',
-  已暂存: 'stored',
-  已拒绝: 'rejected',
-}
-
-export function TracePanel({
-  observations,
-  focusedObservationId,
-  onAccept,
-  onContinue,
-  onClose,
-  onToggleSize,
-  discussionNotice,
-  onHeaderPointerDown,
-  onHeaderPointerMove,
-  onHeaderPointerUp,
-  compact = false,
-  capabilities,
-  onCapabilityRequest,
-  codexProjection,
-  onCodexDecision,
-  onCodexInput,
-  codexInteractionBusy = false,
-  codexInteractionNotice = '',
-}: TracePanelProps) {
-  const [draft, setDraft] = useState('')
-  const [isRecording, setIsRecording] = useState(false)
-  const [imagePreview, setImagePreview] = useState<{ url: string; name: string } | null>(null)
-  const [sourceMode, setSourceMode] = useState<'zhihu' | 'global'>('zhihu')
-  const [profileId, setProfileId] = useState('')
-  const [capabilityBusy, setCapabilityBusy] = useState<'search' | 'agent' | ''>('')
-  const [capabilityNotice, setCapabilityNotice] = useState('')
-  const [sourceResults, setSourceResults] = useState<any[]>([])
-  const [agentRun, setAgentRun] = useState<any>(null)
-  const [codexAnswers, setCodexAnswers] = useState<Record<string, string>>({})
-  const focusedCardRef = useRef<HTMLElement | null>(null)
-  const imageInputRef = useRef<HTMLInputElement | null>(null)
-  const recordingTimerRef = useRef<number | undefined>(undefined)
-  const focusedObservation = observations.find((observation) => observation.id === focusedObservationId)
-  const pendingCodexInteraction = codexProjection?.pendingInteraction
-  const agent = capabilities?.agent
-  const profiles = agent?.profiles || []
-  const sourceMetric = (item: any) => [
-    Number.isSafeInteger(item.vote_up_count) ? `${item.vote_up_count} 赞同` : '',
-    Number.isSafeInteger(item.comment_count) ? `${item.comment_count} 评论` : '',
-    item.content_type || '',
-  ].filter(Boolean).join(' · ')
-
-  useEffect(() => {
-    if (!profileId && (agent?.defaultProfileId || profiles[0]?.profileId)) setProfileId(agent?.defaultProfileId || profiles[0].profileId)
-  }, [agent?.defaultProfileId, profiles.length, profileId])
-
-  useEffect(() => {
-    if (!focusedObservationId) return
-    focusedCardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [focusedObservationId])
-
-  useEffect(() => {
-    setCodexAnswers({})
-  }, [pendingCodexInteraction?.interactionId])
-
-  useEffect(() => () => {
-    if (recordingTimerRef.current !== undefined) window.clearTimeout(recordingTimerRef.current)
-    if (imagePreview) URL.revokeObjectURL(imagePreview.url)
-  }, [imagePreview])
-
-  const clearImagePreview = () => {
-    if (imagePreview) URL.revokeObjectURL(imagePreview.url)
-    setImagePreview(null)
-  }
-
-  const startMockRecording = () => {
-    if (isRecording) return
-    setIsRecording(true)
-    recordingTimerRef.current = window.setTimeout(() => {
-      setDraft('刚才在协作里发现：先保留证据和待回答问题，比立刻总结更重要。')
-      setIsRecording(false)
-      recordingTimerRef.current = undefined
-    }, 2000)
-  }
-
-  const selectImage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    clearImagePreview()
-    setImagePreview({ url: URL.createObjectURL(file), name: file.name })
-    event.target.value = ''
-  }
-
-  const submitObservation = async () => {
-    const text = draft.trim()
-    if (!text) return
-    try {
-      await onAccept(text)
-      setDraft('')
-      clearImagePreview()
-    } catch (error) {
-      setCapabilityNotice(error instanceof Error ? error.message : '这条内容暂时没有保存成功。')
-    }
-  }
-
-  const capabilityText = () => draft.trim() || focusedObservation?.text || ''
-  const search = async () => {
-    const text = capabilityText()
-    if (!text || !onCapabilityRequest) { setCapabilityNotice('先写一句，或打开一条历史观察。'); return }
-    setCapabilityBusy('search'); setCapabilityNotice(`正在${sourceMode === 'zhihu' ? '知乎' : '全网'}搜索…`); setSourceResults([])
-    try {
-      const value = await onCapabilityRequest({ operation: 'search', source: sourceMode, query: text, count: 3 })
-      setSourceResults(value.items || []); setCapabilityNotice(value.items?.length ? `收到 ${value.items.length} 条接口摘要，尚未保存。` : '本次没有返回来源。')
-    } catch (error) { setCapabilityNotice(error instanceof Error ? error.message : String(error)) }
-    finally { setCapabilityBusy('') }
-  }
-  const runAgent = async () => {
-    const text = capabilityText()
-    if (!text || !onCapabilityRequest) { setCapabilityNotice('先写一句，或打开一条历史观察。'); return }
-    setCapabilityBusy('agent'); setCapabilityNotice('正在创建一次有边界的 Agent 运行…'); setAgentRun(null)
-    try {
-      const value = await onCapabilityRequest({ operation: 'agent.run', text, source: sourceMode, ...(profileId ? { profileId } : {}) })
-      setAgentRun(value); setCapabilityNotice(value.status === 'succeeded' ? 'Agent 已返回候选，没有自动改写理解。' : value.error?.message || `本次运行：${value.status}`)
-    } catch (error) { setCapabilityNotice(error instanceof Error ? error.message : String(error)) }
-    finally { setCapabilityBusy('') }
-  }
-
-  const submitCodexInput = () => {
-    const answers: Record<string, { answers: string[] }> = {}
-    for (const [id, answer] of Object.entries(codexAnswers)) {
-      const trimmed = answer.trim()
-      if (trimmed) answers[id] = { answers: [trimmed] }
-    }
-    if (!Object.keys(answers).length) return
-    void onCodexInput?.(answers)
-  }
-
-  return (
-    <aside className={`trace-panel ${compact ? 'trace-panel-compact' : ''}`} aria-label="Trace 思考沉淀面板">
-      <header
-        className="trace-panel-header trace-panel-drag-handle"
-        onPointerDown={onHeaderPointerDown}
-        onPointerMove={onHeaderPointerMove}
-        onPointerUp={onHeaderPointerUp}
-        onPointerCancel={onHeaderPointerUp}
-      >
-        <div>
-          <span className="trace-eyebrow">TRACE · THINKING LAYER</span>
-          <h2>先接住，再想清楚</h2>
-          <p>不用现在分类，先把现场留在这里。</p>
-        </div>
-        <div className="trace-panel-window-actions" onPointerDown={(event) => event.stopPropagation()}>
-          <button className="trace-panel-size-button" type="button" onClick={onToggleSize} aria-label={compact ? '展开为大悬浮窗' : '缩为小悬浮窗'}>
-            <span aria-hidden="true">{compact ? '展开' : '缩小'}</span>
-          </button>
-          <button className="trace-icon-button" type="button" onClick={onClose} aria-label="返回气泡视图">
-            ×
-          </button>
-        </div>
-      </header>
-
+import React,{useEffect,useRef,useState,type PointerEvent as ReactPointerEvent} from 'react'
+import {Tabs} from 'radix-ui'
+import {ArrowUpRight,ChevronLeft,Maximize2,Minimize2,Search} from 'lucide-react'
+import {type Observation} from './mock-data'
+import {type PetProjection,type TraceCodexApprovalDecision} from './codex-events'
+import {CompanionComposer,type CaptureReceipt} from './CompanionComposer'
+type Props={open:boolean;requestedView:'request'|'recent'|'write';observations:Observation[];focusedObservationId?:string;onSelect:(id:string)=>void;draft:string;onDraftChange:(value:string)=>void;onSave:()=>void;busy:boolean;pendingText?:string;receipt:CaptureReceipt;storageError:string;conflict:boolean;onReconcile:()=>void;rejected:boolean;onRelease:()=>void;archives:{text:string;commandId:string}[];onAccept:(text:string,source?:string)=>Promise<void>;onContinue:()=>void;onClose:()=>void;onToggleSize:()=>void;discussionNotice:string;compact:boolean;capabilities:any;onCapabilityRequest:(request:Record<string,unknown>)=>Promise<any>;codexProjection:PetProjection;onCodexDecision:(decision:TraceCodexApprovalDecision)=>Promise<void>;onCodexInput:(answers:Record<string,{answers:string[]}>)=>Promise<void>;codexInteractionBusy:boolean;codexInteractionNotice:string;onHeaderPointerDown:(e:ReactPointerEvent<HTMLElement>)=>void;onHeaderPointerMove:(e:ReactPointerEvent<HTMLElement>)=>void;onHeaderPointerUp:(e:ReactPointerEvent<HTMLElement>)=>void}
+export function TracePanel({open,requestedView,observations,focusedObservationId,onSelect,draft,onDraftChange,onSave,busy,pendingText,receipt,storageError,conflict,onReconcile,rejected,onRelease,archives,onAccept,onContinue,onClose,onToggleSize,discussionNotice,compact,capabilities,onCapabilityRequest,codexProjection,onCodexDecision,onCodexInput,codexInteractionBusy,codexInteractionNotice,onHeaderPointerDown,onHeaderPointerMove,onHeaderPointerUp}:Props){
+  const pendingCodexInteraction=codexProjection.pendingInteraction
+  const [tab,setTab]=useState(pendingCodexInteraction?'request':focusedObservationId?'recent':'write'),[query,setQuery]=useState('')
+  const [sourceMode,setSourceMode]=useState('zhihu'),[profileId,setProfileId]=useState(''),[capabilityBusy,setCapabilityBusy]=useState(''),[capabilityNotice,setCapabilityNotice]=useState(''),[capabilityError,setCapabilityError]=useState(false),[sourceResults,setSourceResults]=useState<any[]>([]),[agentRun,setAgentRun]=useState<any>(null)
+  const [codexAnswers,setCodexAnswers]=useState<Record<string,string>>({}),focusCard=useRef<HTMLElement>(null)
+  const wasOpen=useRef(false)
+  useEffect(()=>{if(open&&!wasOpen.current)setTab(requestedView);wasOpen.current=open},[open,requestedView])
+  const agent=capabilities?.agent,profiles=agent?.profiles||[],focused=observations.find(o=>o.id===focusedObservationId),visible=observations.filter(o=>o.text.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+  useEffect(()=>{setCodexAnswers({})},[pendingCodexInteraction?.interactionId])
+  useEffect(()=>{if(!pendingCodexInteraction&&tab==='request')setTab('write')},[pendingCodexInteraction,tab])
+  useEffect(()=>{if(tab==='recent')focusCard.current?.scrollIntoView({block:'nearest'})},[tab,focusedObservationId])
+  const submitCodexInput=()=>{const answers:Record<string,{answers:string[]}>= {};for(const [id,value]of Object.entries(codexAnswers))if(value.trim())answers[id]={answers:[value.trim()]};if(Object.keys(answers).length)void onCodexInput(answers)}
+  const run=async(kind:'search'|'agent')=>{const text=draft.trim()||focused?.text;if(!text){setCapabilityError(true);setCapabilityNotice('先写一句，或在最近记录中选一条。');return}setCapabilityBusy(kind);setCapabilityError(false);setCapabilityNotice(kind==='search'?'正在查找来源…':'正在请求 Agent…');try{const result=await onCapabilityRequest(kind==='search'?{operation:'search',source:sourceMode,query:text,count:3}:{operation:'agent.run',text,source:sourceMode,...(profileId?{profileId}:{})});if(kind==='search'){setSourceResults(result.items||[]);setCapabilityNotice(result.items?.length?'已返回摘要，保存前可先查看原文。':'本次没有返回来源。')}else{setAgentRun(result);setCapabilityError(result.status!=='succeeded');setCapabilityNotice(result.status==='succeeded'?'结果已返回，尚未保存或采用。':result.error?.message||'本次运行未完成。')}}catch(e){setCapabilityError(true);setCapabilityNotice(e instanceof Error?e.message:'本次请求没有完成。')}finally{setCapabilityBusy('')}}
+  return <aside className={'trace-panel '+(compact?'trace-panel-compact':'')} role="dialog" aria-modal="false" aria-label="Trace 悬浮窗">
+    <header className="trace-surface-header trace-panel-drag-handle" onPointerDown={onHeaderPointerDown} onPointerMove={onHeaderPointerMove} onPointerUp={onHeaderPointerUp} onPointerCancel={onHeaderPointerUp}><div className="trace-brand"><span className="trace-brand-mark" aria-hidden="true">t.</span><div><strong>桌面收集</strong><small>随手记录，慢慢想清楚</small></div></div><div className="trace-window-actions"><button type="button" onClick={onToggleSize} aria-label={compact?'展开悬浮窗':'缩小悬浮窗'}>{compact?<Maximize2/>:<Minimize2/>}</button><button type="button" onClick={onClose} aria-label="返回快速记录"><ChevronLeft/></button></div></header>
+    <Tabs.Root className="trace-panel-tabs" value={tab} onValueChange={setTab}><Tabs.List className="trace-segments" aria-label="悬浮窗内容"><Tabs.Trigger value="write">记录</Tabs.Trigger><Tabs.Trigger value="recent">最近 <span>{observations.length}</span></Tabs.Trigger><Tabs.Trigger value="tools">来源与 Agent</Tabs.Trigger>{pendingCodexInteraction&&<Tabs.Trigger value="request">待处理 <span>1</span></Tabs.Trigger>}</Tabs.List><div className="trace-panel-body">
+      <Tabs.Content value="write"><CompanionComposer draft={draft} onChange={onDraftChange} onSave={onSave} busy={busy} pendingText={pendingText} receipt={receipt} storageError={storageError} conflict={conflict} onReconcile={onReconcile} rejected={rejected} onRelease={onRelease} archives={archives}/><p className="trace-gentle-note">原话留在本机收集区。需要展开时，再回到完整工作面继续。</p></Tabs.Content>
+      <Tabs.Content value="recent"><label className="trace-search-field"><Search aria-hidden="true"/><input aria-label="查找最近记录" placeholder="找一句曾经留下的话" value={query} onChange={e=>setQuery(e.target.value)}/></label><p className="trace-list-caption">最近 {observations.length} 条本机记录 · 匹配 {visible.length} 条</p><div className="trace-observation-list">{visible.length?visible.map(o=><article ref={o.id===focusedObservationId?focusCard:undefined} className={'trace-observation-card '+(o.id===focusedObservationId?'trace-selected':'')} key={o.id}><button type="button" className="trace-record-select" aria-pressed={o.id===focusedObservationId} onClick={()=>onSelect(o.id)}><small>{o.status} · {o.source||'桌面收集'}</small><p>{o.text}</p></button>{o.id===focusedObservationId&&<button className="trace-record-continue" type="button" onClick={onContinue}>继续这条讨论 <ArrowUpRight/></button>}</article>):<p className="trace-empty">{query?'没有找到这句话。试试更短的词。':'这里还空着，先去留一句话吧。'}</p>}</div>{discussionNotice&&<p role="status" className="trace-receipt">{discussionNotice}</p>}</Tabs.Content>
+      <Tabs.Content value="tools"><section className="trace-tools-intro"><span className={'trace-connection '+(capabilities?.connected?'trace-connected':'')}>{capabilities?.loading?'正在检查连接':capabilities?.connected?'本机服务已连接':'服务暂未连接'}</span><h3>让思考多一个参照</h3><p>使用当前草稿，或选中的最近记录。搜索会访问外部来源；执行仅在你明确点击后开始。</p></section><label className="trace-field">搜索范围<select aria-label="搜索范围" value={sourceMode} onChange={e=>setSourceMode(e.target.value)} disabled={Boolean(capabilityBusy)}><option value="zhihu">知乎</option><option value="global">全网</option></select></label>{profiles.length>0&&<label className="trace-field">Agent 执行器<select aria-label="Agent 执行器" value={profileId||agent?.defaultProfileId||profiles[0]?.profileId} onChange={e=>setProfileId(e.target.value)} disabled={Boolean(capabilityBusy)}>{profiles.map((p:any)=><option key={p.profileId} value={p.profileId}>{p.label||p.profileId}</option>)}</select></label>}<div className="trace-tool-actions"><button className="trace-button" type="button" disabled={!capabilities?.search?.enabled||Boolean(capabilityBusy)} onClick={()=>void run('search')}>{capabilityBusy==='search'?'查找中…':'查找来源'}</button><button className="trace-button trace-button-primary" type="button" disabled={!agent?.enabled||Boolean(capabilityBusy)} onClick={()=>void run('agent')}>{capabilityBusy==='agent'?'请求中…':'交给 Agent'}</button></div>{!capabilities?.search?.enabled&&<p className="trace-gentle-note">搜索尚未可用，不影响本机记录。</p>}{!agent?.enabled&&<p className="trace-gentle-note">Agent 尚未可用；不会把记录保存冒充 AI 执行。</p>}{(receipt.kind!=='idle'||pendingText!==undefined)&&<div className="trace-tool-save-receipt"><p className={'trace-receipt '+(receipt.kind==='error'?'trace-receipt-error':'')} role={receipt.kind==='error'?'alert':'status'}>{receipt.text||'有一段原请求等待确认。'}</p>{pendingText!==undefined&&<button className="trace-button" disabled={busy} onClick={conflict?onReconcile:onSave}>{conflict?'核对最新版本后，保存原请求':'重试原请求'}</button>}</div>}{capabilityNotice&&<p className={'trace-receipt '+(capabilityError?'trace-receipt-error':'')} role={capabilityError?'alert':'status'}>{capabilityNotice}</p>}{sourceResults.map(item=><article className="trace-source-card" key={item.id}><small>公开来源 · 尚未保存</small><h3>{item.title||'未命名来源'}</h3><p>{item.excerpt}</p><footer>{item.url&&<a href={item.url} target="_blank" rel="noreferrer">查看原文 <ArrowUpRight/></a>}<button type="button" disabled={busy||pendingText!==undefined} onClick={()=>void onAccept(item.excerpt,item.source)}>保存摘要</button></footer></article>)}{agentRun?.result&&<article className="trace-source-card"><small>Agent 返回 · 尚未采用</small><p>{agentRun.result.answer}</p><button disabled={busy||pendingText!==undefined} onClick={()=>void onAccept(agentRun.result.answer,'Agent 返回')}>保存这份回答</button></article>}</Tabs.Content>
+      <Tabs.Content value="request">
       {pendingCodexInteraction && (
         <section className="trace-section trace-approval-section" aria-labelledby="trace-approval-title" data-trace-interactive-region="approval">
           <div className="trace-approval-kicker">需要你的决定 · {pendingCodexInteraction.kind === 'input' ? '输入请求' : '操作请求'}</div>
@@ -280,98 +121,8 @@ export function TracePanel({
         </section>
       )}
 
-      <section className="trace-section trace-capture-section">
-        <label className="trace-label" htmlFor="trace-capture-input">此刻想留下什么？</label>
-        <div className="trace-capture-input-row">
-          <textarea
-            id="trace-capture-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="看到的现象、踩到的坑、突然想通的判断……"
-            rows={3}
-          />
-          <div className="trace-capture-media-actions" aria-label="轻接收方式">
-            <button className={`trace-media-button ${isRecording ? 'trace-media-button-recording' : ''}`} type="button" onClick={startMockRecording} aria-label="模拟语音输入" title="模拟语音输入">
-              {isRecording ? <span className="trace-recording-wave" aria-label="正在录音"><i /><i /><i /><i /></span> : '◉'}
-            </button>
-            <button className="trace-media-button" type="button" onClick={() => imageInputRef.current?.click()} aria-label="选择图片" title="选择图片">
-              ▧
-            </button>
-            <input ref={imageInputRef} className="trace-file-input" type="file" accept="image/*" onChange={selectImage} />
-          </div>
-        </div>
-        {isRecording && <p className="trace-recording-label">正在模拟录音，2 秒后将填入转写文本…</p>}
-        {imagePreview && (
-          <div className="trace-image-preview">
-            <img src={imagePreview.url} alt="待接住的图片缩略图" />
-            <div>
-              <strong>图片现场已接住</strong>
-              <span>Mock 识别：一张与当前思考有关的现场截图</span>
-              <small>{imagePreview.name}</small>
-            </div>
-            <button type="button" onClick={clearImagePreview} aria-label="移除图片">×</button>
-          </div>
-        )}
-        <div className="trace-action-row">
-          <button className="trace-button trace-button-primary" type="button" onClick={() => void submitObservation()}>
-            接住它
-          </button>
-          <button className="trace-button trace-button-secondary" type="button" onClick={onContinue}>
-            继续讨论
-          </button>
-        </div>
-        {discussionNotice && <p className="trace-inline-notice">{discussionNotice}</p>}
-        <section className="trace-runtime-tools" aria-label="知乎与 Agent 能力">
-          <div className="trace-runtime-heading"><div><span className="trace-eyebrow">LIVE CAPABILITIES</span><strong>让来源和 Agent 参与</strong></div><span className={capabilities?.connected ? 'trace-runtime-online' : 'trace-runtime-offline'}>{capabilities?.loading ? '检查中' : capabilities?.connected ? 'Runtime 已连接' : '未连接'}</span></div>
-          <div className="trace-runtime-controls"><select aria-label="搜索范围" value={sourceMode} disabled={Boolean(capabilityBusy)} onChange={(event) => setSourceMode(event.target.value as 'zhihu' | 'global')}><option value="zhihu">知乎搜索</option><option value="global">全网搜索</option></select>{profiles.length > 0 && <select aria-label="Agent 执行器" value={profileId} disabled={Boolean(capabilityBusy)} onChange={(event) => setProfileId(event.target.value)}>{profiles.map((profile: any) => <option key={profile.profileId} value={profile.profileId}>{profile.label || profile.profileId}</option>)}</select>}</div>
-          <div className="trace-action-row"><button className="trace-button trace-button-secondary" type="button" disabled={!capabilities?.search?.enabled || Boolean(capabilityBusy)} onClick={() => void search()}>{capabilityBusy === 'search' ? '正在搜索…' : '查找来源'}</button><button className="trace-button trace-button-primary" type="button" disabled={!agent?.enabled || Boolean(capabilityBusy)} onClick={() => void runAgent()}>{capabilityBusy === 'agent' ? 'Agent 处理中…' : '交给 Agent'}</button></div>
-          {!capabilities?.connected && <small>{capabilities?.error?.message || '启动 trace-runtime，并设置 TRACE_ZHIHU_ENABLED=1 与 TRACE_AGENT_ENABLED=1。'}</small>}
-          {capabilities?.connected && !capabilities?.search?.enabled && <small>{capabilities?.search?.error?.message || '本机 Runtime 尚未启用知乎公开搜索。'}</small>}
-          {capabilities?.connected && !agent?.enabled && <small>{agent?.error?.message || '本机 Runtime 尚未启用 Agent 执行器。'}</small>}
-          {capabilityNotice && <p className="trace-runtime-notice" role="status">{capabilityNotice}</p>}
-          {sourceResults.map((item) => <article className="trace-runtime-result" key={item.id}><small>{item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容'}{item.author ? ` · ${item.author}` : ''}</small><strong>{item.title || '未命名来源'}</strong>{sourceMetric(item) && <span>{sourceMetric(item)}</span>}<p>{item.excerpt}</p><footer>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">查看原文</a> : <small>缺少原文链接</small>}<button type="button" onClick={() => void onAccept(item.excerpt, item.source === 'zhihu' ? '知乎公开内容' : '全网公开内容')}>保留到 Trace</button></footer></article>)}
-          {agentRun?.result && <article className="trace-runtime-result trace-runtime-agent"><small>{agentRun.profile?.label || 'Agent'} · 未采纳候选</small><strong>Agent 的回答</strong><p>{agentRun.result.answer}</p><button type="button" onClick={() => void onAccept(agentRun.result.answer, agentRun.profile?.label || 'Trace Agent')}>保留到 Trace</button></article>}
-        </section>
-      </section>
-
-      {compact && focusedObservation && (
-        <article className="trace-compact-observation" aria-label="当前观察详情">
-          <span className={`trace-status trace-status-${statusClass[focusedObservation.status]}`}>{focusedObservation.status}</span>
-          <strong>{focusedObservation.text}</strong>
-          <small>{focusedObservation.source || 'Trace 本机工作区'}{focusedObservation.createdAt ? ` · ${focusedObservation.createdAt}` : ''}</small>
-        </article>
-      )}
-
-      <section className="trace-section" aria-labelledby="trace-history-title">
-        <div className="trace-section-heading">
-          <div>
-            <span className="trace-eyebrow">现场回收站</span>
-            <h3 id="trace-history-title">历史观察</h3>
-          </div>
-          <span className="trace-count">{observations.length} 条</span>
-        </div>
-        <div className="trace-observation-list">
-          {observations.map((observation) => (
-            <article
-              className={`trace-observation-card ${observation.id === focusedObservationId ? 'trace-observation-card-focused' : ''}`}
-              key={observation.id}
-              ref={observation.id === focusedObservationId ? focusedCardRef : undefined}
-              data-trace-observation-id={observation.id}
-            >
-              <div className="trace-observation-main">
-                <p>{observation.text}</p>
-                <div className="trace-meta-row">
-                  <span className={`trace-status trace-status-${statusClass[observation.status]}`}>{observation.status}</span>
-                  {observation.source && <span>来源 {observation.source}</span>}
-                </div>
-              </div>
-              {observation.createdAt && <time>{observation.createdAt}</time>}
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <p className="trace-footer-note">这里显示的是桌面端同一份本机工作区；保存、讨论和 Agent 结果会回到 Trace。</p>
-    </aside>
-  )
+      </Tabs.Content>
+    </div></Tabs.Root>
+    <footer className="trace-surface-footer"><span>拖动标题可移动</span><span>Esc 收起 · 草稿保留</span></footer>
+  </aside>
 }

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { pdfAssetsPlugin } from './pdf-assets.mjs';
 
 const desktopPort = Number(process.env.TRACE_DESKTOP_PORT || 4186);
 const apiPort = Number(process.env.TRACE_API_PORT || 4173);
@@ -6,6 +7,7 @@ const apiOrigin = `http://127.0.0.1:${Number.isInteger(apiPort) && apiPort > 0 ?
 
 export default defineConfig({
   root: '.',
+  plugins: [pdfAssetsPlugin()],
   base: '/',
   server: {
     host: '127.0.0.1',

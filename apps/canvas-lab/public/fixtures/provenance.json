@@ -1,0 +1,31 @@
+{
+  "author": "Trace Canvas Lab synthetic fixtures",
+  "screenshot": {
+    "source": "source.html",
+    "viewportCssPx": [
+      680,
+      460
+    ]
+  },
+  "pdf": {
+    "source": "paper.html",
+    "page": 1,
+    "pageSizePoints": [
+      510,
+      450
+    ],
+    "regionCssPx": {
+      "x": 48,
+      "y": 108,
+      "width": 576,
+      "height": 160
+    },
+    "regionPdfPoints": [
+      36,
+      81,
+      432,
+      120
+    ],
+    "note": "Crop rendered from the same fixed-layout HTML used to print the PDF. No PDF extraction feature is claimed."
+  }
+}

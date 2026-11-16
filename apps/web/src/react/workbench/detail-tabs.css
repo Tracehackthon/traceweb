@@ -1,0 +1,41 @@
+/* Halo's quiet layered selection, adapted to Trace tokens. High-frequency tabs
+   switch immediately: no spring, content slide, ambient pulse or hover-only UI. */
+html[data-trace-appearance] .wb-shell .wb-halo-tabs {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:4px;
+  margin:8px 12px;
+  padding:4px;
+  border:0.5px solid var(--trace-border-control);
+  border-radius:12px;
+  background:var(--trace-surface-muted);
+}
+html[data-trace-appearance] .wb-shell .wb-halo-tabs [role=tab] {
+  min-width:0;
+  min-height:36px;
+  padding:4px;
+  border:0.5px solid transparent;
+  border-radius:8px;
+  background:transparent;
+  color:var(--trace-text-secondary);
+  font-size:14px;
+  white-space:normal;
+  box-shadow:none;
+  transform:none;
+  transition:none;
+  animation:none;
+}
+html[data-trace-appearance] .wb-shell .wb-halo-tabs [data-state=active] {
+  background:var(--trace-surface-panel);
+  color:var(--trace-text-primary);
+  border-color:var(--trace-border-control);
+  font-weight:600;
+}
+html[data-trace-appearance] .wb-shell .wb-halo-tabs [role=tab]::after { content:none; }
+html[data-trace-appearance] .wb-shell .wb-halo-tabs [role=tab]:focus-visible {
+  outline:2px solid var(--trace-focus);
+  outline-offset:1px;
+}
+@media (max-width:767px) {
+  html[data-trace-appearance] .wb-shell .wb-halo-tabs [role=tab] { min-height:44px; }
+}

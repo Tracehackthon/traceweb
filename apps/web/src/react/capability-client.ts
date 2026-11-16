@@ -2,7 +2,11 @@ export type SearchSource = 'zhihu' | 'global';
 export type SearchItem = { id: string; provider: 'zhihu'; source: SearchSource; title: string; author: string | null; url: string | null; excerpt: string; content_id?: string | null; content_type: string; comment_count?: number | null; vote_up_count?: number | null; authority_level?: string | null; edited_at?: string | null; content_mode: string; fetched_at: string };
 export type SearchResult = { source: SearchSource; query: string; items: SearchItem[]; content_mode: string; saved_to_trace: false };
 
-type NativeCapabilityBridge = { requestCapability?: (request: Record<string, unknown>) => Promise<any> };
+type NativeCapabilityBridge = {
+  requestCapability?: (request: Record<string, unknown>) => Promise<any>;
+  onSetupProgress?: (listener: (event: any) => void) => (() => void) | undefined;
+  getRuntimeStatus?: () => { connected?: boolean; bundled?: boolean; state?: string; message?: string } | null;
+};
 
 function nativeBridge(): NativeCapabilityBridge | undefined {
   return (window as Window & { traceNative?: NativeCapabilityBridge }).traceNative;
@@ -150,6 +154,7 @@ export async function runNativeWork(input: {
   note?: string;
   source?: SearchSource | 'none';
   profileId?: string;
+  threadId?: string;
 }): Promise<any> {
   const bridge = nativeBridge();
   if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌宠，再把这次工作交给本机 Codex。');
@@ -166,6 +171,12 @@ export async function desktopSetupStatus(): Promise<any> {
   const bridge = nativeBridge();
   if (!bridge?.requestCapability) return null;
   return bridge.requestCapability({ operation: 'setup.status' });
+}
+
+export async function retryDesktopRuntime(): Promise<any> {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) throw new Error('请先启动 Trace 桌面版。');
+  return bridge.requestCapability({ operation: 'setup.runtime.retry' });
 }
 
 export async function selectDesktopProject(): Promise<any> {
@@ -186,4 +197,26 @@ export async function connectTraceCodexPlugin(): Promise<any> {
   return bridge.requestCapability({ operation: 'setup.codex.connect' });
 }
 
+export function onDesktopSetupProgress(listener: (event: any) => void): (() => void) | undefined {
+  return nativeBridge()?.onSetupProgress?.(listener);
+}
+
 export function hasNativeCapabilityBridge(): boolean { return Boolean(nativeBridge()?.requestCapability); }
+
+export function nativeRuntimeStatus(): { connected?: boolean; bundled?: boolean; state?: string; message?: string } | null {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability || typeof bridge.getRuntimeStatus !== 'function') return null;
+  try { return bridge.getRuntimeStatus() || null; } catch { return null; }
+}
+
+export function nativeRuntimeConnected(): boolean {
+  const bridge = nativeBridge();
+  if (!bridge?.requestCapability) return false;
+  const status = nativeRuntimeStatus();
+  return status ? status.connected === true : true;
+}
+
+export function nativeRuntimeUnavailable(): boolean {
+  const status = nativeRuntimeStatus();
+  return Boolean(status && status.connected === false && status.state !== 'starting');
+}

@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "name": "@trace/product-workspace",
+  "version": "0.3.0-frontend.18",
+  "recordedAt": "2026-11-03",
+  "license": "UNLICENSED",
+  "distribution": "Trace internal private artifact; canvas source MIT is separately retained in the Web source record",
+  "archive": {
+    "path": "vendor/trace-product-workspace-0.3.0-frontend.18.tgz",
+    "sha256": "f06d527b1cfa69647340bc1c72dc9f72217fa4d8ca3454c4eebdaeaabdf5a3a0",
+    "integrity": "sha512-3utxiNfDGqpmKicYlJGJhcsLilthATB25yefZnFjgFGEkz3UB7u6Yl3PFuyLOQvpSaru8mr0Or5A4QuWp+cFNg=="
+  },
+  "source": {
+    "repository": "trace-runtime",
+    "relativePackage": "packages/product/workspace",
+    "head": "b2f8400842f29aa900417e35c39e14f9bff686a7",
+    "dirty": false,
+    "dirtyStatus": "",
+    "files": [
+      {
+        "path": "README.md",
+        "sha256": "f1187cf1b4311d09c30fa7e25c7fffb2cda3f42ee4d6c30c9ddd7131460fbced"
+      },
+      {
+        "path": "package.json",
+        "sha256": "4a2516ac73789808aa4b64a667089ef3f2b34b9f940ac921671503515ec88fe1"
+      },
+      {
+        "path": "src/activation-rules.mjs",
+        "sha256": "a54c32127dd9c9b197442c54fc1a8ca854ec1ca52f30f0f7219b642a6e7d611d"
+      },
+      {
+        "path": "src/bridge.mjs",
+        "sha256": "77437e6f7e26a06de67451ba3a9f1551ead92056fa916dec3da8ab2eb82dc7be"
+      },
+      {
+        "path": "src/canvas-model.mjs",
+        "sha256": "b19b6aadafc19e758fb8fc2d03c011b78d2c19b43f07fe111cdf0d95dffddb32"
+      },
+      {
+        "path": "src/canvas-store.mjs",
+        "sha256": "67733866bfa6fad6653bf514152930447dcc0baad546ca99bb83091e4fa09943"
+      },
+      {
+        "path": "src/capability-feedback-rules.mjs",
+        "sha256": "2218dfdead18127fc6b98dbe56059ecce6bb327aac671e853299a37fc6dc0962"
+      },
+      {
+        "path": "src/capability-packet-codec.mjs",
+        "sha256": "70fc8854db6a992c1e2be89557aec37e6696fdc59689724e00eaba5204a9f3cf"
+      },
+      {
+        "path": "src/capability-packet-rules.mjs",
+        "sha256": "e6f30eeee65fd1b4aa5bdfa8705ccddaba4730ffa59a12383cedf34f4bb79c9d"
+      },
+      {
+        "path": "src/chain-model.mjs",
+        "sha256": "ef9b70460fdc44c2e570e382e70e605baf9118a9651dcaa71acf5501aa610109"
+      },
+      {
+        "path": "src/codex-bridge.mjs",
+        "sha256": "876c776ef441c1c534d6ea4ad79002ca71d98a544d8fd296511ba59451555257"
+      },
+      {
+        "path": "src/commands.mjs",
+        "sha256": "ccc7493e06a6ec5043552ff257ffc086794cdb90f6b11f8578b00eadb6be4d76"
+      },
+      {
+        "path": "src/comparison-model.mjs",
+        "sha256": "77dec44807160056aaaf1c272452f57f4eb97edb1a19b7b1b6ef2dc7b28e0bfb"
+      },
+      {
+        "path": "src/demo-workspace.mjs",
+        "sha256": "fadd0283ce9df727767c1eeb5d5390765613db83fdecb55d96f562e8b97a15d4"
+      },
+      {
+        "path": "src/host-ingest.mjs",
+        "sha256": "b82b8fc6a6820ec24b1a68dcdca65929694a9e0146f6e006fd1ea88faa841bf9"
+      },
+      {
+        "path": "src/host-privacy.mjs",
+        "sha256": "837f668a9346dd3d4a641db735f5b8baf59be0d11ad4b5c01d021f7304e9e5f7"
+      },
+      {
+        "path": "src/host-workflow.mjs",
+        "sha256": "486800a0eea0ce80e197866921722b4c0464d8ea7f7127c4655007442997b4e1"
+      },
+      {
+        "path": "src/index.mjs",
+        "sha256": "286f5969df169f66edacdb61d928b48ed4a8446c8271b068a3735284516f33d7"
+      },
+      {
+        "path": "src/scope-contract.mjs",
+        "sha256": "8b3f7b442f51c21a5d9eaf8c0c72eb3788dc2b8943d24fcedf7801e06b8aa70e"
+      },
+      {
+        "path": "src/task-dispatch-rules.mjs",
+        "sha256": "88df11c31508809324c21178be385aeae45756b6069664b9810cb7eeef90ccb0"
+      },
+      {
+        "path": "src/workbench-model.mjs",
+        "sha256": "10890ed7b83e004db54f9dba964debe640f33791727fdf65be25c1092155a6cb"
+      },
+      {
+        "path": "src/worksite-model.mjs",
+        "sha256": "9994cb0637fec1100a38575b2df9b8d990f7a5cc2e18174f1d85b8439ce92fc6"
+      },
+      {
+        "path": "src/workspace.mjs",
+        "sha256": "0025362ac11245080758c786aba4cd2b3d4c94848bc8a824000aed106410406f"
+      },
+      {
+        "path": "src/writeback-plan.mjs",
+        "sha256": "a7be771a14cbbf9135beb79b99b0a8551848ad8387b37f62a7a2c7a316e8383b"
+      },
+      {
+        "path": "tsconfig.types.json",
+        "sha256": "d1e01e41c11f04c2a28e89a695ea6a7a483160aec10ca4971d2a8ac6d75bfc2e"
+      },
+      {
+        "path": "types/activation-rules.d.mts",
+        "sha256": "ce8a1ec796bdef8e85e45b21377621956eec2d75b3e86b50b62eac575baae73c"
+      },
+      {
+        "path": "types/bridge.d.mts",
+        "sha256": "031a508541aff04c3e0e1266db8bd63dd39624cc37c17b5a6400ece5c572026a"
+      },
+      {
+        "path": "types/canvas-model.d.mts",
+        "sha256": "e7a36ab6cebd36eca9bf83b8bb9cfff818f4cd99ce5ed6ec765ab33ede7912c9"
+      },
+      {
+        "path": "types/capability-feedback-rules.d.mts",
+        "sha256": "462b3b34c199b945e62edf130d20006c43c9ad564c286ef4465f0207367a2bfc"
+      },
+      {
+        "path": "types/capability-packet-codec.d.mts",
+        "sha256": "36cdc90aeb5a6bec6ad07f25673e8ceac2da955b383cb153ea1dd6b6ec62b15c"
+      },
+      {
+        "path": "types/capability-packet-rules.d.mts",
+        "sha256": "55f5ef48b616e0b9aea4cd5a158b22609ac70189766db063986e4172e9b06245"
+      },
+      {
+        "path": "types/chain-model.d.mts",
+        "sha256": "84e4cfc0e435a612f83f932f54a61abff8f753c51ce5fd74da49825e469b30ea"
+      },
+      {
+        "path": "types/commands.d.mts",
+        "sha256": "d1d8668f741e01999ae1bf16958190a440da6c04a31a518ce94c30abe9140edd"
+      },
+      {
+        "path": "types/comparison-model.d.mts",
+        "sha256": "7913bf38815b2895e58aa2bf7af5a63a920ffe018f0344b5a70bdeb97621db19"
+      },
+      {
+        "path": "types/demo-workspace.d.mts",
+        "sha256": "c413e4fdcc2895566dcdd4e31b6d1c8c7143e2ddea0a4d63e3d1714bd51a8253"
+      },
+      {
+        "path": "types/index.d.mts",
+        "sha256": "783a3f5f9c63dbd3d19ea350beca73fa6250ea75f28b6bb46bcb6a2b2661fc58"
+      },
+      {
+        "path": "types/scope-contract.d.mts",
+        "sha256": "90cefac89312b4d305b513faaac926982dabefd9e5c96afdf61a8b164e0b3af8"
+      },
+      {
+        "path": "types/task-dispatch-rules.d.mts",
+        "sha256": "6ccb027c90c03ca8b9694cd68c286b978fe3504cbfbe498dd3b5385c7d67ce5c"
+      },
+      {
+        "path": "types/workbench-model.d.mts",
+        "sha256": "b1d287d7f46ce35699dadda9d8d56175d850f4859ead44f78ffd2f4ebf09751d"
+      },
+      {
+        "path": "types/worksite-model.d.mts",
+        "sha256": "267c7a1e9dc72810913a299799780d06590fcadbeb44e100c498112127168440"
+      },
+      {
+        "path": "types/writeback-plan.d.mts",
+        "sha256": "71b3a6bc9d624929ddf81cdeb8a9c3edf849f53b1bd8b844f9d71b9828b1e657"
+      }
+    ]
+  },
+  "scope": "Content schema2, independently versioned canvas, resource bytes separated; full capability/share/Agent/migration compatibility remains in the main task",
+  "verification": "Static type/syntax and consumed artifact identity only; actual full-application E2E tracked by the consuming frontend task.",
+  "revisionReason": "frontend.18 separates the original inputCommandId from each later dispatch receipt; retries preserve the original self-bound input snapshot while current source eligibility is revalidated without display-title drift. Source-only independent review does not imply business or transport acceptance.",
+  "supersedes": {
+    "version": "0.3.0-frontend.17",
+    "reason": "R17-F1 static P2: retry receipt snapshot could rebuild a newer display title against the original input hash.17 failure remains;18 source changes statically reviewed, no new business E2E/Runtime stage/installation."
+  },
+  "acceptanceNote": "Implementation checkpoint; actual manual/source/result journeys, installed main and final complete-product approval are distinct gates.",
+  "nativeRuntimeRequirement": {
+    "contract": "TASK_EXECUTION_GATES_VERSION=1",
+    "sourceCommit": "ab440ecc690cddd18b6b6772ddd5eb930bb0a1ba",
+    "packagedRuntime": "not staged or verified; old Runtime fails new Task execution before model submission; no installed app change"
+  }
+}

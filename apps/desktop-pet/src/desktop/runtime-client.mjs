@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { isReadableProductWorkspace } from './runtime-readiness.mjs'
 
 // Safe fallback for standalone client construction. The packaged desktop
 // host asks the OS for a free loopback port and passes that resolved origin
@@ -20,6 +22,9 @@ const TERMINAL_AGENT_EVENT_TYPES = new Set([
 const NO_NOT_FOUND_FALLBACK = Symbol('no-not-found-fallback')
 const DESKTOP_HOST = 'codex'
 const DESKTOP_HOST_SESSION = 'trace-desktop'
+const CODEX_QUALIFICATION_REQUIRED = 'CODEX_QUALIFICATION_REQUIRED'
+const QUALIFICATION_TIMEOUT_MS = 60_000
+const NATIVE_PRODUCT_RESPONSE_KIND = 'trace.native-product-response@1'
 
 export function resolveCodexExecutable({ env = process.env, platform = process.platform } = {}) {
   const explicit = typeof env.TRACE_CODEX_BIN === 'string' ? env.TRACE_CODEX_BIN.trim() : ''
@@ -51,16 +56,21 @@ export function resolveCodexExecutable({ env = process.env, platform = process.p
   return existing[0]
 }
 
-function findProjectDir(start = process.env.TRACE_PROJECT_DIR || process.cwd()) {
+export function resolveProjectDir(start = process.env.TRACE_PROJECT_DIR || process.cwd(), { allowPlainDirectory = false } = {}) {
   let current = path.resolve(start)
   if (!fs.existsSync(current) || !fs.statSync(current).isDirectory()) throw new Error('当前项目位置不可用，请从项目目录启动 Trace 桌宠')
+  const selected = current
+  // The folder picker is an explicit user decision. Keep that exact working
+  // directory even when a parent folder happens to contain an unrelated
+  // `.git` marker; Codex can work in both Git and non-Git directories.
+  if (allowPlainDirectory) return selected
   while (true) {
     if (fs.existsSync(path.join(current, '.git'))) return current
     const parent = path.dirname(current)
     if (parent === current) break
     current = parent
   }
-  throw new Error('没有找到当前项目，请从项目目录启动 Trace 桌宠，或设置 TRACE_PROJECT_DIR')
+  throw new Error('还没有选择工作项目，请在 Trace 中选择一个文件夹')
 }
 
 function safeProjectName(projectDir) {
@@ -78,8 +88,19 @@ function publicRuntimeError(value, status) {
   const fallback = `Trace 没有完成这次请求（${status}）`
   const message = typeof value?.error?.message === 'string' ? value.error.message.trim() : ''
   if (!message) return fallback
-  if (message.length > 500 || /(?:[A-Za-z]:[\\/]|\/(?:Users|home|var|tmp|private|opt|srv)\/|\b(?:projectDir|contextHash|deliveryId|endpoint|cwd|profileId)\b)/i.test(message)) return fallback
+  if (message.length > 500 || /(?:[A-Za-z]:[\\/]|\/(?:Users|home|var|tmp|private|opt|srv)\/|\b(?:projectDir|contextHash|deliveryId|endpoint|cwd|profileId|pnpm|schema|rpc)\b)/i.test(message)) return fallback
   return message
+}
+
+function runtimeError(value, status) {
+  const error = new Error(publicRuntimeError(value, status))
+  if (typeof value?.error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,80}$/.test(value.error.code)) error.code = value.error.code
+  error.status = status
+  return error
+}
+
+function safeThreadId(value) {
+  return typeof value === 'string' && value.trim() && value.length <= 200 && !/[\0\r\n]/.test(value) ? value.trim() : null
 }
 
 function safeWorkResult(workspace, workId) {
@@ -142,6 +163,7 @@ export function createRuntimeCapabilityClient({
   origin = process.env.TRACE_BACKEND_ORIGIN || DEFAULT_RUNTIME_ORIGIN,
   cloudOrigin = process.env.TRACE_CLOUD_ORIGIN || DEFAULT_CLOUD_ORIGIN,
   projectDir: configuredProjectDir,
+  runtimeRoot = process.env.TRACE_RUNTIME_ROOT,
   fetchImpl = globalThis.fetch,
   cloudFetchImpl = fetchImpl,
   randomId = randomUUID,
@@ -149,16 +171,29 @@ export function createRuntimeCapabilityClient({
   now = Date.now,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   onCodexEvent = null,
+  onSetupProgress = null,
+  qualifyCodexAppServerImpl = null,
+  getCodexThreadId = null,
+  setCodexThreadId = null,
+  getRuntimeStatus = null,
+  retryRuntime = null,
+  runtimeTimeoutMs = 35_000,
+  workspaceTimeoutMs = 35_000,
 } = {}) {
-  const backendOrigin = validateRuntimeOrigin(origin)
+  let backendOrigin = validateRuntimeOrigin(origin)
   const cloudBase = new URL(cloudOrigin)
   if (cloudBase.protocol !== 'https:' || cloudBase.username || cloudBase.password || cloudBase.pathname !== '/' || cloudBase.search || cloudBase.hash) throw new Error('TRACE_CLOUD_ORIGIN must be an HTTPS origin')
   let projectContext
   let selectedProjectDir = configuredProjectDir
+  let hasExplicitProjectDir = typeof configuredProjectDir === 'string' && configuredProjectDir.trim().length > 0
   const repositoryPreflights = new Map()
   const recoveryPreviews = new Map()
   const publicationPreviews = new Map()
   const agentEventSubscriptions = new Map()
+  const codexThreadIds = new Map()
+  let qualificationPromise = null
+  let qualificationController = null
+  let closed = false
   let lastPanelRows = null
   const remember = (map, key, value) => {
     map.set(key, {...value, createdAt: now()})
@@ -170,19 +205,117 @@ export function createRuntimeCapabilityClient({
   }
   const currentProject = () => {
     if (!projectContext) {
-      const projectDir = findProjectDir(selectedProjectDir)
-      projectContext = { projectDir, projectName: safeProjectName(projectDir) }
+      const projectDir = resolveProjectDir(selectedProjectDir, { allowPlainDirectory: hasExplicitProjectDir })
+      projectContext = { projectDir, projectName: safeProjectName(projectDir), repository: fs.existsSync(path.join(projectDir, '.git')) }
     }
     return projectContext
   }
   const setProjectDir = (projectDir) => {
     selectedProjectDir = projectDir
+    hasExplicitProjectDir = true
     projectContext = undefined
     const selected = currentProject()
-    return { connected: true, projectName: selected.projectName, agentLabel: 'Codex', locationLabel: '已选择项目' }
+    return { connected: true, projectName: selected.projectName, repository: selected.repository, agentLabel: 'Codex', locationLabel: selected.repository ? '已选择 Git 项目' : '已选择工作文件夹' }
   }
 
-  async function runtimeRequest(pathname, body, timeoutMs = 35_000, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
+  const setupProgress = (event) => {
+    if (closed || typeof onSetupProgress !== 'function') return
+    const safe = {
+      kind: 'codex-qualification',
+      status: event?.status === 'failed' ? 'failed' : event?.status === 'completed' ? 'completed' : 'running',
+      phase: typeof event?.phase === 'string' && /^[a-z-]{2,40}$/.test(event.phase) ? event.phase : 'checking',
+      message: typeof event?.message === 'string' && event.message.length <= 240 ? event.message : '正在检查 Codex 兼容性…',
+    }
+    try { onSetupProgress(safe) } catch { /* Renderer progress is advisory. */ }
+  }
+
+  function setupError(code, message) {
+    const error = new Error(message)
+    error.code = code
+    return error
+  }
+
+  async function loadPackagedQualifier() {
+    if (!runtimeRoot || !path.isAbsolute(runtimeRoot)) return null
+    const entry = path.join(runtimeRoot, 'native', 'qualify-codex-app-server.mjs')
+    if (!fs.existsSync(entry)) return null
+    try {
+      const module = await import(pathToFileURL(entry).href)
+      return typeof module.qualifyCodexAppServer === 'function' ? module.qualifyCodexAppServer : null
+    } catch {
+      return null
+    }
+  }
+
+  function storedCodexThreadId(workId) {
+    const local = safeThreadId(codexThreadIds.get(workId))
+    if (local) return local
+    if (typeof getCodexThreadId !== 'function') return null
+    try {
+      const persisted = safeThreadId(getCodexThreadId(workId))
+      if (persisted) codexThreadIds.set(workId, persisted)
+      return persisted
+    } catch { return null }
+  }
+
+  function rememberCodexThreadId(workId, run) {
+    const threadId = safeThreadId(run?.runtime?.threadId || run?.threadId)
+    if (!threadId) return null
+    const previous = codexThreadIds.get(workId)
+    codexThreadIds.set(workId, threadId)
+    if (threadId !== previous) {
+      try { setCodexThreadId?.(workId, threadId) } catch { /* Local resume state is best effort. */ }
+    }
+    return threadId
+  }
+
+  function withWorkThreadId(work, workId) {
+    const threadId = storedCodexThreadId(workId)
+    return threadId ? { ...work, threadId } : work
+  }
+
+  async function qualifyCodexAppServer() {
+    if (qualificationPromise) return qualificationPromise
+    qualificationPromise = (async () => {
+      qualificationController = new AbortController()
+      const timer = setTimeout(() => qualificationController?.abort(), QUALIFICATION_TIMEOUT_MS)
+      try {
+        setupProgress({ phase: 'starting', message: '正在准备一次性 Codex 兼容性检查…' })
+        const qualifier = qualifyCodexAppServerImpl || await loadPackagedQualifier()
+        if (typeof qualifier !== 'function') throw setupError('CODEX_QUALIFIER_UNAVAILABLE', '当前桌面版本无法完成首次 Codex 检查，请更新 Trace 后重试。')
+        const executable = resolveCodexExecutable()
+        const projectCwd = projectContext?.projectDir || selectedProjectDir || process.cwd()
+        setupProgress({ phase: 'checking', message: '正在验证 Codex 登录状态与连接能力（不会运行模型）…' })
+        const result = await qualifier({
+          ...(executable ? { executable, command: executable } : {}),
+          projectCwd,
+          timeoutMs: QUALIFICATION_TIMEOUT_MS,
+          signal: qualificationController.signal,
+        })
+        if (!result || result.status !== 'compatible' || !Array.isArray(result.result?.checks) || !result.result.checks.includes('no-model-turn')) {
+          throw setupError('CODEX_QUALIFICATION_FAILED', 'Codex 兼容性检查没有通过，请确认 Codex 已安装并登录后重试。')
+        }
+        setupProgress({ status: 'completed', phase: 'complete', message: 'Codex 兼容性检查已完成，正在重新确认连接…' })
+        return { status: 'completed' }
+      } catch (error) {
+        const code = error?.name === 'AbortError' || qualificationController?.signal.aborted ? 'CODEX_QUALIFICATION_TIMEOUT' : (error?.code || 'CODEX_QUALIFICATION_FAILED')
+        const message = code === 'CODEX_QUALIFIER_UNAVAILABLE'
+          ? '当前桌面版本无法完成首次 Codex 检查，请更新 Trace 后重试。'
+          : code === 'CODEX_QUALIFICATION_TIMEOUT'
+            ? 'Codex 兼容性检查超时，请重试。'
+            : 'Codex 兼容性检查没有通过，请确认 Codex 已安装并登录后重试。'
+        setupProgress({ status: 'failed', phase: 'failed', message })
+        throw setupError(code, message)
+      } finally {
+        clearTimeout(timer)
+        qualificationController = null
+        qualificationPromise = null
+      }
+    })()
+    return qualificationPromise
+  }
+
+  async function runtimeRequest(pathname, body, timeoutMs = runtimeTimeoutMs, notFoundFallback = NO_NOT_FOUND_FALLBACK) {
     const url = new URL(pathname, backendOrigin)
     if (url.origin !== backendOrigin || !url.pathname.startsWith('/api/')) throw new Error('Unsupported Trace Runtime path')
     let response
@@ -206,7 +339,7 @@ export function createRuntimeCapabilityClient({
     if (response.status === 404 && notFoundFallback !== NO_NOT_FOUND_FALLBACK) return notFoundFallback
     let value
     try { value = JSON.parse(text) } catch { throw new Error('Trace 本机能力没有正确响应，请重新打开 Trace 后再试') }
-    if (!response.ok) throw new Error(publicRuntimeError(value, response.status))
+    if (!response.ok) throw runtimeError(value, response.status)
     return value
   }
 
@@ -670,7 +803,7 @@ export function createRuntimeCapabilityClient({
       response = await fetchImpl(url, {
         method,
         redirect: 'error',
-        signal: AbortSignal.timeout(35_000),
+        signal: AbortSignal.timeout(workspaceTimeoutMs),
         headers: {
           origin: backendOrigin,
           accept: 'application/json',
@@ -693,7 +826,7 @@ export function createRuntimeCapabilityClient({
       try {
         const value = JSON.parse(text)
         if (value && typeof value === 'object' && value.storage && typeof value.storage === 'object') {
-          value.storage = { kind: value.storage.kind || 'sqlite', label: 'Trace 桌面端本机空间' }
+          value.storage = { kind: value.storage.kind || 'sqlite', label: 'Trace 桌面端本机空间', features: Array.isArray(value.storage.features) ? value.storage.features.filter(feature=>['capability-packet-v1','capability-feedback-v1','capability-feedback-result-v1','message-reference-scope-v1'].includes(feature)) : [] }
         }
         text = JSON.stringify(value)
       } catch {
@@ -774,6 +907,32 @@ export function createRuntimeCapabilityClient({
       }
     }
     if (request.operation === 'workspace.request') return nativeWorkspaceRequest(request.pathname, request.method || 'GET', request.body)
+    if (request.operation === 'workbench.request') {
+      const pathname=request.pathname,method=request.method||'GET'
+      const readable=pathname==='/api/product/workspace'||pathname==='/api/product/canvases'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}$/.test(pathname)||/^\/api\/product\/commands\/[a-zA-Z0-9_-]{1,200}$/.test(pathname)
+      const writable=pathname==='/api/product/commands'||/^\/api\/product\/canvases\/[a-zA-Z0-9_-]{1,128}\/commands$/.test(pathname)
+      if(!(method==='GET'&&readable||method==='POST'&&writable))throw new Error('不支持这个工作台操作')
+      const body=method==='POST'?JSON.stringify(request.body):undefined
+      if(body!==undefined&&Buffer.byteLength(body)>8*1024*1024)throw new Error('工作台命令超过8 MiB')
+      const response=await fetchImpl(new URL(pathname,backendOrigin),{method,redirect:'error',signal:AbortSignal.timeout(runtimeTimeoutMs),headers:{origin:backendOrigin,'content-type':'application/json'},...(body===undefined?{}:{body})})
+      const text=await response.text();if(Buffer.byteLength(text)>8*1024*1024)throw new Error('工作台响应超过8 MiB')
+      let value;try{value=JSON.parse(text)}catch{throw new Error('工作台响应不是有效JSON')}
+      if(!response.ok)return{kind:NATIVE_PRODUCT_RESPONSE_KIND,ok:false,status:response.status,error:value.error}
+      if(value.storage)value.storage={kind:value.storage.kind||'sqlite',label:'Trace 桌面端本机空间',features:Array.isArray(value.storage.features)?value.storage.features.filter(feature=>['capability-packet-v1','capability-feedback-v1','capability-feedback-result-v1','message-reference-scope-v1'].includes(feature)):[]}
+      return value
+    }
+    if (request.operation === 'product.resource.save' || request.operation === 'product.resource.read') {
+      const save=request.operation==='product.resource.save'
+      const bytes=save?(request.bytes instanceof Uint8Array?request.bytes:request.bytes instanceof ArrayBuffer?new Uint8Array(request.bytes):null):null
+      if(save&&(!bytes||bytes.byteLength>256*1024*1024||typeof request.mime!=='string'||!/^\w[\w.+-]*\/[\w.+-]+$/.test(request.mime)))throw new Error('原件数据或类型不正确')
+      if(!save&&(typeof request.resourceId!=='string'||!/^[a-f0-9]{64}$/.test(request.resourceId)))throw new Error('原件身份不正确')
+      const pathname=save?'/api/product/resources':`/api/product/resources/${request.resourceId}/content`
+      const response=await fetchImpl(new URL(pathname,backendOrigin),{method:save?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(30000),headers:{origin:backendOrigin,...(save?{'content-type':request.mime}:{})},...(save?{body:bytes}:{})})
+      if(!response.ok){const value=await response.json();return{kind:NATIVE_PRODUCT_RESPONSE_KIND,ok:false,status:response.status,error:value.error}}
+      if(save)return response.json()
+      const body=await response.arrayBuffer();if(body.byteLength>256*1024*1024)throw new Error('原件超过256 MiB')
+      return {bytes:new Uint8Array(body),mime:response.headers.get('content-type')||'application/octet-stream'}
+    }
     if (request.operation === 'product.command') {
       if (request.protocolVersion !== 1 || !Array.isArray(request.operations) || request.operations.length < 1 || request.operations.length > 256) throw new Error('产品命令不完整')
       const commandId = requireId(request.commandId, '产品命令')
@@ -781,35 +940,99 @@ export function createRuntimeCapabilityClient({
       // Keep the desktop bridge as a thin, authenticated transport. Product
       // Workspace remains the authority for operation schemas, CAS and
       // idempotency; the renderer never sends a whole host snapshot here.
-      return runtimeRequest('/api/product/commands', {
-        protocolVersion: 1,
-        commandId,
-        expectedRevision: request.expectedRevision,
-        operations: request.operations,
-      })
+      try {
+        return await runtimeRequest('/api/product/commands', {
+          protocolVersion: 1,
+          commandId,
+          expectedRevision: request.expectedRevision,
+          operations: request.operations,
+        })
+      } catch (error) {
+        // Electron serializes thrown Errors across IPC without custom status
+        // and code fields. Preserve known Runtime HTTP failures as a bounded
+        // data envelope so the product window can distinguish a 409 conflict
+        // from an offline bridge instead of showing a false connection error.
+        if (Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599) {
+          return {
+            kind: NATIVE_PRODUCT_RESPONSE_KIND,
+            ok: false,
+            status: error.status,
+            error: {
+              ...(typeof error.code === 'string' ? { code: error.code } : {}),
+              message: typeof error.message === 'string' ? error.message : 'Trace 没有完成这次保存。',
+            },
+          }
+        }
+        throw error
+      }
     }
     if (request.operation === 'workspace.summary') return readObservationSummary()
+    if (request.operation === 'runtime.heartbeat') {
+      const workspace = await runtimeRequest('/api/product/workspace', undefined, 4_000)
+      if (!isReadableProductWorkspace(workspace)) throw new Error('Trace 本机内容状态无效')
+      return { status: 'ok' }
+    }
     if (request.operation === 'codex.events') return readCodexEvents()
     if (request.operation === 'workspace.capture') return captureObservation(request.text, request.source)
     if (request.operation === 'host.panel.read') return readRuntimePanel()
     if (request.operation === 'host.panel.action') return runtimePanelAction(request)
     if (request.operation === 'setup.status') {
-      const capabilities = await runtimeRequest('/api/agent/capabilities')
+      const runtime = typeof getRuntimeStatus === 'function' ? getRuntimeStatus() : null
+      if (runtime?.connected === false) {
+        return {
+          runtime: { connected: false, bundled: runtime.bundled === true, state: runtime.state || 'failed', message: runtime.message || 'Trace 本机内容服务暂时不可用，请重试。' },
+          project: { connected: false },
+          codex: { available: false, checked: false, profileId: null, label: 'Codex' },
+        }
+      }
+      let capabilities
+      try { capabilities = await runtimeRequest('/api/agent/capabilities') }
+      catch (error) {
+        // A connected Product listener may still have Agent disabled (for
+        // example when Codex is not installed).  Preserve the runtime
+        // client's safe transport error for callers that have no authoritative
+        // status yet; only degrade Agent when the desktop has confirmed that
+        // the bundled Product listener is healthy.
+        if (runtime?.connected === true) capabilities = { enabled: false, profiles: [] }
+        else throw error
+      }
       const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
       let project
       try { project = currentProject() } catch { project = null }
       return {
-        runtime: { connected: true, bundled: process.env.TRACE_BUNDLED_RUNTIME === '1' },
-        project: project ? { connected: true, name: project.projectName } : { connected: false },
+        runtime: { connected: true, bundled: runtime?.bundled === true || process.env.TRACE_BUNDLED_RUNTIME === '1', ...(runtime?.state ? { state: runtime.state } : {}) },
+        project: project ? { connected: true, name: project.projectName, repository: project.repository } : { connected: false },
         codex: { available: Boolean(codex), checked: false, profileId: codex?.profileId || null, label: codex?.label || 'Codex' },
       }
+    }
+    if (request.operation === 'setup.runtime.retry') {
+      if (typeof retryRuntime !== 'function') throw new Error('Trace 本机内容服务暂时不可用，请重新启动 Trace 后重试')
+      return retryRuntime()
     }
     if (request.operation === 'setup.codex.check') {
       const capabilities = await runtimeRequest('/api/agent/capabilities')
       const codex = capabilities.profiles?.find((profile) => profile.kind === 'codex')
       if (!codex) throw new Error('这台设备还没有可用的 Codex 执行器')
-      const checked = await runtimeRequest('/api/agent/check', { profileId: codex.profileId }, 45_000)
-      return { ready: checked.authenticated === true, authenticated: checked.authenticated === true, version: checked.version || null, label: codex.label || 'Codex' }
+      let qualification = null
+      let checked
+      try {
+        checked = await runtimeRequest('/api/agent/check', { profileId: codex.profileId }, 45_000)
+      } catch (error) {
+        if (error?.code !== CODEX_QUALIFICATION_REQUIRED) throw error
+        qualification = await qualifyCodexAppServer()
+        try {
+          checked = await runtimeRequest('/api/agent/check', { profileId: codex.profileId }, 45_000)
+        } catch {
+          throw setupError('CODEX_CHECK_FAILED', 'Codex 连接检查没有通过，请重试。')
+        }
+      }
+      return {
+        ready: checked.authenticated === true,
+        authenticated: checked.authenticated === true,
+        version: checked.version || null,
+        label: codex.label || 'Codex',
+        ...(qualification ? { qualification } : {}),
+      }
     }
     if (request.operation === 'setup.codex.connect') {
       const runtimeRoot = process.env.TRACE_RUNTIME_ROOT
@@ -866,6 +1089,11 @@ export function createRuntimeCapabilityClient({
       if (!submitted.run?.runId) throw new Error('Trace Runtime did not return a run identity')
       beginAgentEventSubscription(submitted.run.runId)
       return { ...submitted.run, ...(sources ? { sources: { source: sources.source, items: sources.items } } : {}) }
+    }
+    if (request.operation === 'agent.run.receipt') {
+      const runId=requireId(request.runId,'Agent 运行'),after=request.after??0;
+      if(!/^[a-zA-Z0-9-]{1,200}$/.test(runId)||!Number.isSafeInteger(after)||after<0)throw new Error('运行身份或事件游标无效');
+      return runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}/receipt?after=${after}`,undefined,10_000);
     }
     if (request.operation === 'agent.run.read') {
       const runId = requireId(request.runId, 'Agent 运行')
@@ -947,11 +1175,23 @@ export function createRuntimeCapabilityClient({
       return { ...run, ...(sources ? { sources: { source: sources.source, items: sources.items } } : {}) }
     }
     if (request.operation === 'work.environment') {
+      let projectName
       try {
-        const { projectName } = currentProject()
-        return { connected: true, projectName, agentLabel: 'Codex', locationLabel: '当前项目' }
+        projectName = currentProject().projectName
       } catch (error) {
         return { connected: false, projectName: '当前项目', agentLabel: 'Codex', locationLabel: '等待识别', error: { message: error instanceof Error ? error.message : '当前项目不可用' } }
+      }
+      try {
+        const capabilities = await runtimeRequest('/api/agent/capabilities', undefined, 4_000)
+        const profile = capabilities?.profiles?.find((item) => item.kind === 'codex')
+        if (capabilities?.enabled !== true || !profile) return { connected: false, projectName, agentLabel: 'Codex', locationLabel: 'Agent 暂不可用' }
+        // The switch/profile alone do not prove that the installed Codex
+        // executable still qualifies or the account can actually connect.
+        const check = await runtimeRequest('/api/agent/check', { profileId: profile.profileId }, 38_000)
+        const connected = check?.authenticated === true
+        return { connected, projectName, agentLabel: 'Codex', locationLabel: connected ? '当前项目' : 'Agent 暂不可用' }
+      } catch (error) {
+        return { connected: false, projectName, agentLabel: 'Codex', locationLabel: 'Agent 暂不可用', error: { message: error instanceof Error ? error.message : '本机 Agent 暂不可用' } }
       }
     }
     if (request.operation === 'work.read') {
@@ -968,12 +1208,40 @@ export function createRuntimeCapabilityClient({
       const note = typeof request.note === 'string' && request.note.length <= 16_000 ? request.note.trim() : ''
       const role = ['reference', 'trial'].includes(request.role) ? request.role : 'reference'
       const source = ['none', 'zhihu', 'global'].includes(request.source) ? request.source : 'none'
+      const threadId = request.threadId === undefined
+        ? storedCodexThreadId(workId)
+        : safeThreadId(request.threadId)
+      if (request.threadId !== undefined && !threadId) throw new Error('Codex 会话标识不完整')
       const sessionId = `trace-desktop:${workId}`
 
       let workspace = await runtimeRequest('/api/product/workspace')
       const existingWork = workspace.host?.worksite?.works?.[workId]
       const existingMatter = workspace.host?.chain?.matters?.find((item) => item.id === matterId)
-      if (existingMatter && existingMatter.originalText !== text) throw new Error('同一事项已经保存了不同的原话，未覆盖')
+      // The handoff may select the saved understanding rather than the
+      // original capture. Only a *new* work would need to recreate a missing
+      // matter from this text; an existing work owns its selected intake.
+      if (!existingWork && existingMatter && existingMatter.originalText !== text) throw new Error('同一事项已经保存了不同的原话，未覆盖')
+      if (existingWork && (existingWork.project !== projectName || existingWork.agent !== 'Codex')) {
+        throw new Error('这次工作属于另一个执行位置，未重新绑定')
+      }
+      if (existingWork && !workspace.host?.worksite?.sessions?.[workId]?.intake?.some((item) => item.matterId === matterId && item.sourceText === text)) {
+        throw new Error('这次工作带入内容不一致，未发送')
+      }
+      let visible = safeWorkResult(workspace, workId)
+      if (visible?.status === 'returned_for_review' && visible.result) return withWorkThreadId(visible, workId)
+      // Do not create a work or a Codex receive receipt if no Agent can run.
+      // The UI's separate "save work preparation" command remains available.
+      const capabilities = await runtimeRequest('/api/agent/capabilities')
+      if (!capabilities.enabled) throw new Error('本机 Agent 尚未启用')
+      const requestedProfile = typeof request.profileId === 'string'
+        ? capabilities.profiles?.find((profile) => profile.profileId === request.profileId)
+        : null
+      const profile = requestedProfile?.kind === 'codex'
+        ? requestedProfile
+        : capabilities.profiles?.find((item) => item.kind === 'codex')
+      if (!profile) throw new Error('本机没有可用的 Codex 执行器')
+      const check = await runtimeRequest('/api/agent/check', { profileId: profile.profileId }, 38_000)
+      if (check?.authenticated !== true) throw new Error('本机 Codex 尚未连接，工作未发送')
       if (!existingWork) {
         const operations = []
         if (!existingMatter) operations.push({ type: 'capture.create', matterId, text })
@@ -988,12 +1256,7 @@ export function createRuntimeCapabilityClient({
           expectedRevision: workspace.revision,
           operations,
         })
-      } else if (existingWork.project !== projectName || existingWork.agent !== 'Codex') {
-        throw new Error('这次工作属于另一个执行位置，未重新绑定')
       }
-
-      let visible = safeWorkResult(workspace, workId)
-      if (visible?.status === 'returned_for_review' && visible.result) return visible
 
       let delivery = workspace.host?.worksite?.sessions?.[workId]?.codexDelivery
       if (!delivery) {
@@ -1010,16 +1273,6 @@ export function createRuntimeCapabilityClient({
       workspace = await runtimeRequest('/api/product/workspace')
       const matterSession = workspace.host?.chain?.sessions?.[matterId]
       if (!matterSession) throw new Error('本次事项没有可交给 Codex 的上下文')
-      const capabilities = await runtimeRequest('/api/agent/capabilities')
-      if (!capabilities.enabled) throw new Error('本机 Agent 尚未启用')
-      const requestedProfile = typeof request.profileId === 'string'
-        ? capabilities.profiles?.find((profile) => profile.profileId === request.profileId)
-        : null
-      const profile = requestedProfile?.kind === 'codex'
-        ? requestedProfile
-        : capabilities.profiles?.find((item) => item.kind === 'codex')
-      if (!profile) throw new Error('本机没有可用的 Codex 执行器')
-
       const sources = await remoteSourceContext(source, `${title} ${text}`)
       const submitted = await runtimeRequest('/api/agent/runs', {
         protocolVersion: 1,
@@ -1031,9 +1284,11 @@ export function createRuntimeCapabilityClient({
         purpose: 'discuss',
         profileId: profile.profileId,
         input: `完成这次工作：${title}\n\n请只返回实际得到的结果、你的解释与仍需确认的条件；不要自动修改用户的理解。${sources ? `\n\n${sources.prompt}` : ''}`,
+        ...(threadId ? { threadId } : {}),
       })
       const runId = submitted.run?.runId
       if (!runId) throw new Error('Codex 没有返回本次运行')
+      rememberCodexThreadId(workId, submitted.run)
       beginAgentEventSubscription(runId)
       const deadline = now() + 190_000
       let run = submitted.run
@@ -1041,6 +1296,7 @@ export function createRuntimeCapabilityClient({
         if (now() >= deadline) throw new Error('等待 Codex 返回结果超时；可以稍后重新接回')
         await wait(500)
         run = await runtimeRequest(`/api/agent/runs/${encodeURIComponent(runId)}`, undefined, 10_000)
+        rememberCodexThreadId(workId, run)
       }
       if (run.status !== 'succeeded' || !run.result?.answer) throw new Error(run.error?.message || `Codex 本次工作未完成（${run.status}）`)
 
@@ -1065,10 +1321,22 @@ export function createRuntimeCapabilityClient({
       workspace = await runtimeRequest('/api/product/workspace')
       visible = safeWorkResult(workspace, workId)
       if (!visible?.result || returned.receipt?.status !== 'returned_for_review') throw new Error('Codex 结果尚未进入 Trace 复核区')
-      return visible
+      return withWorkThreadId(visible, workId)
     }
     throw new Error('Unsupported capability operation')
   }
 
-  return { origin: backendOrigin, request: capabilityRequest, setProjectDir, subscribeAgentRun }
+  function close() {
+    closed = true
+    qualificationController?.abort()
+    for (const subscription of agentEventSubscriptions.values()) subscription.controller.abort()
+    agentEventSubscriptions.clear()
+  }
+
+  function setRuntimeOrigin(nextOrigin) {
+    backendOrigin = validateRuntimeOrigin(nextOrigin)
+    return backendOrigin
+  }
+
+  return { get origin() { return backendOrigin }, request: capabilityRequest, setRuntimeOrigin, setProjectDir, subscribeAgentRun, close }
 }

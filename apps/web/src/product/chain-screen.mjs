@@ -1,5 +1,6 @@
 // Runtime derivative of artifacts/trace-one-thing-v1-20260915/ui; original assets/layout retained.
-import {escapeHTML as h, icon, mark, patchDOM, selectedRange} from './chain-helpers.mjs';
+import {escapeHTML as h, icon, patchDOM, selectedRange} from './chain-helpers.mjs';
+import {mark} from '../home-icons.js';
 import {registerFont} from './resource-cache.mjs';
 
 const TITLES = {resume:'接着这里',discussion:'接着这里',understanding:'',reentry:'这次带着新材料回来',revised:'接着这里'};
@@ -30,6 +31,20 @@ const sourceRole = (source, matter) => {
   const relation = (matter?.observations || []).find(item => item.sourceId === source?.id)?.relation;
   return relation ? `作为“${RELATIONS[relation] || relation}”对照` : '保留为原现场';
 };
+
+export function discussionText(discussion={}) {
+  return discussion.text ?? [
+    ...(discussion.cases || []).map(item => item.text),
+    ...(discussion.messages || []).map(item => item.text),
+    discussion.possibility,
+  ].filter(Boolean).join('\n\n');
+}
+
+export function discussionSelectionAttributes(text) {
+  return String(text ?? '').trim()
+    ? 'data-selection="discussion" tabindex="0" aria-label="可选择的讨论正文"'
+    : 'data-selection-placeholder="discussion" aria-label="当前没有讨论"';
+}
 
 /** Presentational module; the reducer owns all domain state. */
 export function mountChainScreen({root, view, onAction, onHome, onMatters, onBack, onWorkspaces, assets={}, services={}, demo=false}) {
@@ -84,17 +99,17 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
     const original=`<section class="chain-context-row"><span class="chain-round">${icon('file')}</span><div><h2>${hasHistory()?'当时留下的原表达':'刚才留下的原话'}</h2><p data-selection="originalText" data-key="original-expression" tabindex="0" aria-label="可选择的原表达">${h(originalText())}</p>${source?sourceEvidence(source,m):''}</div></section>`;
     const understanding=m.understanding&&!fresh?row(`我的理解 · v${m.understandingVersion??0}`,m.understanding,'pen',btn('understanding','继续修改','pen','subtle')):'';
     const relations=(m.observations||[]).length&&!fresh?`<section class="chain-context-row"><span class="chain-round">${icon('link')}</span><div><h2>已经接到这里的材料</h2>${m.observations.map(o=>`<p>${h(RELATIONS[o.relation]||o.relation||'关联')} · ${h(o.text||getSource(o.sourceId)?.title||'已保留材料')}</p>`).join('')}${btn('provenance','查看关联与来路','file','subtle')}</div></section>`:'';
-    return common(`<div class="chain-panel-scroll">${fresh?`<div class="chain-fresh">本次未带入旧理解；原记录仍可按需查看。${btn('resume-context','恢复使用旧理解','undo','bare')}</div>`:original}${context.stop?row('上次停在这里',context.stop,'stop'):!fresh&&!hasHistory()?'<p class="chain-footnote">还没有形成理解。可以继续写，也可以直接选中原话找个对照。</p>':''}${understanding}${relations}</div><div class="chain-panel-actions">${btn('comparison','找个对照','balance')}${btn('understanding','我想先自己写','pen')}${btn('discussion','继续写一句','message','subtle')}${hasHistory()?btn(fresh?'resume-context':'fresh',fresh?'恢复使用旧理解':'这次先不带入旧理解',null,'text-link'):''}</div>`);
+    return common(`<div class="chain-panel-scroll">${fresh?`<div class="chain-fresh">本次未带入旧理解；原记录仍可按需查看。${btn('resume-context','恢复使用旧理解','undo','bare')}</div>`:original}${context.stop?row('上次停在这里',context.stop,'stop'):!fresh&&!hasHistory()?'<p class="chain-footnote">还没有形成理解。补充原话会单独保留；写下理解需要你再确认保存。也可以选中原话找个对照。</p>':''}${understanding}${relations}</div><div class="chain-panel-actions">${btn('comparison','找个对照','balance')}${btn('understanding','写下我的理解','pen')}${btn('discussion','补充原话','message','subtle')}${hasHistory()?btn(fresh?'resume-context':'fresh',fresh?'恢复使用旧理解':'这次先不带入旧理解',null,'text-link'):''}</div>`);
   }
   function discussion() {
     const d=current.discussion||{};
-    const text=d.text ?? [...(d.cases||[]).map(x=>x.text),...(d.messages||[]).map(x=>x.text),d.possibility].filter(Boolean).join('\n\n');
-    return common(`<div class="chain-panel-scroll"><div class="chain-section-heading"><span class="chain-round">${icon('balance')}</span><h2>${d.cases?.length?'换个情形，自己判断':'围绕这件事继续写'}</h2>${d.cases?.length ? '<span class="chain-amber-label">假设情形 · 不是实际案例</span>' : ''}</div><div class="chain-discussion-text" data-key="discussion-text" data-selection="discussion" tabindex="0" aria-label="可选择的讨论正文">${(text || '当前没有讨论。写下自己的问题即可开始。').split('\n\n').map((part,i)=>`${i?'<span class="chain-text-separator">\n\n</span>':''}<span class="chain-discussion-block">${h(part)}</span>`).join('')}</div>${current.focus?.field==='discussion' ? `<div class="chain-selection-actions" data-key="selection-actions">${btn('focus-ask','围绕这句问','message','compact')}${btn('focus-understanding','接到我的理解','link','compact')}${btn('branch','先留个旁支','branch','compact')}</div>`:''}<p class="chain-footnote">选中一段文字后，可以围绕具体位置继续。${d.possibility ? '这是示例启发，不是模型实时回复。' : ''}</p></div><div class="chain-panel-actions">${btn('comparison','找个对照','balance','subtle',current.selectedId?'':'disabled')}${btn('understanding','我想先自己写','pen','subtle')}</div>`);
+    const text=discussionText(d);
+    return common(`<div class="chain-panel-scroll"><div class="chain-section-heading"><span class="chain-round">${icon('balance')}</span><h2>${d.cases?.length?'换个情形，自己判断':'围绕这件事继续写'}</h2>${d.cases?.length ? '<span class="chain-amber-label">假设情形 · 不是实际案例</span>' : ''}</div><div class="chain-discussion-text" data-key="discussion-text" ${discussionSelectionAttributes(text)}>${(text || '当前没有讨论。写下自己的问题即可开始。').split('\n\n').map((part,i)=>`${i?'<span class="chain-text-separator">\n\n</span>':''}<span class="chain-discussion-block">${h(part)}</span>`).join('')}</div>${current.focus?.field==='discussion' ? `<div class="chain-selection-actions" data-key="selection-actions">${btn('focus-ask','围绕这句问','message','compact')}${btn('focus-understanding','接到我的理解','link','compact')}${btn('branch','先留个旁支','branch','compact')}</div>`:''}<p class="chain-footnote">${text.trim() ? '选中一段文字后，可以围绕具体位置继续。' : '写下自己的问题后，可以围绕具体位置继续。'}${d.possibility ? '这是示例启发，不是模型实时回复。' : ''}</p></div><div class="chain-panel-actions">${btn('comparison','找个对照','balance','subtle',current.selectedId?'':'disabled')}${btn('understanding','写下我的理解','pen','subtle')}</div>`);
   }
   function understanding() {
     const m=current.matter||{}, suggestion=current.suggestion;
     const saved=m.understandingDraft===m.understanding;
-    return common(`<div class="chain-editor-heading"><span class="chain-round">${icon('file')}</span><h2>我的理解</h2><span class="chain-muted">个人理解 · ${!m.understanding&&!m.understandingDraft?'尚未写下':saved?`已保存 · v${m.understandingVersion??0}`:'草稿 · 尚未确认为当前理解'}</span><span class="chain-editor-truth">尚未作为工作要求</span></div><div class="chain-editor" data-key="editor"><div class="chain-editor-toolbar"><span>纯文本编辑</span><span>选中一句，提出局部修改</span>${btn('suggest','建议修改','pen','compact',current.focus?.field==='understanding'?'':'disabled')}${current.undo?.suggestion ? btn('undo-suggestion','撤销局部修改','undo','compact'):''}</div>${field('understanding',m.understandingDraft,'暂无已保存的理解，可以直接写。','chain-understanding-input','data-selection="understanding" spellcheck="false"')}<div class="chain-editor-sources">${(m.sources||[]).slice(0,2).map(s=>btn('source',s.title,'file','subtle',`data-source="${h(s.id)}"`)).join('')}</div>${suggestion && ['pending','stale'].includes(suggestion.status) ? `<aside class="chain-suggestion" data-key="suggestion"><h3>${icon('bulb')}建议修改 · 只改这一处</h3><p><strong>原句：</strong>${h(suggestion.original)}</p><p><strong>建议：</strong>${h(suggestion.replacement)}</p>${suggestion.status==='stale'?'<p class="chain-amber-label">局部建议已过期，请重新选择。</p>':''}<div>${btn('accept-suggestion','接受这一处',null,'primary compact',suggestion.status==='stale'?'disabled':'')}${btn('self-edit','自己改',null,'compact')}${btn('dismiss-suggestion','放弃建议',null,'compact')}</div></aside>`:''}</div><label class="chain-stop-editor">未决停点${field('stop',m.stopDraft ?? m.stop,'还没分清什么？留一句给下次。','chain-stop-input','rows="1"')}</label><div class="chain-panel-actions">${btn('save-understanding','保存我的理解','check','primary')}${btn('handoff','带去用','link')}${btn('comparison','找个对照','balance','subtle',current.selectedId?'':'disabled')}<span class="chain-footnote">保存理解不自动成为工作要求。</span></div>`,{wide:true,compose:false});
+    return common(`<div class="chain-editor-heading"><span class="chain-round">${icon('file')}</span><h2>我的理解</h2><span class="chain-muted">个人理解 · ${!m.understanding&&!m.understandingDraft?'尚未写下':saved?`已保存 · v${m.understandingVersion??0}`:'草稿 · 尚未确认为当前理解'}</span><span class="chain-editor-truth">尚未作为工作要求</span></div><div class="chain-editor" data-key="editor"><div class="chain-editor-toolbar"><span>纯文本编辑</span><span>选中一句，提出局部修改</span>${btn('suggest','建议修改','pen','compact',current.focus?.field==='understanding'?'':'disabled')}${current.undo?.suggestion ? btn('undo-suggestion','撤销局部修改','undo','compact'):''}</div>${field('understanding',m.understandingDraft,'暂无已保存的理解，可以直接写。','chain-understanding-input','data-selection="understanding" spellcheck="false"')}<div class="chain-editor-sources">${(m.sources||[]).slice(0,2).map(s=>btn('source',s.title,'file','subtle',`data-source="${h(s.id)}"`)).join('')}</div>${suggestion && ['pending','stale'].includes(suggestion.status) ? `<aside class="chain-suggestion" data-key="suggestion"><h3>${icon('bulb')}建议修改 · 只改这一处</h3><p><strong>原句：</strong>${h(suggestion.original)}</p><p><strong>建议：</strong>${h(suggestion.replacement)}</p>${suggestion.status==='stale'?'<p class="chain-amber-label">局部建议已过期，请重新选择。</p>':''}<div>${btn('accept-suggestion','接受这一处',null,'primary compact',suggestion.status==='stale'?'disabled':'')}${btn('self-edit','自己改',null,'compact')}${btn('dismiss-suggestion','放弃建议',null,'compact')}</div></aside>`:''}</div><label class="chain-stop-editor">未决停点${field('stop',m.stopDraft ?? m.stop,'还没分清什么？留一句给下次。','chain-stop-input','rows="1"')}</label><div class="chain-panel-actions">${btn('save-understanding','保存我的理解','check','primary')}${btn('handoff','带去用','link')}${btn('comparison','找个对照','balance','subtle',current.selectedId?'':'disabled')}<span class="chain-footnote">原话会保留；理解可以再改，也不会自动成为工作要求。</span></div>`,{wide:true,compose:false});
   }
   function comparison() {
     const c=current.comparison, source=getSource(c?.sourceId)||firstSource();
@@ -111,7 +126,10 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   }
   function handoff() {
     const m=current.matter||{}, ho=current.handoff||{}, dest=ho.destination||{};
-    return `<main class="chain-handoff-layout" data-key="main"><section class="chain-handoff-context"><div class="chain-heading"><h1>我的理解<b>。</b></h1><p>个人草稿 · ${m.understandingDraft===m.understanding&&m.understanding?'已保存':'草稿 · 尚未确认为当前理解'}</p></div><div class="chain-glass chain-handoff-summary">${row('',m.understanding || '暂无已保存的理解，可以直接写。')}${row('还没分清',m.stop || '尚未留下停点。','stop')}${current.incoming?.text ? `<div class="chain-inference">${icon('bulb')}这次带来：${h(current.incoming.text)}</div>`:''}</div>${composer('先写下这次准备怎样尝试……')}</section><section class="chain-handoff-side chain-glass"><div class="chain-side-heading"><h1>带去这次工作</h1>${btn('back','关闭','close','icon-only')}</div><div class="chain-panel-scroll"><section class="chain-destination-summary" aria-label="工作去向"><span class="chain-native-mark">C›_</span><div><strong>${h(dest.agent||'Codex')}</strong><span>${current.nativeConnected?'当前项目已自动识别':'启动桌宠后自动识别当前项目'}</span></div><small>不会把项目路径、登录信息或系统参数放进页面。</small></section><label class="chain-label">这次请它做什么${smallInput('task',dest.task,'例如：核对条件并给出可复核结果')}</label><label class="chain-label">选中的内容${field('handoff-text',ho.selectedText,'选择这次实际要带入的文字','chain-handoff-text','rows="3"')}<small>来源：${h(title())}</small></label><fieldset class="chain-role"><legend>我希望这次</legend>${[['trial','这次准备试','pen'],['reference','作为参考','file'],['exclude','这次不用','no']].map(([key,label,name])=>btn('role',label,name,ho.role===key?'selected':'',`data-role="${key}" aria-pressed="${ho.role===key}"`)).join('')}</fieldset><label class="chain-label">补充说明（可选）${field('handoff-note',ho.note,'想观察什么，或不希望怎样使用？','chain-handoff-note','rows="2"')}</label><label class="chain-label">使用范围<select class="chain-field" data-field="scope" aria-label="使用范围"><option value="current-task">只用于这次工作</option></select><small>不会自动变成长期要求。</small></label></div><footer class="chain-handoff-actions">${btn('confirm-handoff',current.nativeConnected&&/^Codex(?:\s|$|原生)/i.test(dest.agent||'Codex')?'交给 Codex':'保存工作准备',null,'primary',ho.selectedText?.trim() && ho.role!=='exclude' && dest.task?.trim()?'':'disabled')}${btn('exclude-handoff','先不带入',null)}</footer></section></main>`;
+    const nativeCodex = current.nativeConnected&&/^Codex(?:\s|$|原生)/i.test(dest.agent||'Codex');
+    const primaryLabel = nativeCodex ? '交给 Codex' : '保存工作准备';
+    const primaryState = nativeCodex ? '点击一次即可确认并交给本机 Codex。' : '工作准备会保存在本机；Agent 可用后再执行。';
+    return `<main class="chain-handoff-layout" data-key="main"><section class="chain-handoff-context"><div class="chain-heading"><h1>我的理解<b>。</b></h1><p>个人草稿 · ${m.understandingDraft===m.understanding&&m.understanding?'已保存':'草稿 · 尚未确认为当前理解'}</p></div><div class="chain-glass chain-handoff-summary">${row('',m.understanding || '暂无已保存的理解，可以直接写。')}${row('还没分清',m.stop || '尚未留下停点。','stop')}${current.incoming?.text ? `<div class="chain-inference">${icon('bulb')}这次带来：${h(current.incoming.text)}</div>`:''}</div>${composer('先写下这次准备怎样尝试……')}</section><section class="chain-handoff-side chain-glass"><div class="chain-side-heading"><h1>带去这次工作</h1>${btn('back','关闭','close','icon-only')}</div><div class="chain-panel-scroll"><section class="chain-destination-summary" aria-label="工作去向"><span class="chain-native-mark">C›_</span><div><strong>${h(dest.agent||'Codex')}</strong><span>${current.nativeConnected?'当前项目已自动识别':'Agent 暂不可用，先保存工作准备'}</span></div><small>不会把项目路径、登录信息或系统参数放进页面。</small></section><label class="chain-label">这次请它做什么${smallInput('task',dest.task,'例如：核对条件并给出可复核结果')}</label><label class="chain-label">选中的内容${field('handoff-text',ho.selectedText,'选择这次实际要带入的文字','chain-handoff-text','rows="3"')}<small>来源：${h(title())}</small></label><fieldset class="chain-role"><legend>我希望这次</legend>${[['trial','这次准备试','pen'],['reference','作为参考','file'],['exclude','这次不用','no']].map(([key,label,name])=>btn('role',label,name,ho.role===key?'selected':'',`data-role="${key}" aria-pressed="${ho.role===key}"`)).join('')}</fieldset><label class="chain-label">补充说明（可选）${field('handoff-note',ho.note,'想观察什么，或不希望怎样使用？','chain-handoff-note','rows="2"')}</label><label class="chain-label">使用范围<select class="chain-field" data-field="scope" aria-label="使用范围"><option value="current-task">只用于这次工作</option></select><small>不会自动变成长期要求。</small></label></div><footer class="chain-handoff-actions">${btn('confirm-handoff',primaryLabel,null,'primary',`${ho.selectedText?.trim() && ho.role!=='exclude' && dest.task?.trim()?'':'disabled'} data-handoff-cta="primary" aria-describedby="handoff-cta-note"`)}${btn('exclude-handoff','先不带入',null, '', 'data-handoff-cta="cancel"')}<small id="handoff-cta-note" class="chain-footnote">${primaryState}</small></footer></section></main>`;
   }
   function work() {
     const ho=current.handoffSnapshot || current.handoff || {},dest=ho.destination||{};
@@ -165,9 +183,12 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   }
   function resize() {
     if (disposed) return;
-    const narrowHandoff = current.screen === 'handoff' && root.clientWidth < 760;
-    root.classList.toggle('chain-narrow', narrowHandoff);
-    if (narrowHandoff) stage.style.transform = 'none';
+    // Every chain screen is a real document on a narrow viewport. Previously
+    // only handoff opted out of the 1672px canvas transform, leaving reading,
+    // resume and discussion at roughly 0.23x on a 390px phone.
+    const narrow = root.clientWidth < 760;
+    root.classList.toggle('chain-narrow', narrow);
+    if (narrow) stage.style.transform = 'none';
     else {
       const scale=Math.min(root.clientWidth/1672,root.clientHeight/941);
       stage.style.transform=`translate(-50%, -50%) scale(${scale})`;
@@ -178,6 +199,7 @@ export function mountChainScreen({root, view, onAction, onHome, onMatters, onBac
   function selectText(element) {
     if (composition) return;
     const name=element?.dataset.selection;if(!name)return;
+    if (name==='discussion'&&!discussionText(current.discussion||{}).trim()) return;
     const selection = element instanceof HTMLTextAreaElement ? {start:element.selectionStart,end:element.selectionEnd,text:element.value.slice(element.selectionStart,element.selectionEnd)} : selectedRange(element);
     if (!selection?.text?.trim()) return;
     if (name==='article') {const source=current.availableSources?.[0];dispatch({type:'CAPTURE_EXCERPT',text:selection.text,sourceId:source?.id});readingOpen=true;render();}

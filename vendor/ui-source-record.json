@@ -1,0 +1,77 @@
+{
+  "license": "MIT",
+  "repository": "https://github.com/Surajmaurya1/easyui",
+  "commit": "7c106d4a195f9ce566ffbbc672fc48bed68d30bd",
+  "files": [
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/LICENSE",
+      "path": "LICENSE",
+      "sha256": "44812848f920dd3a9bbe27918ae4e92d548ac788846955fe88b953e57e716e22"
+    },
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/registry.json",
+      "path": "registry.json",
+      "sha256": "2f276bea7061aff102b969d54c209681e5d227988b01006209f91be0cf5567d4"
+    },
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/src/components/ui/CommandMenu.tsx",
+      "path": "src/components/ui/CommandMenu.tsx",
+      "sha256": "a50beed1444e843bbe0d4c5cc3835297cd1fb00fd12682068f23def1b9d6225a"
+    },
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/src/components/ui/RecoveryLedger.tsx",
+      "path": "src/components/ui/RecoveryLedger.tsx",
+      "sha256": "866a7fb1af2c03db3230e5d77c5171012aea9d095e9523796fc00ae646c1b261"
+    },
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/src/components/ui/OriginDropdown.tsx",
+      "path": "src/components/ui/OriginDropdown.tsx",
+      "sha256": "aa41bea3384983a6b39755fdf583c517405f25b219829f5000fcd6a6436da994"
+    },
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/src/components/ui/DirectionalTooltip.tsx",
+      "path": "src/components/ui/DirectionalTooltip.tsx",
+      "sha256": "bcce99ca9496253c198a821cb2d7d52cfcca73efa8222f3ffacb83ee148d3892"
+    },
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/src/lib/utils.ts",
+      "path": "src/lib/utils.ts",
+      "sha256": "294bd8cd51a7d1717bfd46a433434e366ee69ef4c01f3b74e6e7b28a05e87d75"
+    },
+    {
+      "url": "https://github.com/Surajmaurya1/easyui/blob/7c106d4a195f9ce566ffbbc672fc48bed68d30bd/src/lib/motion-tokens.ts",
+      "path": "src/lib/motion-tokens.ts",
+      "sha256": "4a1b9a23b8dab549100ce9e33c7a4fbdacdae4552563073329172ca4eaa11293"
+    }
+  ],
+  "scope": "Fixed read-only source excerpts for Trace component adaptation; not a standalone install",
+  "licenseSha256": "44812848f920dd3a9bbe27918ae4e92d548ac788846955fe88b953e57e716e22",
+  "adaptations": [
+    {
+      "source": "src/components/ui/CommandMenu.tsx",
+      "target": "apps/web/src/react/library-workspace.tsx",
+      "changes": "Data-driven Product search; no catalog, GitHub, CLI, Motion, Tailwind or manual modal; persistent route selection and IME guards"
+    },
+    {
+      "source": "src/components/ui/RecoveryLedger.tsx",
+      "target": "apps/web/src/react/ui/evolution-panel.tsx",
+      "changes": "Read-only history and comparison; no restore action, invented dates, theme or animation runtime; normalized actual receipt fields and undo identity"
+    },
+    {
+      "source": "src/components/ui/OriginDropdown.tsx + DirectionalTooltip.tsx",
+      "target": "apps/web/src/react/ui/controls.tsx",
+      "changes": "Origin-aware CSS presentation; replaced positioning, focus and dismissal with Radix; shared CSS tokens and Lucide"
+    }
+  ],
+  "licenseSupplements": [
+    {
+      "sha256": "a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84",
+      "sourceUrl": "https://github.com/theKashey/react-remove-scroll-bar/blob/7301c160fda44cb8cf2b9fdfde61efad35736196/LICENSE",
+      "declaredLicense": "MIT",
+      "package": "react-remove-scroll-bar",
+      "version": "2.3.8",
+      "licenseSourceCommit": "7301c160fda44cb8cf2b9fdfde61efad35736196",
+      "note": "Published 2.3.8 package includes an MIT declaration but omits license text. Supplement from official repository LICENSE history; npm gitHead b3b1287aad81def2e2ae707274b74531b61ddbaf is not resolvable in that repository. This does not claim source/release commit equivalence."
+    }
+  ]
+}

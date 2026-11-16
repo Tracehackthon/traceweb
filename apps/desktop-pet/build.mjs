@@ -1,8 +1,10 @@
 import { build } from 'esbuild'
 import { build as viteBuild } from 'vite'
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createWebBuildProvenance } from '../../scripts/web-build-provenance.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const outDir = resolve(root, 'lib')
@@ -10,8 +12,10 @@ const desktopOutDir = resolve(outDir, 'desktop')
 const discussionSourceDir = resolve(root, '../web')
 const discussionPublicDir = resolve(discussionSourceDir, 'public')
 const packageId = 'dsh-trace'
+await import('../../scripts/verify-product-workspace.mjs')
 const desktopPublicAssets = [
   'favicon.ico',
+  'workbench-appearance.js',
   'site.webmanifest',
   'brand/trace-app-icon-16.png',
   'brand/trace-app-icon-32.png',
@@ -75,9 +79,26 @@ const clientBundle = `window.__ModuleLoader__.load({\n\tid: ${JSON.stringify(pac
 await writeFile(resolve(outDir, 'client.js'), clientBundle, 'utf8')
 
 await mkdir(desktopOutDir, { recursive: true })
+// Bundle the pinned Product package into the desktop main-process store. No
+// source checkout, loopback listener or renderer Node access is needed at runtime.
+await build({
+  absWorkingDir: root,
+  entryPoints: ['src/desktop/workbench-store.mjs'],
+  outfile: resolve(desktopOutDir, 'workbench-store.mjs'),
+  bundle: true, format: 'esm', platform: 'node', target: 'node22',
+  legalComments: 'none',
+})
+await writeFile(resolve(desktopOutDir,'workbench-store-provenance.json'),JSON.stringify({
+  schema:'trace.desktop-workbench-store@1',
+  product:JSON.parse(await readFile(resolve(root,'../../vendor/product-workspace-source.json'),'utf8')),
+  bundleSha256:createHash('sha256').update(await readFile(resolve(desktopOutDir,'workbench-store.mjs'))).digest('hex'),
+},null,2))
 await build({
   absWorkingDir: root,
   entryPoints: ['src/desktop/renderer.tsx'],
+  // The desktop package and the shared Radix/Lucide imports must use one React
+  // dispatcher, even when both workspace roots have their own node_modules.
+  alias: { react: resolve(root, '../../node_modules/react'), 'react-dom': resolve(root, '../../node_modules/react-dom') },
   outfile: resolve(desktopOutDir, 'renderer.js'),
   bundle: true,
   format: 'iife',
@@ -92,7 +113,17 @@ await build({
 await Promise.all([
   copyFile(resolve(root, 'src/desktop/index.html'), resolve(desktopOutDir, 'index.html')),
   copyFile(resolve(root, 'src/desktop/main.mjs'), resolve(desktopOutDir, 'main.mjs')),
+  readFile(resolve(root, 'src/desktop/workbench-agent.mjs'),'utf8').then(source=>writeFile(resolve(desktopOutDir,'workbench-agent.mjs'),source.replace("'../../../../shared/workbench-result-items.mjs'","'./workbench-result-items.mjs'"))),
+  copyFile(resolve(root,'../../shared/workbench-result-items.mjs'),resolve(desktopOutDir,'workbench-result-items.mjs')),
   copyFile(resolve(root, 'src/desktop/runtime-client.mjs'), resolve(desktopOutDir, 'runtime-client.mjs')),
+  copyFile(resolve(root, 'src/desktop/runtime-readiness.mjs'), resolve(desktopOutDir, 'runtime-readiness.mjs')),
+  copyFile(resolve(root, 'src/desktop/runtime-port-selection.mjs'), resolve(desktopOutDir, 'runtime-port-selection.mjs')),
+  copyFile(resolve(root, 'src/desktop/runtime-installation-identity.mjs'), resolve(desktopOutDir, 'runtime-installation-identity.mjs')),
+  copyFile(resolve(root, 'src/desktop/runtime-integrations.mjs'), resolve(desktopOutDir, 'runtime-integrations.mjs')),
+  copyFile(resolve(root, 'src/desktop/runtime-project-binding.mjs'), resolve(desktopOutDir, 'runtime-project-binding.mjs')),
+  copyFile(resolve(root, 'src/desktop/artifact-lifecycle.mjs'), resolve(desktopOutDir, 'artifact-lifecycle.mjs')),
+  copyFile(resolve(root, 'src/desktop/lifecycle.mjs'), resolve(desktopOutDir, 'lifecycle.mjs')),
+  copyFile(resolve(root, 'src/desktop/storage-lifecycle.mjs'), resolve(desktopOutDir, 'storage-lifecycle.mjs')),
   copyFile(resolve(root, 'src/desktop/preload.cjs'), resolve(desktopOutDir, 'preload.cjs')),
   copyFile(resolve(root, 'src/desktop/discussion-preload.cjs'), resolve(desktopOutDir, 'discussion-preload.cjs')),
   copyFile(resolve(root, 'src/client/assets/liukanshan.png'), resolve(desktopOutDir, 'liukanshan.png')),
@@ -112,7 +143,7 @@ await viteBuild({
     outDir: discussionOutDir,
     emptyOutDir: true,
     manifest: false,
-    rollupOptions: { input: resolve(discussionSourceDir, 'index.html') },
+    rollupOptions: { input: {index:resolve(discussionSourceDir, 'index.html'),legacy:resolve(discussionSourceDir,'legacy.html')} },
   },
 })
 
@@ -121,6 +152,11 @@ await Promise.all(desktopPublicAssets.map(async (relative) => {
   await mkdir(dirname(destination), { recursive: true })
   await copyFile(resolve(discussionPublicDir, relative), destination)
 }))
+await cp(resolve(discussionPublicDir,'fonts'),resolve(discussionOutDir,'fonts'),{recursive:true})
+await cp(resolve(discussionPublicDir,'licenses'),resolve(discussionOutDir,'licenses'),{recursive:true})
+
+const webBuildProvenance = await createWebBuildProvenance({ webRoot: discussionSourceDir, outputDir: discussionOutDir })
+console.log(`Web build identity ${webBuildProvenance.buildId} · source ${webBuildProvenance.sourceSha256}`)
 
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 console.log(`Built ${manifest.name}@${manifest.version}`)

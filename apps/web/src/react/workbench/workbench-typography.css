@@ -1,0 +1,64 @@
+/* One reading scale for the current workbench and its portalled surfaces.
+   Colour/material/motion stay in their existing owners. Spacing uses the
+   shared 4px unit; controls retain the 48 = 12 + 24 + 12 geometry contract. */
+:root[data-trace-appearance] {
+  --wb-text-meta:12px;
+  --wb-text-label:13px;
+  --wb-text-body:14px;
+  --wb-text-reading:15px;
+  --wb-text-section:16px;
+  --wb-text-panel:20px;
+  --wb-text-page:24px;
+  --wb-leading-meta:20px;
+  --wb-leading-body:24px;
+  --wb-leading-reading:28px;
+  --wb-leading-title:32px;
+  --wb-weight-regular:400;
+  --wb-weight-medium:500;
+  --wb-weight-semibold:600;
+  --wb-field-gap:calc(5 * var(--trace-space-unit));
+  --wb-section-gap:calc(6 * var(--trace-space-unit));
+  --wb-pane-gutter:calc(8 * var(--trace-space-unit));
+  --wb-detail-inset:calc(6 * var(--trace-space-unit));
+  --wb-reading-measure:784px;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) {
+  font-size:var(--wb-text-body); line-height:var(--wb-leading-body); font-weight:var(--wb-weight-regular);
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) h1 {
+  font-size:var(--wb-text-page); line-height:var(--wb-leading-title); font-weight:var(--wb-weight-semibold); margin:0;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) h2 {
+  font-size:var(--wb-text-panel); line-height:var(--wb-leading-reading); font-weight:var(--wb-weight-semibold); margin:0;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) :is(h3,h4,h5) {
+  font-size:var(--wb-text-section); line-height:var(--wb-leading-body); font-weight:var(--wb-weight-semibold); margin:0 0 12px;
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) small {
+  font-size:var(--wb-text-meta); line-height:var(--wb-leading-meta); font-weight:var(--wb-weight-regular);
+}
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) :is(.wb-editor label,.wb-halo-field>label,.wb-execution label) {
+  font-size:var(--wb-text-label); line-height:var(--wb-leading-meta); font-weight:var(--wb-weight-medium);
+}
+/* Explicit control type prevents both label inheritance and legacy global
+   input:not(...) shorthand from resizing values or making them semibold. */
+html[data-trace-appearance] :is(.wb-shell,.wb-dialog,.trace-ui) .wb-halo-control>:is(input,textarea,.wb-select-trigger) {
+  font-size:var(--wb-text-body); line-height:var(--wb-leading-body); font-weight:var(--wb-weight-regular);
+}
+html[data-trace-appearance] :is(.wb-inspector-scroll>.wb-preserve,.wb-messages article>p,.wb-original-text,.wb-execution-result>p,.wb-adopted-review>p) {
+  font-size:var(--wb-text-reading); line-height:var(--wb-leading-reading); font-weight:var(--wb-weight-regular);
+}
+html[data-trace-appearance] :is(.wb-material-title,.wb-task-detail>h3) {
+  font-size:var(--wb-text-panel); line-height:var(--wb-leading-reading); font-weight:var(--wb-weight-semibold);
+}
+html[data-trace-appearance] .wb-task-detail>h3 { margin:0; }
+html[data-trace-appearance] .wb-inspector>header h2 { font-size:var(--wb-text-section); line-height:var(--wb-leading-body); }
+html[data-trace-appearance] .wb-inspector-scroll>.wb-preserve+.wb-muted { margin-top:16px; font-size:var(--wb-text-meta); line-height:var(--wb-leading-meta); }
+html[data-trace-appearance] .wb-thinking-pane>h2 { margin-bottom:20px; }
+html[data-trace-appearance] :is(.wb-step-editor>header h3,.wb-execution>header h3,.wb-execution-view>header h3) { margin:0; }
+html[data-trace-appearance] .wb-halo-disclosure>summary { font-size:var(--wb-text-body); line-height:var(--wb-leading-body); }
+html[data-trace-appearance] .wb-code-body,html[data-trace-appearance] .wb-execution-log pre {
+  font-size:var(--wb-text-label); line-height:var(--wb-leading-meta); font-weight:var(--wb-weight-regular);
+}
+@media(max-width:1439px) { :root[data-trace-appearance] { --wb-pane-gutter:calc(6 * var(--trace-space-unit)); } }
+@media(max-width:767px) { :root[data-trace-appearance] { --wb-pane-gutter:calc(5 * var(--trace-space-unit)); --wb-detail-inset:calc(5 * var(--trace-space-unit)); } }

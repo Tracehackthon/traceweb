@@ -1,14 +1,17 @@
+import {validateWorkbench} from '@trace/product-workspace';
+import {browserWorkbenchFeatures} from './workbench-browser.mjs';
 // Origin-scoped storage for the static deployment. Never fall back to an
 // empty workspace after a read failure, and never report success before commit.
 const DEMO_WORKSPACE = location.pathname === '/app/demo' || location.pathname.startsWith('/app/demo/');
 const DATABASE = DEMO_WORKSPACE ? 'trace-web-complete-demo-v3' : 'trace-portal-workspace-v1';
 const STORE = 'workspace';
 const COMMANDS = 'commands';
-const info = { kind: 'indexeddb', mode: DEMO_WORKSPACE ? 'complete-demo' : 'personal', location: DEMO_WORKSPACE ? '当前浏览器 · 独立演示空间（不会混入个人空间）' : '当前浏览器 · IndexedDB（仅当前网站，不跨设备同步）' };
+const info = { features:browserWorkbenchFeatures, kind: 'indexeddb', mode: DEMO_WORKSPACE ? 'complete-demo' : 'personal', location: DEMO_WORKSPACE ? '当前浏览器 · 独立演示空间（不会混入个人空间）' : '当前浏览器 · IndexedDB（仅当前网站，不跨设备同步）' };
 const stable = value => Array.isArray(value) ? `[${value.map(stable).join(',')}]`
   : value && typeof value === 'object' ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}` : JSON.stringify(value);
 function failure(status, code, message) { return Object.assign(new Error(message), { status, code }); }
 function validateHost(host) {
+  if(host?.schemaVersion===2){validateWorkbench(host);return;}
   if (!host || host.schemaVersion !== 1 || host.chain?.schemaVersion !== 1 || host.worksite?.schemaVersion !== 1
     || !Array.isArray(host.chain.matters) || !Array.isArray(host.chain.sources) || !host.chain.sessions
     || !host.comparisons || !host.worksite.works || !host.worksite.sessions || !host.workGuards
@@ -39,7 +42,7 @@ function snapshot(record) {
 }
 function openDatabase() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1);
+    const request = indexedDB.open(DATABASE);
     let blocked = false;
     request.onupgradeneeded = () => {
       request.result.createObjectStore(STORE);
@@ -64,6 +67,7 @@ export async function readBrowserWorkspace() {
 }
 
 export async function putBrowserWorkspace(payload) {
+  if(payload?.host?.schemaVersion===2)throw failure(410,'LEGACY_WRITE_DISABLED','新内容只接受明确命令，不能整份覆盖。');
   if (!payload || !Number.isSafeInteger(payload.expectedRevision) || payload.expectedRevision < 0
     || typeof payload.commandId !== 'string' || !payload.commandId || payload.commandId.length > 200) {
     throw failure(400, 'INVALID_COMMAND', '保存命令不完整，未写入。');
@@ -87,19 +91,25 @@ export async function putBrowserWorkspace(payload) {
       current.onsuccess = () => {
         try {
           const saved = snapshot(current.result);
+          if(saved.host?.schemaVersion===2)throw failure(410,'LEGACY_WRITE_DISABLED','旧快照不能覆盖新内容工作区。');
           const known = commands.get(payload.commandId);
           known.onsuccess = () => {
             try {
               if (known.result) {
                 if (known.result.fingerprint !== fingerprint) throw failure(409, 'COMMAND_REUSED', '同一命令包含不同内容，未覆盖数据。');
-                result = { revision: known.result.revision, replayed: true, storage: info };
+                // Older command rows did not retain their committed snapshot.
+                // Never pair an old revision with the current head's content.
+                const committedHost = known.result.host || (saved.revision === known.result.revision ? saved.host : null);
+                if (!committedHost) throw failure(409, 'COMMITTED_SNAPSHOT_UNAVAILABLE', '这次修改已有提交记录，但原回执内容不可用。请先保留草稿，再载入最新版本。');
+                validateHost(committedHost);
+                result = { revision: known.result.revision, host: structuredClone(committedHost), headRevision: saved.revision, replayed: true, storage: info };
                 return;
               }
               if (saved.revision !== payload.expectedRevision) throw failure(409, 'REVISION_CONFLICT', '另一标签页已有更新，请先导出，再载入已保存版本。');
               const revision = saved.revision + 1;
               workspaces.put({ schemaVersion: 1, revision, host }, 'current');
-              commands.put({ fingerprint, revision }, payload.commandId);
-              result = { revision, replayed: false, storage: info };
+              commands.put({ fingerprint, revision, host: structuredClone(host) }, payload.commandId);
+              result = { revision, host: structuredClone(host), headRevision: revision, replayed: false, storage: info };
             } catch (cause) { error = cause; tx.abort(); }
           };
         } catch (cause) { error = cause; tx.abort(); }
@@ -112,7 +122,11 @@ export async function browserWorkspaceRequest(url, options = {}) {
   try {
     const method = options.method || 'GET';
     let value;
-    if (url === '/api/web/workspace' && method === 'GET') value = await readBrowserWorkspace();
+    if ((url === '/api/web/workspace'||url==='/api/product/workspace') && method === 'GET') value = await readBrowserWorkspace();
+    else if(url==='/api/product/commands'&&method==='POST')value=await (await import('./workbench-browser.mjs')).browserProductCommand(JSON.parse(options.body));
+    else if(/^\/api\/product\/commands\/[a-zA-Z0-9_-]{1,200}$/.test(url)&&method==='GET')value=await (await import('./workbench-browser.mjs')).readBrowserProductCommand(url.slice('/api/product/commands/'.length));
+    else if(url==='/api/product/canvases'&&method==='GET')value={items:await (await import('./workbench-browser.mjs')).listBrowserCanvases()};
+    else if(/^\/api\/product\/canvases\/[a-zA-Z0-9_-]+(?:\/commands)?$/.test(url)){const api=await import('./workbench-browser.mjs'),id=url.split('/')[4];if(method==='GET'&&!url.endsWith('/commands'))value={document:await api.readBrowserCanvas(id)};else if(method==='POST'&&url.endsWith('/commands'))value=await api.browserCanvasCommand(id,JSON.parse(options.body));else throw failure(405,'METHOD_NOT_ALLOWED','不支持这个布局操作。');}
     else if (url === '/api/web/workspace' && method === 'PUT') value = await putBrowserWorkspace(JSON.parse(options.body));
     else if (url === '/api/web/export' && method === 'GET') value = { format: 'trace-web-export', schemaVersion: 1, exportedAt: new Date().toISOString(), ...await readBrowserWorkspace() };
     else throw failure(404, 'NOT_FOUND', '不存在的浏览器存储操作。');

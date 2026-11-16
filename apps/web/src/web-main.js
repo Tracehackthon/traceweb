@@ -1,9 +1,12 @@
+import './fonts.css';
 // Keep the public introduction, full product and reserved video route in one
 // deployment while loading only the surface a visitor actually requested.
+import '../../../shared/ui-geometry.css';
 import introStylesheet from './intro.css?url';
 import videoStylesheet from './video.css?url';
 
 const path = window.location.pathname.replace(/\/+$/, '') || '/';
+document.documentElement.dataset.traceGeometry = 'true';
 const legacyProductLink = path === '/' && new URLSearchParams(window.location.search).has('view');
 
 function loadStylesheet(href) {

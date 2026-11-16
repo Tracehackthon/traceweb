@@ -21,6 +21,10 @@ apps/web/.impeccable/review/
 apps/desktop-pet/lib/
 apps/desktop-pet/node_modules/
 artifacts/bridge-e2e/
+artifacts/desktop-capability-headless/
 video-source/
 .impeccable/
 .research/
+
+# 本机缓存不属于客户端源码；保留磁盘内容，清理另行确认。
+/.cache/

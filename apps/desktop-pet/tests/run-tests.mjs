@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import { mkdtemp } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { once } from 'node:events'
+import net from 'node:net'
 import test from 'node:test'
 import { build } from 'esbuild'
 
@@ -22,6 +23,252 @@ await build({
 const codex = await import(pathToFileURL(join(output, 'codex-events.mjs')).href)
 const placement = await import(pathToFileURL(join(output, 'placement.mjs')).href)
 const runtimeClient = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-client.mjs')).href)
+const installationIdentity = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-installation-identity.mjs')).href)
+const runtimeIntegrations = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-integrations.mjs')).href)
+const projectBinding = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-project-binding.mjs')).href)
+const desktopLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/lifecycle.mjs')).href)
+const storageLifecycle = await import(pathToFileURL(resolve(root, 'src/desktop/storage-lifecycle.mjs')).href)
+const portSelection = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-port-selection.mjs')).href)
+const runtimeReadiness = await import(pathToFileURL(resolve(root, 'src/desktop/runtime-readiness.mjs')).href)
+await import('./artifact-lifecycle.test.mjs')
+
+test('project lifecycle is routed from the Trace Web product window to guarded host operations', async () => {
+  const main = await readFile(resolve(root, 'src/desktop/main.mjs'), 'utf8')
+  const build = await readFile(resolve(root, 'build.mjs'), 'utf8')
+  const releaseSmoke = await readFile(resolve(root, '../../scripts/release-smoke.mjs'), 'utf8')
+  assert.match(main, /project\.lifecycle\./)
+  assert.match(main, /!discussionWindows\.has\(senderWindow\).*项目生命周期功能只能由 Trace Web 产品窗口调用/s)
+  assert.match(main, /inspectProjectTrace\(project\.path/)
+  assert.match(main, /dialog\.showMessageBox\(senderWindow,[\s\S]*?永久清除/)
+  assert.match(main, /purgeQuarantinedArtifact\(project\.path, request\.id\)/)
+  assert.match(build, /copyFile\(resolve\(root, 'src\/desktop\/artifact-lifecycle\.mjs'\)/)
+  assert.match(releaseSmoke, /lib\/desktop\/artifact-lifecycle\.mjs/)
+})
+
+test('packaged desktop probes readable product state without requiring a newer heartbeat route', async () => {
+  const paths = []
+  const workspace = { protocolVersion: 1, revision: 0, storage: { schemaVersion: 1 } }
+  const fetchImpl = async (url) => {
+    paths.push(new URL(url).pathname)
+    return {
+      ok: true,
+      headers: { get: () => 'application/json; charset=utf-8' },
+      json: async () => workspace,
+      text: async () => JSON.stringify(workspace),
+    }
+  }
+  assert.equal(await runtimeReadiness.probeProductWorkspace('http://127.0.0.1:42731', fetchImpl), true)
+  const client = runtimeClient.createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:42731', fetchImpl, cloudFetchImpl: fetchImpl,
+  })
+  assert.deepEqual(await client.request({ operation: 'runtime.heartbeat' }), { status: 'ok' })
+  assert.deepEqual(paths, ['/api/product/workspace', '/api/product/workspace'])
+  assert.equal(runtimeReadiness.isReadableProductWorkspace({ protocolVersion: 1, revision: 0, storage: null }), false)
+  assert.equal(await runtimeReadiness.probeProductWorkspace('http://127.0.0.1:42731', async () => ({ ok: false })), false)
+})
+
+test('existing handoff may carry understanding text without overwriting its original capture', async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), 'trace-handoff-project-'))
+  const workId = 'work-test'
+  const matterId = 'matter-test'
+  const selectedText = 'My saved understanding, not the original capture'
+  const workspace = {
+    revision: 2,
+    host: {
+      chain: { matters: [{ id: matterId, originalText: 'Original capture' }], sessions: { [matterId]: { contextMode: 'default', contextEpoch: 1 } } },
+      worksite: {
+        works: { [workId]: { id: workId, project: projectDir.split(/[\\/]/).at(-1), agent: 'Codex', connected: false } },
+        sessions: { [workId]: { intake: [{ matterId, sourceText: selectedText }], codexDelivery: { status: 'prepared' } } },
+      },
+    },
+  }
+  const paths = []
+  const fetchImpl = async (url) => {
+    const pathname = new URL(url).pathname
+    paths.push(pathname)
+    const value = pathname === '/api/agent/capabilities' ? { enabled: false } : workspace
+    return { ok: true, status: 200, text: async () => JSON.stringify(value) }
+  }
+  const client = runtimeClient.createRuntimeCapabilityClient({ origin: 'http://127.0.0.1:42731', projectDir, fetchImpl, cloudFetchImpl: fetchImpl })
+  const environment = await client.request({ operation: 'work.environment' })
+  assert.equal(environment.connected, false)
+  assert.equal(environment.projectName, projectDir.split(/[\\/]/).at(-1))
+  assert.deepEqual(paths, ['/api/agent/capabilities'])
+  paths.length = 0
+  await assert.rejects(client.request({ operation: 'work.run', workId, matterId, title: 'Test', text: selectedText, role: 'trial', source: 'none' }), /本机 Agent 尚未启用/)
+  assert.deepEqual(paths, ['/api/product/workspace', '/api/agent/capabilities'])
+  assert.equal(paths.includes('/api/agent/runs'), false)
+
+  paths.length = 0
+  const newWork = { ...workspace, host: { ...workspace.host, worksite: { works: {}, sessions: {} } } }
+  const noAgentClient = runtimeClient.createRuntimeCapabilityClient({
+    origin: 'http://127.0.0.1:42731', projectDir,
+    fetchImpl: async (url) => {
+      const pathname = new URL(url).pathname
+      paths.push(pathname)
+      const value = pathname === '/api/agent/capabilities' ? { enabled: false } : newWork
+      return { ok: true, status: 200, text: async () => JSON.stringify(value) }
+    },
+  })
+  await assert.rejects(noAgentClient.request({ operation: 'work.run', workId: 'new-work', matterId, title: 'Test', text: 'Original capture', role: 'trial', source: 'none' }), /本机 Agent 尚未启用/)
+  assert.deepEqual(paths, ['/api/product/workspace', '/api/agent/capabilities'])
+})
+
+test('packaged runtime keeps explicit origins loopback-only and migrates occupied ports', async () => {
+  assert.equal(portSelection.isLoopbackHttpOrigin('http://127.0.0.1:4173'), true)
+  assert.equal(portSelection.isLoopbackHttpOrigin('http://localhost:4173'), true)
+  assert.equal(portSelection.isLoopbackHttpOrigin('https://127.0.0.1:4173'), false)
+  assert.equal(portSelection.isLoopbackHttpOrigin('http://example.test:4173'), false)
+
+  const blocker = net.createServer()
+  blocker.listen(0, '127.0.0.1')
+  await once(blocker, 'listening')
+  const occupied = blocker.address().port
+  assert.equal(await portSelection.selectLoopbackPort(occupied), 0)
+  blocker.close()
+  await once(blocker, 'close')
+  assert.equal(await portSelection.selectLoopbackPort(occupied), occupied)
+})
+
+test('desktop upgrades discard version-bound caches while preserving user state and authorization data', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-storage-upgrade-'))
+  for (const name of storageLifecycle.TRANSIENT_STORAGE_NAMES) {
+    await mkdir(join(directory, name), { recursive: true })
+    await writeFile(join(directory, name, 'stale.bin'), 'old-version', 'utf8')
+  }
+  for (const name of ['state', 'IndexedDB', 'Local Storage', 'Network']) {
+    await mkdir(join(directory, name), { recursive: true })
+    await writeFile(join(directory, name, 'keep.bin'), 'user-data', 'utf8')
+  }
+  await writeFile(join(directory, 'desktop-settings.json'), '{}', 'utf8')
+
+  const result = storageLifecycle.clearVersionBoundStorage({ userData: directory, previousVersion: '0.2.2', currentVersion: '0.2.3' })
+  assert.equal(result.changed, true)
+  for (const name of storageLifecycle.TRANSIENT_STORAGE_NAMES) await assert.rejects(access(join(directory, name)))
+  for (const name of ['state', 'IndexedDB', 'Local Storage', 'Network', 'desktop-settings.json']) await access(join(directory, name))
+
+  const stable = storageLifecycle.clearVersionBoundStorage({ userData: directory, previousVersion: '0.2.3', currentVersion: '0.2.3' })
+  assert.deepEqual(stable, { changed: false, removed: [], failed: [] })
+})
+
+test('desktop shutdown is single-flight, bypasses renderer unload vetoes and waits for local state cleanup', async () => {
+  const calls = []
+  const windows = [
+    { isDestroyed: () => false, hide: () => calls.push('hide-a'), destroy: () => calls.push('destroy-a') },
+    { isDestroyed: () => true, hide: () => calls.push('hide-dead'), destroy: () => calls.push('destroy-dead') },
+    { isDestroyed: () => false, hide: () => calls.push('hide-b'), destroy: () => calls.push('destroy-b') },
+  ]
+  const app = { exit: (code) => calls.push(`exit-${code}`) }
+  const controller = desktopLifecycle.createDesktopShutdownController({
+    app,
+    listWindows: () => windows,
+    destroyTray: () => calls.push('tray'),
+    stopPolling: () => calls.push('polling'),
+    closeCapability: () => calls.push('capability'),
+    closeRuntime: async () => { calls.push('runtime-start'); await new Promise((resolve) => setTimeout(resolve, 5)); calls.push('runtime-end') },
+    onStart: (reason) => calls.push(`start-${reason}`),
+    timeoutMs: 100,
+  })
+  const quitEvent = { prevented: false, preventDefault() { this.prevented = true } }
+  controller.handleBeforeQuit(quitEvent)
+  assert.equal(quitEvent.prevented, true)
+  await Promise.all([controller.requestShutdown('duplicate'), controller.done])
+  assert.deepEqual(calls, [
+    'start-before-quit', 'polling', 'capability', 'hide-a', 'destroy-a', 'hide-b', 'destroy-b', 'tray',
+    'runtime-start', 'runtime-end', 'exit-0',
+  ])
+  assert.equal(controller.isShuttingDown(), true)
+})
+
+test('desktop update-shutdown launch intent is explicit and bounded cleanup cannot keep the process alive', async () => {
+  assert.equal(desktopLifecycle.launchIntent(['Trace.exe']).action, 'activate')
+  assert.equal(desktopLifecycle.launchIntent(['Trace.exe', desktopLifecycle.UPDATE_SHUTDOWN_ARGUMENT]).action, 'shutdown-for-update')
+  const calls = []
+  const controller = desktopLifecycle.createDesktopShutdownController({
+    app: { exit: (code) => calls.push(`exit-${code}`) },
+    listWindows: () => [],
+    closeRuntime: () => new Promise(() => {}),
+    timeoutMs: 10,
+  })
+  await controller.requestShutdown('installer')
+  assert.deepEqual(calls, ['exit-0'])
+})
+
+test('installer asks the registered app to stop, then force-closes only the registered executable before overwrite', async () => {
+  const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+  const installer = await readFile(resolve(root, 'build/installer.nsh'), 'utf8')
+  const installSection = await readFile(resolve(root, 'node_modules/app-builder-lib/templates/nsis/installSection.nsh'), 'utf8')
+  const installUtil = await readFile(resolve(root, 'node_modules/app-builder-lib/templates/nsis/include/installUtil.nsh'), 'utf8')
+  const uninstaller = await readFile(resolve(root, 'node_modules/app-builder-lib/templates/nsis/uninstaller.nsh'), 'utf8')
+  assert.equal(manifest.build.nsis.include, 'build/installer.nsh')
+  assert.equal(manifest.build.nsis.deleteAppDataOnUninstall, false)
+  assert.match(installer, /--trace-shutdown-for-update/)
+  assert.match(installer, /InstallLocation/)
+  assert.match(installer, /ExecutablePath/)
+  assert.match(installer, /Stop-Process/)
+  assert.match(installer, /AddSeconds\(5\)/)
+  assert.match(installer, /Start-Sleep/)
+  assert.match(installer, /traceStopAppAtPath "\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}"/)
+  assert.match(installer, /customCheckAppRunning/)
+  assert.match(installer, /tracePurgeRegisteredInstall HKCU/)
+  assert.match(installer, /tracePurgeRegisteredInstall HKLM/)
+  assert.match(installer, /TRACE_INSTALL_DIR/)
+  assert.match(installer, /\$\{APP_EXECUTABLE_FILENAME\}/)
+  assert.match(installer, /Remove-Item -LiteralPath/)
+  assert.match(installer, /\$\$attempt -lt 20/)
+  assert.match(installer, /\$R0 == 2/)
+  assert.match(installer, /旧安装位置无法通过产品身份校验/)
+  assert.match(installer, /旧程序文件仍在使用中/)
+  assert.match(installer, /DeleteRegKey \$\{ROOT\} "\$\{INSTALL_REGISTRY_KEY\}"/)
+  assert.match(installer, /Get-ChildItem -LiteralPath/)
+  assert.match(installer, /!macro customRemoveFiles/)
+  assert.match(installer, /RMDir \/r "\$INSTDIR"/)
+  assert.ok(installSection.indexOf('uninstallOldVersion') < installSection.indexOf('installApplicationFiles'))
+  assert.match(installUtil, /\/S \/KEEP_APP_DATA/)
+  assert.match(uninstaller, /RMDir \/r \$INSTDIR/)
+})
+
+test('desktop runtime integrations load backend-only Zhihu config without overriding explicit environment', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-'))
+  const file = join(directory, 'runtime-integrations.json')
+  await writeFile(file, JSON.stringify({ zhihu: {
+    enabled: true,
+    accessSecret: 'file-secret',
+    oauthAppId: '669',
+    oauthAppKey: 'file-app-key',
+    oauthRedirectUri: 'https://trace.neutrom.store/callback',
+  } }), 'utf8')
+  const env = { ZHIHU_ACCESS_SECRET: 'environment-wins' }
+  const result = runtimeIntegrations.applyRuntimeIntegrationConfig({ file, env })
+  assert.equal(result.zhihuEnabled, true)
+  assert.equal(env.TRACE_ZHIHU_ENABLED, '1')
+  assert.equal(env.ZHIHU_ACCESS_SECRET, 'environment-wins')
+  assert.equal(env.ZHIHU_OAUTH_APP_ID, '669')
+  assert.equal(env.ZHIHU_OAUTH_APP_KEY, 'file-app-key')
+  assert.equal(env.ZHIHU_OAUTH_REDIRECT_URI, 'https://trace.neutrom.store/callback')
+  assert.equal(JSON.stringify(result).includes('file-secret'), false)
+  assert.equal(JSON.stringify(result).includes('file-app-key'), false)
+})
+
+test('desktop runtime integrations stay disabled when config is absent or explicitly disabled', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-off-'))
+  const missing = runtimeIntegrations.applyRuntimeIntegrationConfig({ file: join(directory, 'missing.json'), env: {} })
+  assert.equal(missing.found, false)
+  assert.equal(missing.zhihuEnabled, false)
+  const file = join(directory, 'runtime-integrations.json')
+  await writeFile(file, JSON.stringify({ zhihu: { enabled: false } }), 'utf8')
+  const env = {}
+  runtimeIntegrations.applyRuntimeIntegrationConfig({ file, env })
+  assert.equal(env.TRACE_ZHIHU_ENABLED, '0')
+})
+
+test('desktop runtime integrations reject unsafe callback and relative config paths', async () => {
+  assert.throws(() => runtimeIntegrations.readRuntimeIntegrationConfig('relative.json'), /absolute/)
+  const directory = await mkdtemp(join(tmpdir(), 'trace-runtime-integrations-bad-'))
+  const file = join(directory, 'runtime-integrations.json')
+  await writeFile(file, JSON.stringify({ zhihu: { enabled: true, oauthRedirectUri: 'http://example.test/callback?code=x' } }), 'utf8')
+  assert.throws(() => runtimeIntegrations.readRuntimeIntegrationConfig(file), /HTTPS OAuth redirect/)
+})
 
 const event = (overrides = {}) => ({
   threadId: 'thread-a',
@@ -275,15 +522,57 @@ test('placement records restore by display then resolution and clamp to work are
 
 test('native bridge exposes explicit event, bounds and placement channels', async () => {
   const preload = await readFile(resolve(root, 'src/desktop/preload.cjs'), 'utf8')
+  const discussionPreload = await readFile(resolve(root, 'src/desktop/discussion-preload.cjs'), 'utf8')
   const main = await readFile(resolve(root, 'src/desktop/main.mjs'), 'utf8')
   const renderer = await readFile(resolve(root, 'src/desktop/renderer.tsx'), 'utf8')
   const overlay = await readFile(resolve(root, 'src/client/TraceOverlay.tsx'), 'utf8')
   for (const channel of ['trace-native:codex-event', 'trace-native:placement:get', 'trace-native:placement:save', 'trace-native:interactive-bounds']) {
     assert.match(preload + main, new RegExp(channel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
+  assert.match(discussionPreload + main, /trace-native:setup-progress/)
+  assert.match(discussionPreload + main, /trace-native:runtime-status/)
+  assert.match(main, /scheduleBundledRuntimeRecovery/)
+  assert.match(main, /RUNTIME_RECOVERY_DELAYS_MS/)
+  assert.match(main, /runtime\.heartbeat/)
+  assert.match(main, /titleBarStyle: 'hidden'/)
+  assert.match(main, /titleBarOverlay:/)
+  const webRuntime = await readFile(resolve(root, '../web/src/react/runtime.ts'), 'utf8')
+  assert.match(webRuntime, /this\.nativeWorkReady && hasNativeCapabilityBridge\(\)/)
+  assert.match(main, /selectLoopbackPort/)
+  assert.match(main, /自动避开占用端口/)
+  assert.match(main, /WORKSPACE_IPC_TIMEOUT_MS/)
+  assert.match(main, /RUNTIME_START_TIMEOUT_MS/)
+  assert.match(main, /withIpcTimeout/)
+  assert.match(main, /bindNativeAgentProject\(process\.env\.TRACE_PROJECT_DIR \|\| settings\.projectDir\)/)
+  assert.match(main, /bindNativeAgentProject\(result\.filePaths\[0\]\)/)
   assert.match(renderer, /data-trace-interactive-region/)
   assert.match(overlay, /reduceTraceCodexEvent/)
   assert.match(overlay, /nativeCodexEventsEnabled/)
+})
+
+test('desktop project binding configures native Agent only for an existing absolute directory', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'trace-native-project-binding-'))
+  const env = { TRACE_AGENT_NATIVE_PROJECT_CWD: 'stale-value' }
+  assert.deepEqual(projectBinding.bindNativeAgentProject(directory, { env }), { configured: true })
+  assert.equal(env.TRACE_AGENT_NATIVE_PROJECT_CWD, resolve(directory))
+  assert.deepEqual(projectBinding.bindNativeAgentProject('relative-project', { env }), { configured: false })
+  assert.equal('TRACE_AGENT_NATIVE_PROJECT_CWD' in env, false)
+})
+
+test('packaged runtime identity is stable and repairs only missing desktop settings', () => {
+  const values = ['a'.repeat(48), 'b'.repeat(48)]
+  const random = () => values.shift()
+  const first = installationIdentity.ensureRuntimeIdentity({}, random)
+  assert.equal(first.changed, true)
+  assert.match(first.identity.installationId, /^installation-[a-f0-9]{48}$/)
+  assert.match(first.identity.workspaceId, /^workspace-[a-f0-9]{48}$/)
+  const second = installationIdentity.ensureRuntimeIdentity(first.settings, () => { throw new Error('must not rotate stable IDs') })
+  assert.equal(second.changed, false)
+  assert.deepEqual(second.identity, first.identity)
+  const repaired = installationIdentity.ensureRuntimeIdentity({ ...first.settings, runtimeIdentity: { installationId: 'bad', workspaceId: first.identity.workspaceId } }, () => 'c'.repeat(48))
+  assert.equal(repaired.changed, true)
+  assert.equal(repaired.identity.workspaceId, first.identity.workspaceId)
+  assert.equal(repaired.identity.installationId, `installation-${'c'.repeat(48)}`)
 })
 
 test('rendering contract keeps the pet as a visual projection', async () => {
